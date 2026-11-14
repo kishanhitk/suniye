@@ -595,10 +595,19 @@ struct AttentionTile: View {
     }
 }
 
-struct EmptyStateCard: View {
+struct EmptyStateCard<Action: View>: View {
     let icon: String
     let title: String
     let detail: String
+    private let action: Action
+
+    /// `action` shows under the detail, inside the centered group.
+    init(icon: String, title: String, detail: String, @ViewBuilder action: () -> Action) {
+        self.icon = icon
+        self.title = title
+        self.detail = detail
+        self.action = action()
+    }
 
     var body: some View {
         VStack(spacing: AppMetrics.emptyStateSpacing) {
@@ -612,8 +621,15 @@ struct EmptyStateCard: View {
                 .foregroundStyle(MainWindowPalette.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: AppMetrics.emptyStateMaxWidth)
+            action
         }
         .frame(maxWidth: .infinity, minHeight: AppMetrics.emptyStateMinHeight)
+    }
+}
+
+extension EmptyStateCard where Action == EmptyView {
+    init(icon: String, title: String, detail: String) {
+        self.init(icon: icon, title: title, detail: detail) { EmptyView() }
     }
 }
 

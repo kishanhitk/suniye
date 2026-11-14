@@ -4,8 +4,8 @@ import SwiftUI
 struct MeetingTranscriptLine: Equatable {
     let id: UUID
     let time: String
-    /// "You" or "Them"; nil when the meeting had no call track.
-    let speaker: String?
+    /// Nil when the meeting had no call track, so no line has a speaker.
+    let speaker: MeetingTrack?
     let text: String
 }
 
@@ -182,9 +182,9 @@ private struct TranscriptTextView: NSViewRepresentable {
                     .foregroundColor: NSColor.secondaryLabelColor,
                     .paragraphStyle: paragraph,
                 ]))
-                output.append(NSAttributedString(string: (line.speaker ?? "") + "\t", attributes: [
-                    .font: NSFont.systemFont(ofSize: body.pointSize, weight: .medium),
-                    .foregroundColor: NSColor.labelColor,
+                output.append(NSAttributedString(string: (line.speaker?.speakerLabel ?? "") + "\t", attributes: [
+                    .font: NSFont.systemFont(ofSize: body.pointSize, weight: .semibold),
+                    .foregroundColor: line.speaker == .you ? NSColor.controlAccentColor : NSColor.secondaryLabelColor,
                     .paragraphStyle: paragraph,
                 ]))
                 output.append(NSAttributedString(string: line.text + "\n", attributes: [

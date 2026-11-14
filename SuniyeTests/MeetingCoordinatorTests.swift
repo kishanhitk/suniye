@@ -106,7 +106,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         let summary = await store.summary(of: id)
         let audioLeft = !store.audioTracks(of: id).isEmpty
         let segments = await store.segments(of: id)
-        XCTAssertEqual(summary, "## Overview\nShip on Friday.")
+        XCTAssertEqual(summary, "## Overview\nThe team agreed to ship on Friday.\n\n## Decisions\n- Ship on Friday")
         XCTAssertFalse(audioLeft, "the audio goes once the transcript is final")
         XCTAssertEqual(segments.map(\.text), [longSentence])
         XCTAssertGreaterThanOrEqual(host.idleCount, 1, "Magic Format can warm its prompt after the summary")
@@ -255,8 +255,8 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(stopped)
         XCTAssertTrue(finished)
-        let requests = await summaryModel.requests
-        XCTAssertEqual(requests, 2)
+        let kinds = await summaryModel.kinds
+        XCTAssertEqual(kinds, [.part(number: 1, count: 1), .part(number: 1, count: 1), .overview], "the stopped request runs again")
     }
 
     func testRegenerateWithAnotherTemplateRemembersItAndWritesTheSummaryAgain() async throws {
@@ -269,11 +269,15 @@ final class MeetingCoordinatorTests: XCTestCase {
         _ = await waitUntil { coordinator.record(id)?.status == .done }
 
         await coordinator.regenerate(id, templateID: MeetingTemplate.standUp.id)
-        let rewritten = await waitUntil { await self.summaryModel.requests == 2 }
+        let rewritten = await waitUntil { await self.summaryModel.kinds.count == 4 }
         let done = await waitUntil { coordinator.record(id)?.status == .done }
 
         XCTAssertTrue(rewritten)
         XCTAssertTrue(done)
+        let kinds = await summaryModel.kinds
+        XCTAssertEqual(kinds, [.part(number: 1, count: 1), .overview, .part(number: 1, count: 1), .overview])
+        let summary = await coordinator.summary(of: id)
+        XCTAssertEqual(summary, "## Done\n- Shipped the beta", "the Stand-up sections")
         XCTAssertEqual(coordinator.record(id)?.templateID, MeetingTemplate.standUp.id)
         XCTAssertEqual(coordinator.settings.templateID, MeetingTemplate.standUp.id, "the next meeting starts with the last template")
     }
@@ -755,10 +759,10 @@ private actor WordEngine: TranscriptionServiceProtocol {
     }
 }
 
-/// Answers one summary; while closed, a request waits until it opens or its
-/// task is canceled.
+/// Answers each summary request by its kind; while closed, a request waits
+/// until it opens or its task is canceled.
 private actor GatedSummaryModel: MeetingSummaryModel {
-    private(set) var requests = 0
+    private(set) var kinds: [MeetingSummaryRequest.Kind] = []
     private(set) var waiting = false
     private var isOpen = true
 
@@ -779,12 +783,19 @@ private actor GatedSummaryModel: MeetingSummaryModel {
     }
 
     func generate(_ request: MeetingSummaryRequest) async throws -> String {
-        requests += 1
+        kinds.append(request.kind)
         waiting = true
         defer { waiting = false }
         while !isOpen {
             try await Task.sleep(for: .milliseconds(5))
         }
-        return "Release plan\n## Overview\nShip on Friday."
+        switch request.kind {
+        case .part, .userNotes:
+            return request.input.contains("\nDone:") ? "Done: Shipped the beta" : "Decisions: Ship on Friday"
+        case .overview:
+            return "Title: Release plan\nThe team agreed to ship on Friday."
+        case .summary, .join:
+            return "Release plan\n## Overview\nShip on Friday."
+        }
     }
 }

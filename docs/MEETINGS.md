@@ -76,8 +76,11 @@ After a quit or a crash during a recording, the next launch finishes the transcr
 | The local model (Gemma) | The Magic Format local model download, Apple Silicon |
 
 - Templates: General, 1:1, Stand-up, Interview, and your own (**Settings → General → Meetings → Summary templates**).
-- Your notes go into the summary.
-- A long transcript is cut into parts; each part gets notes, and the summary comes from the notes.
+- A template's "## " headings are the sections of the summary. A section named Overview or Summary is a short paragraph; every other section is a list.
+- The transcript is read in parts of at most about 4,000 tokens. The model gets each part, and your notes, with a request for at most three items for each section. Suniye joins the items in meeting order, your notes first, and drops exact repeats; the model then writes only the title and the overview. No last step can drop an item.
+- The built-in sections (Decisions, Action items, Dates and numbers, Open questions) have fixed rules for what goes in them. A template that you wrote or edited goes to each part as a guide to its sections.
+- The built-in templates have a **Dates and numbers** section for the dates and numbers that fit no other section.
+- A template with no list section is summarized by the model in one step, or from notes on the parts when the transcript is long. So is a template so long that a part would hold less than 1,000 tokens of transcript.
 - **Regenerate** writes the summary again, with the same or another template.
 
 ## Files

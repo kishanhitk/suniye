@@ -1,8 +1,9 @@
 import Foundation
 
 /// How to write a meeting's summary: its sections and what goes in them, as
-/// text that the user can edit. The title line and the heading format are
-/// fixed rules in `MeetingSummaryPrompt`, so an edit cannot break the parser.
+/// text that the user can edit. Its "## " headings are the sections of the
+/// summary (`MeetingSummaryLayout`); the title line is a fixed rule in
+/// `MeetingSummaryPrompt`.
 struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
     let id: String
     var name: String
@@ -23,9 +24,11 @@ struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
     ## Overview
     ## Decisions
     ## Action items
+    ## Dates and numbers
     ## Open questions
     Under Overview, write two or three sentences: what the meeting was about and what it decided.
     Write one line for each decision, task and open question. For a task, say who does it, and by when if the transcript says.
+    Under Dates and numbers, write each date or number that fits no other section, with what it is about.
     Leave out a section with nothing in it.
     Use only what the transcript and my notes say.
     """)
@@ -37,8 +40,10 @@ struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
     ## Updates
     ## Feedback
     ## Action items
+    ## Dates and numbers
     Under Overview, write two or three sentences on what the two people talked about.
     Write one line for each update, piece of feedback and task. Say who gave the feedback and who does each task.
+    Under Dates and numbers, write each date or number that fits no other section, with what it is about.
     Leave out a section with nothing in it.
     Use only what the transcript and my notes say.
     """)
@@ -49,7 +54,9 @@ struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
     ## Done
     ## Next
     ## Blockers
+    ## Dates and numbers
     Write one line for each update.
+    Under Dates and numbers, write each date or number that fits no other section, with what it is about.
     Add a name only when the transcript says it.
     Leave out a section with nothing in it.
     Use only what the transcript and my notes say.
@@ -64,8 +71,10 @@ struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
     ## Strengths
     ## Concerns
     ## Next steps
+    ## Dates and numbers
     Under Overview, write two or three sentences: the role, and how the interview went.
     Write one line for each question with its short answer, and one line for each strength, concern and next step.
+    Under Dates and numbers, write each date or number that fits no other section, with what it is about.
     Leave out a section with nothing in it.
     Use only what the transcript and my notes say.
     """)
