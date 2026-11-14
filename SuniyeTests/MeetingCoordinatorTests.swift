@@ -308,6 +308,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         let firstLoads = await waitUntil { await gate.waiting }
         try await Task.sleep(for: .milliseconds(100))
         let loadsWhileTheFirstWaits = requestedTranscriptModels.count
+        let waitingWhileTheFirstLoads = coordinator.waitingTranscripts
         coordinator.updateSettings { $0.transcriptModel = nil }
         await gate.open()
         let finished = await waitUntil {
@@ -317,7 +318,9 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(firstLoads)
         XCTAssertEqual(loadsWhileTheFirstWaits, 1, "the second pass waits for the first")
+        XCTAssertEqual(waitingWhileTheFirstLoads, [second], "the page of the second shows that it waits")
         XCTAssertTrue(finished)
+        XCTAssertTrue(coordinator.waitingTranscripts.isEmpty)
         XCTAssertEqual(requestedTranscriptModels, [.cohereTranscribe, .cohereTranscribe], "a waiting pass keeps the model of its request")
         XCTAssertEqual(dictationEngineDecodes, 0)
     }

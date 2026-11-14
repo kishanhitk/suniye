@@ -28,7 +28,7 @@ struct MeetingSummaryTab: View {
     private var state: some View {
         switch record.status {
         case .finishing:
-            MeetingTranscriptProgressView(progress: meetings.transcriptProgress[record.id])
+            MeetingTranscriptProgressView(progress: meetings.transcriptProgress[record.id], isWaiting: meetings.waitingTranscripts.contains(record.id))
         case .done:
             if let summary {
                 MeetingSummaryBody(markdown: summary)

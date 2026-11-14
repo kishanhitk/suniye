@@ -4441,8 +4441,8 @@ extension AppState: MeetingHost {
         prewarmLocalLLMIfEligible()
     }
 
-    /// A recording meeting stops and saves before the app quits, and its
-    /// transcript finishes at the next launch. A quit from the user asks
+    /// A recording meeting stops and saves before the app quits, and the
+    /// next launch shows it with Finish Transcript. A quit from the user asks
     /// first; a logout, restart or shutdown does not, so it never blocks one.
     func terminateReplyForMeeting() -> NSApplication.TerminateReply {
         guard meetings.live != nil else { return .terminateNow }

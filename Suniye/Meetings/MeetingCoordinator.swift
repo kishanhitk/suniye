@@ -150,6 +150,8 @@ final class MeetingCoordinator {
     private(set) var writeFailure: MeetingWriteFailure?
     /// The transcripts that are being written, by meeting.
     private(set) var transcriptProgress: [UUID: MeetingTranscriptProgress] = [:]
+    /// The meetings whose transcript waits for the transcript of another one.
+    private(set) var waitingTranscripts: Set<UUID> = []
     /// The meeting that the Meetings section shows; nil shows the list.
     var openMeetingID: UUID?
     /// The meeting whose page is on screen, so a notice does not repeat it.
@@ -723,11 +725,15 @@ final class MeetingCoordinator {
     @discardableResult
     private func queuePass(_ id: UUID) -> Task<Void, Never>? {
         guard passes.insert(id).inserted else { return nil }
+        if passes.count > 1 {
+            waitingTranscripts.insert(id)
+        }
         let model = settings.transcriptModel
         let previous = lastPass
         let pass = Task { [weak self] in
             await self?.update(id) { $0.status = .finishing }
             await previous?.value
+            self?.waitingTranscripts.remove(id)
             await self?.transcribe(id, model: model)
         }
         lastPass = pass

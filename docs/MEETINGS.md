@@ -61,7 +61,7 @@ Call detection reads the Core Audio process list. It reads nothing while no inpu
 - 4 hours of recorded time.
 - Sleep, or a closed lid with no external display.
 - A full disk.
-- **Quit Suniye** asks first. A logout, restart or shutdown stops and saves with no question.
+- **Quit Suniye** asks first: "Quitting stops the recording. Finish the transcript when you open Suniye again." A logout, restart or shutdown stops and saves with no question.
 
 After a quit or a crash, the next launch writes no transcript by itself: it does not load a speech model and run for minutes with no click. A recording that a quit or a crash stopped shows on the list with **Finish Transcript** and **Delete**, and its row has a "Not finished" tag. A transcript that a quit or a crash cut short shows **Finish Transcript**.
 
@@ -73,7 +73,7 @@ After a quit or a crash, the next launch writes no transcript by itself: it does
   - **Same as dictation** (default): the dictation model, on the dictation engine.
   - A model you pick, the dictation model too: it loads for the transcript on an engine of its own and unloads after it, so a switch of the dictation model does not change it. Dictation keeps its model. The Mac holds both models in memory while the transcript is written.
 - A dictation goes first: from the key-down to the end of the dictation, no piece of audio starts decoding. The piece that decodes at the key-down finishes.
-- One transcript at a time: when two meetings wait for a transcript, the second one starts after the first one ends, with the transcript model that was set when it was asked for.
+- One transcript at a time: when two meetings wait for a transcript, the second one starts after the first one ends, with the transcript model that was set when it was asked for. Until then its page shows "Waiting for another transcript…".
 - Picking a model that is not on the Mac downloads it. It becomes the transcript model when the download is done.
 - When the transcript model is not on the Mac at the stop, the meeting shows that cause and **Finish Transcript**.
 - The audio goes to the model in pieces of 2 to 12 s, cut at pauses.
