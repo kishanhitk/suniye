@@ -52,7 +52,7 @@ struct MeetingPage: View {
                 if let failure = meetings.writeFailure, failure.meetingID == id, let duration = record.duration {
                     InlineStatusBanner(
                         icon: "exclamationmark.triangle.fill",
-                        tint: .orange,
+                        tint: .red,
                         title: failure.outOfSpace ? "Recording stopped because the disk is full" : "Recording stopped because the audio could not be saved",
                         detail: "Everything up to \(MeetingTranscript.clock(duration)) is saved." + (failure.outOfSpace ? " Free up space to record again." : "")
                     )
