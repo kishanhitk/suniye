@@ -133,12 +133,12 @@ final class MeetingMicCaptureTests: XCTestCase {
     func testEngineConfigurationChangeRightAfterStartIsIgnored() throws {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: [0.1])
-        var now: TimeInterval = 100
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { now })
+        let clock = TestUptime(100)
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { clock.now })
         try capture.start()
 
         factory.configurationChangeHandlers.last?()
-        now += MeetingMicCapture.settleTime + 1
+        clock.advance(by: MeetingMicCapture.settleTime + 1)
         let reopened = expectation(description: "reopen")
         factory.onStart = { if $0 == 2 { reopened.fulfill() } }
         factory.configurationChangeHandlers.last?()
@@ -151,8 +151,8 @@ final class MeetingMicCaptureTests: XCTestCase {
     func testDigitalSilenceMovesToTheMicrophoneTheDeviceChoicePicksNow() throws {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: Array(repeating: 0, count: 320))
-        var now: TimeInterval = 100
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { now })
+        let clock = TestUptime(100)
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { clock.now })
         let reopened = expectation(description: "reopen")
         factory.onStart = { if $0 == 2 { reopened.fulfill() } }
         let events = Collected<MeetingAudioSourceEvent>()
@@ -161,7 +161,7 @@ final class MeetingMicCaptureTests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.1)
 
         catalog.route = Self.route(id: "usb", name: "USB Microphone")
-        now += MeetingMicCapture.digitalSilenceLimit + 1
+        clock.advance(by: MeetingMicCapture.digitalSilenceLimit + 1)
         factory.feedLatestRing(Array(repeating: 0, count: 320))
         wait(for: [reopened], timeout: 2)
         capture.stop()
@@ -173,15 +173,15 @@ final class MeetingMicCaptureTests: XCTestCase {
     func testDigitalSilenceOnTheSameMicrophoneKeepsTheStream() throws {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: Array(repeating: 0, count: 320))
-        var now: TimeInterval = 100
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { now })
+        let clock = TestUptime(100)
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { clock.now })
         let delivered = expectation(description: "two blocks")
         delivered.expectedFulfillmentCount = 2
         capture.onSamples = { _ in delivered.fulfill() }
         try capture.start()
         Thread.sleep(forTimeInterval: 0.1)
 
-        now += MeetingMicCapture.digitalSilenceLimit + 1
+        clock.advance(by: MeetingMicCapture.digitalSilenceLimit + 1)
         factory.feedLatestRing(Array(repeating: 0, count: 320))
         wait(for: [delivered], timeout: 2)
         capture.stop()
@@ -226,7 +226,7 @@ final class MeetingMicCaptureTests: XCTestCase {
         XCTAssertEqual(factory.startedBackends.count, MeetingMicCapture.maximumReopens + 6)
     }
 
-    private var clock: TimeInterval = 100
+    private let clock = TestUptime(100)
 
     /// The semaphore signals once for each open: the fake driver writes one
     /// block, so a signal also means that the open finished.
@@ -236,7 +236,7 @@ final class MeetingMicCaptureTests: XCTestCase {
             hardwareCatalog: catalog,
             deviceMonitor: FakeMeetingMonitor(),
             driverFactory: factory,
-            uptime: { [weak self] in self?.clock ?? 0 }
+            uptime: { [clock] in clock.now }
         )
         let delivered = DispatchSemaphore(value: 0)
         capture.onSamples = { _ in delivered.signal() }
@@ -244,7 +244,7 @@ final class MeetingMicCaptureTests: XCTestCase {
     }
 
     private func sendConfigurationChangeAfterTheSettleTime(_ factory: FakeMeetingDriverFactory) {
-        clock += MeetingMicCapture.settleTime + 1
+        clock.advance(by: MeetingMicCapture.settleTime + 1)
         factory.configurationChangeHandlers.last?()
     }
 
@@ -264,7 +264,7 @@ final class MeetingMicCaptureTests: XCTestCase {
 
 final class MeetingRecorderTests: XCTestCase {
     private var folder: URL!
-    private var now: TimeInterval = 1_024
+    private let clock = TestUptime(1_024)
 
     override func setUp() {
         super.setUp()
@@ -283,7 +283,7 @@ final class MeetingRecorderTests: XCTestCase {
         return MeetingRecorder(
             sources: sources,
             audioURL: { [unowned self] in url($0) },
-            uptime: { [unowned self] in self.now },
+            uptime: { [clock] in clock.now },
             silenceCheckInterval: silenceCheck
         )
     }
@@ -339,7 +339,7 @@ final class MeetingRecorderTests: XCTestCase {
 
         recorder.pause()
         you.push(Array(repeating: 0.9, count: 160))
-        now += 30
+        clock.advance(by: 30)
         you.tailOnStop = []
         try recorder.resume()
         you.push(Array(repeating: 0.2, count: 160))
@@ -401,7 +401,7 @@ final class MeetingRecorderTests: XCTestCase {
         XCTAssertThrowsError(try recorder.resume())
         you.push(Array(repeating: 0.9, count: 160))
         you.startError = nil
-        now += 5
+        clock.advance(by: 5)
         try recorder.resume()
         you.push(Array(repeating: 0.2, count: 160))
         recorder.stop()
@@ -420,9 +420,9 @@ final class MeetingRecorderTests: XCTestCase {
         }
         try recorder.start()
 
-        now += 0.0625
+        clock.advance(by: 0.0625)
         you.push(Array(repeating: 0.5, count: 1_000))
-        now += 2
+        clock.advance(by: 2)
         you.push(Array(repeating: 0.5, count: 1_000))
         recorder.stop()
 
@@ -442,7 +442,7 @@ final class MeetingRecorderTests: XCTestCase {
         try recorder.start()
 
         them.push(Array(repeating: 0, count: 320))
-        now += MeetingRecorder.callSilenceLimit + 1
+        clock.advance(by: MeetingRecorder.callSilenceLimit + 1)
         wait(for: [silent], timeout: 2)
         them.push(Array(repeating: 0.2, count: 320))
         wait(for: [returned], timeout: 2)
@@ -457,7 +457,7 @@ final class MeetingRecorderTests: XCTestCase {
         try recorder.start()
 
         them.push(Array(repeating: 0.2, count: 320))
-        now += MeetingRecorder.callSilenceLimit + 1
+        clock.advance(by: MeetingRecorder.callSilenceLimit + 1)
         wait(for: [stopped], timeout: 2)
         recorder.restartCallAudio()
         recorder.stop()
@@ -480,9 +480,9 @@ final class MeetingRecorderTests: XCTestCase {
         }
         try recorder.start()
 
-        now += 10
+        clock.advance(by: 10)
         them.push(Array(repeating: 0.2, count: 320))
-        now += MeetingRecorder.callSilenceLimit + 1
+        clock.advance(by: MeetingRecorder.callSilenceLimit + 1)
         wait(for: [first], timeout: 2)
         recorder.rearmCallSilence()
         wait(for: [second], timeout: 2)
@@ -499,7 +499,7 @@ final class MeetingRecorderTests: XCTestCase {
         recorder.onEvent = { events.append([$0]) }
         try recorder.start()
 
-        now += MeetingRecorder.callSilenceLimit * 2
+        clock.advance(by: MeetingRecorder.callSilenceLimit * 2)
         Thread.sleep(forTimeInterval: 0.1)
         recorder.stop()
 
@@ -514,7 +514,7 @@ final class MeetingRecorderTests: XCTestCase {
         recorder.onEvent = { events.append([$0]) }
         try recorder.start()
 
-        now += MeetingRecorder.callSilenceLimit * 2
+        clock.advance(by: MeetingRecorder.callSilenceLimit * 2)
         Thread.sleep(forTimeInterval: 0.1)
         recorder.stop()
 
@@ -524,6 +524,24 @@ final class MeetingRecorderTests: XCTestCase {
 }
 
 // MARK: - Fakes
+
+/// A clock that a test moves while a capture or recorder queue reads it.
+private final class TestUptime: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: TimeInterval
+
+    init(_ value: TimeInterval) {
+        self.value = value
+    }
+
+    var now: TimeInterval {
+        lock.withLock { value }
+    }
+
+    func advance(by seconds: TimeInterval) {
+        lock.withLock { value += seconds }
+    }
+}
 
 private final class Collected<Element>: @unchecked Sendable {
     private let lock = NSLock()
