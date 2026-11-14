@@ -58,8 +58,20 @@ struct MeetingPage: View {
                     )
                 }
                 if live == nil {
-                    MeetingTabs(selection: $tab)
-                        .fixedSize()
+                    HStack(spacing: 12) {
+                        MeetingTabs(selection: $tab)
+                            .fixedSize()
+                        Spacer(minLength: 12)
+                        HStack(spacing: 4) {
+                            if tab == .summary {
+                                MeetingRegenerateMenu(meetings: meetings, actions: actions, record: record)
+                            }
+                            MeetingCopyButton(title: "Copy \(tab.title)", hasText: hasCopyText) {
+                                copyText(record)
+                            }
+                            .id(tab)
+                        }
+                    }
                 }
                 content(record)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -154,16 +166,15 @@ struct MeetingPage: View {
                     Label("Stop", systemImage: "stop.fill")
                 }
                 .keyboardShortcut(".", modifiers: .command)
-            } else if let text = copyText(record) {
-                MeetingCopyButton(title: "Copy \(tab.title)", text: text)
             }
 
             Menu {
                 MeetingMenuItems(record: record, meetings: meetings, actions: actions, isLive: live != nil)
             } label: {
-                Image(systemName: "ellipsis.circle")
+                MeetingIcon(systemName: "ellipsis.circle")
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
             .help("More")
@@ -185,17 +196,28 @@ struct MeetingPage: View {
         return parts.joined(separator: " · ")
     }
 
-    private func copyText(_ record: MeetingRecord) -> String? {
-        let text: String
+    /// Each update of the page reads this, so it does not build the
+    /// transcript text, which can be long. A click builds it.
+    private var hasCopyText: Bool {
         switch tab {
         case .summary:
-            text = summary ?? ""
+            return !(summary ?? "").allSatisfy(\.isWhitespace)
         case .notes:
-            text = notes?.text ?? ""
+            return !(notes?.text ?? "").allSatisfy(\.isWhitespace)
         case .transcript:
-            text = MeetingExport.transcript(record: record, segments: segments)
+            return segments.contains { !$0.text.allSatisfy(\.isWhitespace) }
         }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
+    }
+
+    private func copyText(_ record: MeetingRecord) -> String {
+        switch tab {
+        case .summary:
+            return summary ?? ""
+        case .notes:
+            return notes?.text ?? ""
+        case .transcript:
+            return MeetingExport.transcript(record: record, segments: segments)
+        }
     }
 
     // MARK: - Content
@@ -207,19 +229,13 @@ struct MeetingPage: View {
         case .summary:
             MeetingSummaryTab(meetings: meetings, appState: appState, actions: actions, record: record, summary: summary)
         case .notes:
-            VStack(alignment: .leading, spacing: 12) {
-                if let draft = Binding($notes) {
-                    MeetingNotesEditor(draft: draft) { text in
-                        Task { await meetings.saveNotes(text, for: id) }
-                    }
-                } else if notesUnreadable {
-                    Text("Couldn’t read the notes.")
-                        .foregroundStyle(MainWindowPalette.secondaryText)
+            if let draft = Binding($notes) {
+                MeetingNotesEditor(draft: draft) { text in
+                    Task { await meetings.saveNotes(text, for: id) }
                 }
-                if live == nil {
-                    MeetingRegenerateMenu(title: "Regenerate Summary", meetings: meetings, actions: actions, record: record)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
+            } else if notesUnreadable {
+                Text("Couldn’t read the notes.")
+                    .foregroundStyle(MainWindowPalette.secondaryText)
             }
         case .transcript:
             if record.status == .finishing {
@@ -286,28 +302,49 @@ private struct MeetingTabs: NSViewRepresentable {
     }
 }
 
-/// "Copy Summary", then "Copied" with a checkmark for a moment.
+/// The copy icon of the open tab, a checkmark for a moment after a copy.
 struct MeetingCopyButton: View {
     let title: String
-    let text: String
+    let hasText: Bool
+    let text: () -> String
     @State private var copied = false
 
     var body: some View {
         Button {
             NSPasteboard.general.clearContents()
-            copied = NSPasteboard.general.setString(text, forType: .string)
-        } label: {
+            copied = NSPasteboard.general.setString(text(), forType: .string)
             if copied {
-                Label("Copied", systemImage: "checkmark")
-            } else {
-                Text(title)
+                AccessibilityNotification.Announcement("Copied").post()
             }
+        } label: {
+            MeetingIcon(systemName: copied ? "checkmark" : "doc.on.doc")
+                .contentTransition(.symbolEffect(.replace))
         }
+        .buttonStyle(.plain)
+        .disabled(!hasText)
+        .help(title)
+        .accessibilityLabel(title)
         .task(id: copied) {
             guard copied else { return }
             try? await Task.sleep(for: .seconds(1.5))
             copied = false
         }
+    }
+}
+
+/// An icon button label of the meeting page: a square of the same size for
+/// each symbol, so icons of different widths line up by their centers. Its
+/// control uses the plain style: the borderless styles draw a menu's image
+/// themselves and leave out this frame.
+struct MeetingIcon: View {
+    let systemName: String
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Image(systemName: systemName)
+            .foregroundStyle(isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+            .frame(width: AppMetrics.iconButtonSize, height: AppMetrics.iconButtonSize)
+            .contentShape(Rectangle())
     }
 }
 
