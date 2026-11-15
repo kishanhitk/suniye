@@ -24,6 +24,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
         host.model.isEditable = isEditable
         // The engine skips its own update while Writing Tools run.
         host.editorTextView?.isEditable = isEditable
+        host.model.documentID = documentID
         host.model.load(markdown)
     }
 
@@ -36,7 +37,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
         var isFocused = false {
             didSet { focusChanged() }
         }
-        @ObservationIgnored let documentID: String
+        var documentID: String
         @ObservationIgnored var edited: (_ markdown: String, _ ended: Bool) -> Void = { _, _ in }
         /// The Markdown that the page gave last; an edit that comes back from
         /// the page is no new text.
