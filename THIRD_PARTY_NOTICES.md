@@ -18,6 +18,11 @@ Suniye depends on third-party software and model artifacts.
   - Used for: the `llama-server` runtime for Local Gemma and Qwen3-ASR
   - Local file: `Suniye/LocalLLM/llama-server`, embedded as `Contents/Helpers/llama-server`
 
+- MarkdownEngine 0.15.0 (Apache-2.0)
+  - Source: https://github.com/nodes-app/swift-markdown-engine
+  - Pinned by: `project.yml` (exact version, the `MarkdownEngine` product only)
+  - Used for: the Markdown editor of a meeting summary
+
 ## Model artifacts
 - Model: `sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`
 - Download source: sherpa-onnx releases

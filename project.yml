@@ -7,6 +7,9 @@ packages:
     exactVersion: 2.9.2
   SuniyeAnalytics:
     path: SuniyeAnalytics
+  MarkdownEngine:
+    url: https://github.com/nodes-app/swift-markdown-engine
+    exactVersion: 0.15.0
 schemes:
   Suniye:
     build:
@@ -88,6 +91,8 @@ targets:
       - package: Sparkle
       - package: SuniyeAnalytics
         product: SuniyeAnalytics
+      - package: MarkdownEngine
+        product: MarkdownEngine
       - framework: Suniye/Frameworks/libsherpa-onnx-c-api.dylib
       - framework: Suniye/Frameworks/libonnxruntime.dylib
     postBuildScripts:

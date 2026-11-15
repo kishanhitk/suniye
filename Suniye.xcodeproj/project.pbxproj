@@ -251,6 +251,7 @@
 		D755242586E211F38B5808F4 /* AsyncTestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = C031D342DF8E616CDFE46A95 /* AsyncTestHelpers.swift */; };
 		D86E625941C2BF82BDED6971 /* MainWindowSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BA41916817D0AB1D6A0D341 /* MainWindowSection.swift */; };
 		D9596E4A242074ACA9AFDD0E /* AppleSpeechTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3195A9261B172F86FCD6465C /* AppleSpeechTranscriptionService.swift */; };
+		DA615A3BDBE032A8C443AB1A /* MarkdownEngine in Frameworks */ = {isa = PBXBuildFile; productRef = 0FF1DC62F7BF984F54656529 /* MarkdownEngine */; };
 		DABFB9E4A2770ACD863D0415 /* MeetingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EC3C5F79375CBB7F9353EE0 /* MeetingCoordinatorTests.swift */; };
 		DB33D2B8109251B88068BCC8 /* AppStateHandsFreeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D446136FD33B0273CCFE6C39 /* AppStateHandsFreeTests.swift */; };
 		DBC9493A82BDB3A0B9D10FE3 /* MeetingMicCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DC4B5E09C956EA3CFADBBA7 /* MeetingMicCapture.swift */; };
@@ -636,6 +637,7 @@
 			files = (
 				A0D2E4AA64DD241ACA69457D /* Sparkle in Frameworks */,
 				DF97C8B594E2C877231ECCF7 /* SuniyeAnalytics in Frameworks */,
+				DA615A3BDBE032A8C443AB1A /* MarkdownEngine in Frameworks */,
 				305CB2DFC0FA4FD60803A30D /* libsherpa-onnx-c-api.dylib in Frameworks */,
 				58BD775AF83F95F70DC21BF5 /* libonnxruntime.dylib in Frameworks */,
 			);
@@ -1269,6 +1271,7 @@
 			packageProductDependencies = (
 				A1F146473FBF70BF26A9257B /* Sparkle */,
 				1F908BB9A2C4E07874586F5D /* SuniyeAnalytics */,
+				0FF1DC62F7BF984F54656529 /* MarkdownEngine */,
 			);
 			productName = Suniye;
 			productReference = D8AAE91358FFD9EDBEFA9ACC /* Suniye.app */;
@@ -1295,6 +1298,7 @@
 			mainGroup = 80BAA1F67F5D858DF2C17254;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				174FBC495A2E85F29ADCEECC /* XCRemoteSwiftPackageReference "swift-markdown-engine" */,
 				1D53E53679565392F02B0140 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				5E25D423E06ED26074A50D1D /* XCLocalSwiftPackageReference "SuniyeAnalytics" */,
 			);
@@ -1922,6 +1926,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		174FBC495A2E85F29ADCEECC /* XCRemoteSwiftPackageReference "swift-markdown-engine" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/nodes-app/swift-markdown-engine";
+			requirement = {
+				kind = exactVersion;
+				version = 0.15.0;
+			};
+		};
 		1D53E53679565392F02B0140 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
@@ -1933,6 +1945,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		0FF1DC62F7BF984F54656529 /* MarkdownEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 174FBC495A2E85F29ADCEECC /* XCRemoteSwiftPackageReference "swift-markdown-engine" */;
+			productName = MarkdownEngine;
+		};
 		1F908BB9A2C4E07874586F5D /* SuniyeAnalytics */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SuniyeAnalytics;
