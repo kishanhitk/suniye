@@ -12,6 +12,8 @@ struct GeneralSettings: Codable, Equatable {
     var soundFeedbackEnabled: Bool = false
     var hideFloatingIndicatorWhenIdle: Bool = false
     var liveTranscriptionPreviewEnabled: Bool = false
+    /// The recorded time in the pill while a meeting records.
+    var showsMeetingTime: Bool = true
     var floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil
     /// Legacy onboarding flags. Still written (derived from `onboardingProgress`)
     /// so a downgraded build keeps working; `onboardingProgress` wins on load.
@@ -60,6 +62,7 @@ extension GeneralSettings {
         soundFeedbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundFeedbackEnabled) ?? false
         hideFloatingIndicatorWhenIdle = try container.decodeIfPresent(Bool.self, forKey: .hideFloatingIndicatorWhenIdle) ?? false
         liveTranscriptionPreviewEnabled = try container.decodeIfPresent(Bool.self, forKey: .liveTranscriptionPreviewEnabled) ?? false
+        showsMeetingTime = try container.decodeIfPresent(Bool.self, forKey: .showsMeetingTime) ?? true
         floatingIndicatorPlacement = try container.decodeIfPresent(FloatingIndicatorPlacement.self, forKey: .floatingIndicatorPlacement)
         hasSeenOnboardingWelcome = try container.decodeIfPresent(Bool.self, forKey: .hasSeenOnboardingWelcome)
         hasCompletedCoreOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedCoreOnboarding)

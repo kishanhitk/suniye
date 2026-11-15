@@ -11,6 +11,7 @@ import SwiftUI
 final class FloatingIndicatorModel {
     var state: FloatingIndicatorState = .idle
     var meeting: MeetingSession?
+    var showsMeetingTime = true
 }
 
 enum MeetingPillAction {
@@ -191,7 +192,7 @@ struct FloatingIndicatorView: View {
     @ViewBuilder
     private var capsuleContent: some View {
         if let meeting = model.meeting, showsMeetingPill {
-            MeetingPillContent(session: meeting, expanded: state == .hover, onAction: onMeetingAction)
+            MeetingPillContent(session: meeting, showsTime: model.showsMeetingTime, expanded: state == .hover, onAction: onMeetingAction)
         } else {
             dictationContent
         }
@@ -206,7 +207,7 @@ struct FloatingIndicatorView: View {
             hoverContent
         case let .listening(levels, source, _):
             if let meeting = model.meeting {
-                MeetingPillTimer(session: meeting)
+                MeetingPillTimer(session: meeting, showsTime: model.showsMeetingTime)
             }
             if source == .editHotkey {
                 Image(systemName: "pencil.line")
@@ -317,7 +318,7 @@ struct FloatingIndicatorView: View {
 
     private var pillWidth: CGFloat {
         if showsMeetingPill, let meeting = model.meeting {
-            return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: state == .hover).width
+            return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: state == .hover, showsTime: model.showsMeetingTime).width
         }
         switch state {
         case .idle:
@@ -326,7 +327,7 @@ struct FloatingIndicatorView: View {
             return 152
         case let .listening(_, source, _):
             return FloatingIndicatorMetrics.pillSize(source: source).width
-                + (model.meeting == nil ? 0 : FloatingIndicatorMetrics.meetingTimerWidth)
+                + (model.meeting == nil ? 0 : FloatingIndicatorMetrics.meetingLeadWidth(showsTime: model.showsMeetingTime))
         case let .processing(message):
             guard let message else {
                 return 128
@@ -339,7 +340,7 @@ struct FloatingIndicatorView: View {
 
     private var pillHeight: CGFloat {
         if showsMeetingPill, let meeting = model.meeting {
-            return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: state == .hover).height
+            return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: state == .hover, showsTime: model.showsMeetingTime).height
         }
         switch state {
         case .idle:
@@ -519,18 +520,19 @@ private struct ListeningMeterView: View {
     }
 }
 
-/// The pill while a meeting records. At rest: the dot, the time and one level
-/// meter for the louder track, or a pause glyph while paused, or a warning
-/// glyph while a track has a problem. On hover: Pause (or Resume), Stop and
-/// Open Notes. A click on the pill opens the meeting.
+/// The pill while a meeting records. At rest: the dot, the time when it
+/// shows, and one level meter for the louder track, or a pause glyph while
+/// paused, or a warning glyph while a track has a problem. On hover: Pause
+/// (or Resume), Stop and Open Notes. A click on the pill opens the meeting.
 private struct MeetingPillContent: View {
     let session: MeetingSession
+    let showsTime: Bool
     let expanded: Bool
     let onAction: (MeetingPillAction) -> Void
 
     var body: some View {
         HStack(spacing: FloatingIndicatorMetrics.meetingPillGap) {
-            MeetingPillTimer(session: session, spacing: FloatingIndicatorMetrics.meetingPillGap)
+            MeetingPillTimer(session: session, showsTime: showsTime, spacing: FloatingIndicatorMetrics.meetingPillGap)
             if expanded {
                 MeetingPillButton(title: session.isPaused ? "Resume" : "Pause", icon: session.isPaused ? "record.circle" : "pause.fill") {
                     onAction(session.isPaused ? .resume : .pause)
@@ -607,6 +609,7 @@ private struct MeetingPillButton: View {
 /// while paused.
 private struct MeetingPillTimer: View {
     let session: MeetingSession
+    let showsTime: Bool
     var spacing: CGFloat = 7
 
     var body: some View {
@@ -614,10 +617,12 @@ private struct MeetingPillTimer: View {
             Circle()
                 .fill(session.isPaused ? Color.gray : Color.red)
                 .frame(width: FloatingIndicatorMetrics.meetingPillDotWidth, height: FloatingIndicatorMetrics.meetingPillDotWidth)
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(MeetingTranscript.clock(session.elapsed(at: context.date)))
-                    .font(Font(FloatingIndicatorMetrics.meetingPillTimeFont))
-                    .foregroundStyle(.white.opacity(session.isPaused ? 0.6 : 1))
+            if showsTime {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text(MeetingTranscript.clock(session.elapsed(at: context.date)))
+                        .font(Font(FloatingIndicatorMetrics.meetingPillTimeFont))
+                        .foregroundStyle(.white.opacity(session.isPaused ? 0.6 : 1))
+                }
             }
         }
     }

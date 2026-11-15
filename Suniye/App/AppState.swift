@@ -77,6 +77,10 @@ final class AppState {
         get { generalSettings.liveTranscriptionPreviewEnabled }
         set { updateGeneralSettings { $0.liveTranscriptionPreviewEnabled = newValue } }
     }
+    var showsMeetingTime: Bool {
+        get { generalSettings.showsMeetingTime }
+        set { updateGeneralSettings { $0.showsMeetingTime = newValue } }
+    }
     /// Kill switch for the Permiso drag-to-grant Accessibility overlay.
     /// When false, the Accessibility buttons fall back to the System Settings deep-link.
     var accessibilityDragHelperEnabled: Bool {
@@ -3868,6 +3872,7 @@ final class AppState {
             stopLivePreview()
         }
         if new.hideFloatingIndicatorWhenIdle != old.hideFloatingIndicatorWhenIdle
+            || new.showsMeetingTime != old.showsMeetingTime
             || new.floatingIndicatorPlacement != old.floatingIndicatorPlacement {
             syncFloatingIndicatorPreferences()
         }
@@ -4089,6 +4094,7 @@ final class AppState {
         guard floatingIndicatorEnabled else { return }
         floatingIndicatorController.configure(
             hideWhenIdle: hideFloatingIndicatorWhenIdle,
+            showsMeetingTime: showsMeetingTime,
             placement: floatingIndicatorPlacement
         )
     }

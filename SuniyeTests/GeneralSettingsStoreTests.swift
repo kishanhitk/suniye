@@ -38,6 +38,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
             ),
             soundFeedbackEnabled: true,
             hideFloatingIndicatorWhenIdle: true,
+            showsMeetingTime: false,
             floatingIndicatorPlacement: FloatingIndicatorPlacement(centerXRatio: 0.2, bottomYRatio: 0.15),
             hasSeenOnboardingWelcome: true,
             hasCompletedCoreOnboarding: true,
@@ -211,6 +212,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
         let settings = store.load()
 
         XCTAssertFalse(settings.hideFloatingIndicatorWhenIdle)
+        XCTAssertTrue(settings.showsMeetingTime)
         XCTAssertNil(settings.floatingIndicatorPlacement)
         XCTAssertFalse(settings.soundFeedbackEnabled)
         XCTAssertNil(settings.preferredInputDeviceName)

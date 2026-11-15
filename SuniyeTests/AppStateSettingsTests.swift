@@ -41,6 +41,7 @@ final class AppStateSettingsTests: XCTestCase {
                 hotkeyConfiguration: .globe,
                 echoCancellationEnabled: false,
                 hideFloatingIndicatorWhenIdle: true,
+                showsMeetingTime: false,
                 floatingIndicatorPlacement: placement,
                 hasSeenOnboardingWelcome: false,
                 hasCompletedCoreOnboarding: false
@@ -49,6 +50,7 @@ final class AppStateSettingsTests: XCTestCase {
         let appState = makeTestAppState(generalSettingsStore: generalSettingsStore)
 
         XCTAssertTrue(appState.hideFloatingIndicatorWhenIdle)
+        XCTAssertFalse(appState.showsMeetingTime)
         XCTAssertEqual(appState.floatingIndicatorPlacement, placement)
     }
 
@@ -59,6 +61,16 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hideFloatingIndicatorWhenIdle = true
 
         XCTAssertTrue(generalSettingsStore.latest.hideFloatingIndicatorWhenIdle)
+    }
+
+    func testTurningOffMeetingTimePersistsGeneralSettings() {
+        let generalSettingsStore = TestGeneralSettingsStore()
+        let appState = makeTestAppState(generalSettingsStore: generalSettingsStore)
+        XCTAssertTrue(appState.showsMeetingTime)
+
+        appState.showsMeetingTime = false
+
+        XCTAssertFalse(generalSettingsStore.latest.showsMeetingTime)
     }
 
     func testResetFloatingIndicatorPlacementClearsSavedPlacement() {
