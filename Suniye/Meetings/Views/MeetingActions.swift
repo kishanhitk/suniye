@@ -11,11 +11,17 @@ struct MeetingActionFailure: Equatable {
 @Observable
 final class MeetingActions {
     var deleting: MeetingRecord?
-    var renaming: MeetingRecord?
-    var renameText = ""
     var askingTranscribeAgain: MeetingRecord?
+    var replacingSummary: SummaryReplacement?
     var failure: MeetingActionFailure?
     var editingTemplates = false
+
+    /// Regenerate on a summary that the user edited, waiting for its answer.
+    struct SummaryReplacement: Equatable {
+        let meetingID: UUID
+        let templateID: String?
+        let templateName: String
+    }
 
     func startMeeting(_ meetings: MeetingCoordinator) {
         Task {
@@ -34,13 +40,13 @@ final class MeetingActions {
         deleting = record
     }
 
-    func rename(_ record: MeetingRecord) {
-        renameText = record.title
-        renaming = record
-    }
-
-    func askTranscribeAgain(_ record: MeetingRecord) {
-        askingTranscribeAgain = record
+    /// Asks once the typed text is saved, so the question knows about the
+    /// edits that a new transcript would replace.
+    func askTranscribeAgain(_ record: MeetingRecord, meetings: MeetingCoordinator) {
+        Task {
+            await meetings.textSaves.finish(record.id)
+            askingTranscribeAgain = meetings.record(record.id) ?? record
+        }
     }
 
     func export(_ record: MeetingRecord, meetings: MeetingCoordinator) {
@@ -56,6 +62,12 @@ final class MeetingActions {
                 failure = MeetingActionFailure(title: "Couldn’t export the meeting", message: error.localizedDescription)
             }
         }
+    }
+
+    static func transcribeAgainMessage(model: String?, edited: Bool) -> String {
+        let transcript = model.map { "A new transcript from \($0)" } ?? "A new transcript"
+        let replaced = edited ? "replaces the current one and your edits to it." : "replaces the current one."
+        return "\(transcript) \(replaced) Notes and the summary stay."
     }
 
     func revealInFinder(_ record: MeetingRecord, meetings: MeetingCoordinator) {
@@ -98,27 +110,26 @@ private struct MeetingActionDialogs: ViewModifier {
                 Text("This deletes the summary, notes, transcript and audio. You can’t undo it.")
             }
             .alert(
-                "Rename Meeting",
-                isPresented: Binding(get: { actions.renaming != nil }, set: { if !$0 { actions.renaming = nil } }),
-                presenting: actions.renaming
-            ) { record in
-                TextField("Title", text: $actions.renameText)
-                Button("Rename") {
-                    let title = actions.renameText
-                    Task { await meetings.rename(record.id, to: title) }
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-            .alert(
                 actions.askingTranscribeAgain.map { "Transcribe “\($0.title)” again?" } ?? "",
                 isPresented: Binding(get: { actions.askingTranscribeAgain != nil }, set: { if !$0 { actions.askingTranscribeAgain = nil } }),
                 presenting: actions.askingTranscribeAgain
             ) { record in
                 Button("Transcribe Again") { meetings.transcribeAgain(record.id) }
                 Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text(meetings.transcriptModelName.map { "A new transcript from \($0) replaces the current one. Notes and the summary stay." }
-                    ?? "A new transcript replaces the current one. Notes and the summary stay.")
+            } message: { record in
+                Text(MeetingActions.transcribeAgainMessage(model: meetings.transcriptModelName, edited: record.transcriptEditedAt != nil))
+            }
+            .alert(
+                "Replace your edited summary?",
+                isPresented: Binding(get: { actions.replacingSummary != nil }, set: { if !$0 { actions.replacingSummary = nil } }),
+                presenting: actions.replacingSummary
+            ) { replacement in
+                Button("Replace") {
+                    Task { await meetings.regenerate(replacement.meetingID, templateID: replacement.templateID) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { replacement in
+                Text("A new summary with the \(replacement.templateName) template replaces your changes.")
             }
             .alert(
                 actions.failure?.title ?? "",
@@ -151,11 +162,10 @@ struct MeetingMenuItems: View {
         if !isLive {
             Button("Export as Markdown…") { actions.export(record, meetings: meetings) }
             if meetings.audioOnMac.contains(record.id), record.status.hasFinalTranscript {
-                Button("Transcribe Again…") { actions.askTranscribeAgain(record) }
+                Button("Transcribe Again…") { actions.askTranscribeAgain(record, meetings: meetings) }
                     .disabled(!meetings.canTranscribeAgain(record))
             }
         }
-        Button("Rename…") { actions.rename(record) }
         Button("Show in Finder") { actions.revealInFinder(record, meetings: meetings) }
         if !isLive {
             Divider()

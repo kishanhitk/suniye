@@ -17,9 +17,16 @@ enum MeetingTranscript {
         segments.sorted { ($0.audioStart, $0.track) < ($1.audioStart, $1.track) }
     }
 
-    /// The transcript that a reader sees: no echo of the call, and no line
-    /// after the end of the call that the meeting followed.
+    /// The transcript that a reader sees. A transcript that the user edited
+    /// is as the user left it: the pass wrote it filtered, and an edit must
+    /// not hide a line or bring one back.
     static func final(_ segments: [MeetingSegment], of record: MeetingRecord) -> [MeetingSegment] {
+        record.transcriptEditedAt == nil ? filtered(segments, of: record) : ordered(segments)
+    }
+
+    /// The lines of a pass that a transcript keeps: no echo of the call, and
+    /// no line after the end of the call that the meeting followed.
+    static func filtered(_ segments: [MeetingSegment], of record: MeetingRecord) -> [MeetingSegment] {
         let kept = record.transcriptEnd.map { end in segments.filter { $0.audioStart < end } } ?? segments
         return final(kept, callPlayedOnSpeakers: record.callPlayedOnSpeakers)
     }

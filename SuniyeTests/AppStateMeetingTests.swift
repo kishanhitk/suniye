@@ -13,6 +13,24 @@ final class AppStateMeetingTests: XCTestCase {
         XCTAssertEqual(toasts.shownMessages, ["Summary ready"])
     }
 
+    func testAQuitWaitsForTheTextThatAPageHasNotSaved() async {
+        let appState = makeTestAppState()
+        var saved = false
+        appState.meetings.textSaves.stage(.notes, of: UUID()) { saved = true }
+
+        let reply = appState.terminateReplyForMeeting()
+        let done = await waitUntil { saved && appState.meetings.textSaves.isIdle }
+
+        XCTAssertEqual(reply, .terminateLater)
+        XCTAssertTrue(done)
+    }
+
+    func testAQuitWithNothingToSaveEndsAtOnce() {
+        let appState = makeTestAppState()
+
+        XCTAssertEqual(appState.terminateReplyForMeeting(), .terminateNow)
+    }
+
     func testTranscribeAgainShowsWhenItEndsAndWhenItFails() {
         let toasts = SpyLearningToastPresenter()
         let appState = makeTestAppState(learningToastPresenter: toasts)

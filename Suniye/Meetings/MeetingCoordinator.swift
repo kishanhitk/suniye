@@ -163,6 +163,7 @@ final class MeetingCoordinator {
             if oldValue !== live {
                 onLiveChange?(live)
                 updateCallDetection()
+                blockPlayback()
             }
         }
     }
@@ -196,6 +197,9 @@ final class MeetingCoordinator {
     @ObservationIgnored var onNotice: ((MeetingNotice) -> Void)?
     @ObservationIgnored let summaries: MeetingSummaries
     @ObservationIgnored let store: MeetingStore
+    /// The text that the meeting page saves; a quit waits for it.
+    @ObservationIgnored let textSaves = MeetingTextSaves()
+    @ObservationIgnored let playback: MeetingPlayback
     @ObservationIgnored let templates: MeetingTemplateStore
 
     @ObservationIgnored private let settingsStore: MeetingSettingsStore
@@ -217,7 +221,10 @@ final class MeetingCoordinator {
     @ObservationIgnored private var dictating = false
     /// The dictation's audio capture runs: the microphone track gets silence.
     @ObservationIgnored private var dictationCaptures = false {
-        didSet { live?.recorder.setMicrophoneMuted(dictationCaptures) }
+        didSet {
+            live?.recorder.setMicrophoneMuted(dictationCaptures)
+            blockPlayback()
+        }
     }
     @ObservationIgnored private var loadedModel: ASRModelID?
     @ObservationIgnored private var listTexts: [UUID: MeetingListText] = [:]
@@ -243,6 +250,7 @@ final class MeetingCoordinator {
         self.environment = environment
         self.analytics = analytics
         settings = settingsStore.load()
+        playback = MeetingPlayback(store: store, makePlayer: environment.makePlayer)
         detector = MeetingCallDetector(reader: environment.makeMicrophoneUsers(), uptime: environment.uptime)
         summaries = MeetingSummaries(
             store: store,
@@ -320,7 +328,10 @@ final class MeetingCoordinator {
     }
 
     /// Writes the summary, notes and transcript to `url` as Markdown.
+    /// The text that the user typed is saved first, so the file has it.
     func export(_ record: MeetingRecord, to url: URL) async throws {
+        await textSaves.finish(record.id)
+        let record = self.record(record.id) ?? record
         let markdown = MeetingExport.markdown(
             record: record,
             summary: await summary(of: record.id),
@@ -395,6 +406,9 @@ final class MeetingCoordinator {
         }
         await speech.start()
         recorder.setMicrophoneMuted(dictationCaptures)
+        // The microphone would hear the playback. No await from here to
+        // `live`, so no Play comes in between.
+        playback.close()
         do {
             try recorder.start()
         } catch {
@@ -685,6 +699,60 @@ final class MeetingCoordinator {
         }
     }
 
+    /// Writes the text that the user changed in transcript lines; the times
+    /// and the speakers stay. An empty text deletes its line when the edit
+    /// ended (`deleteEmpty`); until then the line keeps its old text on disk,
+    /// so a line that the user empties to retype it does not go.
+    func editTranscript(_ id: UUID, texts: [UUID: String], deleteEmpty: Bool) async {
+        guard record(id)?.status.hasFinalTranscript == true else { return }
+        let segments = await store.segments(of: id).compactMap { segment -> MeetingSegment? in
+            guard let text = texts[segment.id] else { return segment }
+            if text.isEmpty {
+                return deleteEmpty ? nil : segment
+            }
+            return segment.withText(text)
+        }
+        do {
+            try await store.replaceSegments(segments, of: id)
+        } catch {
+            AppLogger.shared.log(.error, "meeting transcript edit not saved id=\(id.uuidString) error=\(error.localizedDescription)")
+            return
+        }
+        if record(id)?.transcriptEditedAt == nil {
+            let now = environment.now()
+            await update(id) { $0.transcriptEditedAt = now }
+        }
+        dropListText(id)
+    }
+
+    /// The user changed this part of a meeting's text, for the first time in
+    /// this visit of its page.
+    func textEdited(_ part: MeetingEditedText) {
+        analytics.track(.meetingEdited(part: part))
+    }
+
+    /// The audio of a meeting started to play, for the first time in this
+    /// visit of its page.
+    func playbackStarted() {
+        analytics.track(.meetingPlayed)
+    }
+
+    /// Writes the summary that the user changed, as Markdown.
+    func editSummary(_ id: UUID, markdown: String) async {
+        guard record(id)?.status == .done else { return }
+        do {
+            try await store.saveSummary(markdown, for: id)
+        } catch {
+            AppLogger.shared.log(.error, "meeting summary edit not saved id=\(id.uuidString) error=\(error.localizedDescription)")
+            return
+        }
+        if record(id)?.summaryEditedAt == nil {
+            let now = environment.now()
+            await update(id) { $0.summaryEditedAt = now }
+        }
+        dropListText(id)
+    }
+
     /// The cached list text goes after the write, so no read that ran
     /// during it keeps the old notes.
     func saveNotes(_ notes: String, for id: UUID) async {
@@ -696,8 +764,19 @@ final class MeetingCoordinator {
         dropListText(id)
     }
 
+    /// Writes the summary again, unless the user edited it, also in text
+    /// that waited for its save: then it writes nothing and returns false,
+    /// and the page asks before the edit is replaced.
+    func regenerateUnlessEdited(_ id: UUID, templateID: String? = nil) async -> Bool {
+        await textSaves.finish(id)
+        guard record(id)?.summaryEditedAt == nil else { return false }
+        await regenerate(id, templateID: templateID)
+        return true
+    }
+
     func regenerate(_ id: UUID, templateID: String? = nil) async {
         guard record(id)?.status.canRegenerate == true else { return }
+        await textSaves.finish(id)
         if let templateID {
             updateSettings { $0.templateID = templateID }
         }
@@ -716,6 +795,7 @@ final class MeetingCoordinator {
 
     func delete(_ id: UUID) async throws {
         guard live?.id != id, transcriptPasses[id] == nil else { return }
+        playback.close(id)
         summaries.remove(id)
         try await store.delete(id)
         meetings.removeAll { $0.id == id }
@@ -731,7 +811,8 @@ final class MeetingCoordinator {
     /// From the start of a dictation to its end, no meeting chunk starts
     /// decoding and the summary waits. The microphone track gets silence from
     /// the start until `dictationCaptureEnded()`: the dictated words are not
-    /// meeting talk.
+    /// meeting talk. Playback stops for the capture, so the dictation does
+    /// not hear it, and it does not start again by itself.
     func dictationChanged(active: Bool) {
         dictating = active
         dictationCaptures = active
@@ -873,6 +954,7 @@ final class MeetingCoordinator {
             let transcript = try await runPass(id, model: chosenModel, lines: .draft)
             guard !transcript.isEmpty else { throw TranscribeAgainError.noLines }
             try await store.keepDraft(of: id)
+            await update(id) { $0.transcriptEditedAt = nil }
             dropListText(id)
             onNotice?(.transcribedAgain(id))
         } catch {
@@ -892,11 +974,12 @@ final class MeetingCoordinator {
 
     /// Deletes the audio whose time is over: at launch and after each
     /// transcript, never on a timer. A meeting with no final transcript keeps
-    /// its audio for Finish Transcript, and a meeting in a pass keeps it until
-    /// the pass ends.
+    /// its audio for Finish Transcript, and a meeting in a pass or with its
+    /// audio open in the player keeps it until the next check.
     private func deleteExpiredAudio() async {
         let now = environment.now()
-        for record in meetings where audioOnMac.contains(record.id) && record.status.hasFinalTranscript && transcriptPasses[record.id] == nil {
+        for record in meetings where audioOnMac.contains(record.id) && record.status.hasFinalTranscript
+            && transcriptPasses[record.id] == nil && playback.meetingID != record.id {
             if let days = settings.audioRetention.days,
                now < (record.endedAt ?? record.startedAt).addingTimeInterval(TimeInterval(days) * 24 * 60 * 60) {
                 continue
@@ -1040,8 +1123,15 @@ final class MeetingCoordinator {
         }
     }
 
+    private func blockPlayback() {
+        playback.block(live != nil || dictationCaptures)
+    }
+
+    /// Notes alone are enough, so the notes typed just before a stop are
+    /// saved first.
     private func hasEnoughSpeech(_ id: UUID, segments: [MeetingSegment]) async -> Bool {
-        MeetingSummaryWriter.hasEnoughSpeech(segments, notes: await store.notes(of: id) ?? "")
+        await textSaves.finish(id)
+        return MeetingSummaryWriter.hasEnoughSpeech(segments, notes: await store.notes(of: id) ?? "")
     }
 
     private func apply(_ record: MeetingRecord) {

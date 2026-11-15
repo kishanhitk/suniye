@@ -40,6 +40,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     private var uptime: TimeInterval = 1000
     private var cardDurations = MeetingCallCard.Durations()
     private var summaryAvailability = MeetingSummaryAvailability.ready(.localModel)
+    private var players: [FakeMeetingAudioPlayer] = []
 
     override func setUp() async throws {
         try await super.setUp()
@@ -76,7 +77,12 @@ final class MeetingCoordinatorTests: XCTestCase {
             liveCheckInterval: .milliseconds(20),
             speechlessLimit: speechlessLimit,
             makeSpeechDetector: { LoudSpeechDetector() },
-            callCardDurations: cardDurations
+            callCardDurations: cardDurations,
+            makePlayer: { [unowned self] _ in
+                let player = FakeMeetingAudioPlayer(duration: 3)
+                players.append(player)
+                return player
+            }
         )
         let coordinator = MeetingCoordinator(
             store: store,
@@ -843,6 +849,263 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.record(meeting.id)?.status, .done)
     }
 
+    func testAnEditKeepsTheTimesAndReachesTheListAndItsSearch() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let line = MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 40_000, text: "Ship on Fryday.")
+        try await store.appendSegment(line, to: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        await coordinator.editTranscript(meeting.id, texts: [line.id: "Ship on Friday."], deleteEmpty: false)
+        let transcript = await coordinator.transcript(of: meeting.id)
+        let listed = await coordinator.listText(for: meeting.id)
+
+        XCTAssertEqual(transcript, [line.withText("Ship on Friday.")])
+        XCTAssertEqual(listed.transcript, ["Ship on Friday."])
+        XCTAssertEqual(coordinator.record(meeting.id)?.transcriptEditedAt, clock)
+    }
+
+    func testAnEmptiedLineStaysOnDiskUntilTheEditEnds() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let kept = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 16_000, text: "Hello.")
+        let emptied = MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 32_000, text: "Thanks for watching.")
+        try await store.appendSegment(kept, to: meeting.id)
+        try await store.appendSegment(emptied, to: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        await coordinator.editTranscript(meeting.id, texts: [emptied.id: ""], deleteEmpty: false)
+        let whileTyping = await coordinator.transcript(of: meeting.id)
+        await coordinator.editTranscript(meeting.id, texts: [emptied.id: ""], deleteEmpty: true)
+        let afterTheEdit = await coordinator.transcript(of: meeting.id)
+
+        XCTAssertEqual(whileTyping, [kept, emptied])
+        XCTAssertEqual(afterTheEdit, [kept])
+    }
+
+    func testAnEditedLineThatRepeatsTheCallStays() async throws {
+        var meeting = MeetingRecord(title: "Call", startedAt: clock.addingTimeInterval(-600), tracks: [.you, .them], status: .done, templateID: "general")
+        meeting.endedAt = clock.addingTimeInterval(-60)
+        meeting.callPlayedOnSpeakers = true
+        try await store.create(meeting)
+        let call = MeetingSegment(id: UUID(), track: .them, audioStart: 0, audioEnd: 48_000, text: "We ship on Friday.")
+        let mine = MeetingSegment(id: UUID(), track: .you, audioStart: 8_000, audioEnd: 40_000, text: "Sounds good.")
+        try await store.appendSegment(call, to: meeting.id)
+        try await store.appendSegment(mine, to: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        await coordinator.editTranscript(meeting.id, texts: [mine.id: "We ship on Friday."], deleteEmpty: false)
+        let transcript = await coordinator.transcript(of: meeting.id)
+
+        XCTAssertEqual(transcript.map(\.text), ["We ship on Friday.", "We ship on Friday."], "the echo rule does not hide a line that the user wrote")
+    }
+
+    func testTranscribeAgainClearsTheEditMark() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let line = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words.")
+        try await store.appendSegment(line, to: meeting.id)
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        await coordinator.start()
+        await coordinator.editTranscript(meeting.id, texts: [line.id: "Edited words."], deleteEmpty: false)
+        let marked = coordinator.record(meeting.id)?.transcriptEditedAt != nil
+
+        coordinator.transcribeAgain(meeting.id)
+        let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
+
+        XCTAssertTrue(marked)
+        XCTAssertTrue(finished)
+        XCTAssertNil(coordinator.record(meeting.id)?.transcriptEditedAt)
+        let transcript = await coordinator.transcript(of: meeting.id)
+        XCTAssertEqual(transcript.map(\.text), [longSentence])
+    }
+
+    func testTranscribeAgainFiltersTheNewTranscriptOfAnEditedMeeting() async throws {
+        let end = clock.addingTimeInterval(-24 * 60 * 60)
+        var meeting = MeetingRecord(title: "Call", startedAt: end.addingTimeInterval(-60), tracks: [.you], status: .done, templateID: "general")
+        meeting.endedAt = end
+        meeting.transcriptEnd = 4 * MeetingAudioFormat.sampleRate
+        try await store.create(meeting)
+        let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: meeting.id))
+        try writer.append(tone(2.5, level: 0.3) + silence(3) + tone(2.5, level: 0.5) + silence(0.5))
+        try writer.close()
+        let line = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words.")
+        try await store.appendSegment(line, to: meeting.id)
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        await coordinator.start()
+        await coordinator.editTranscript(meeting.id, texts: [line.id: "Edited words."], deleteEmpty: false)
+
+        coordinator.transcribeAgain(meeting.id)
+        let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
+        let stored = await store.segments(of: meeting.id)
+
+        XCTAssertTrue(finished)
+        XCTAssertEqual(stored.map(\.text), [longSentence], "the line after the end of the call stays out, also on disk")
+    }
+
+    func testRegenerateWaitsForTheTranscriptThatTheUserTyped() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let line = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: longSentence)
+        try await store.appendSegment(line, to: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        let typed = longSentence.replacingOccurrences(of: "word1 ", with: "typedword ")
+        coordinator.textSaves.stage(.transcript, of: meeting.id) {
+            await coordinator.editTranscript(meeting.id, texts: [line.id: typed], deleteEmpty: false)
+        }
+
+        await coordinator.regenerate(meeting.id)
+        let written = await waitUntil { coordinator.record(meeting.id)?.status == .done }
+        let inputs = await summaryModel.inputs
+
+        XCTAssertTrue(written)
+        XCTAssertTrue(inputs.contains { $0.contains("typedword") }, "the summary reads the typed text, not the text on disk before it")
+    }
+
+    func testASummaryEditIsSavedAndMarkedAndANewSummaryClearsTheMark() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: longSentence), to: meeting.id)
+        try await store.saveSummary("## Overview\nShip Friday.", for: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        await coordinator.editSummary(meeting.id, markdown: "## Overview\nShip on Monday.")
+        let saved = await coordinator.summary(of: meeting.id)
+        let marked = coordinator.record(meeting.id)?.summaryEditedAt
+        await coordinator.regenerate(meeting.id)
+        let written = await waitUntil { coordinator.record(meeting.id)?.status == .done }
+
+        XCTAssertEqual(saved, "## Overview\nShip on Monday.")
+        XCTAssertEqual(marked, clock)
+        XCTAssertTrue(written)
+        XCTAssertNil(coordinator.record(meeting.id)?.summaryEditedAt, "a new summary is not the user's edit")
+    }
+
+    func testPlayIsOffWhileADictationCaptures() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
+        let coordinator = makeCoordinator()
+        coordinator.playback.open(meeting.id)
+        coordinator.playback.play()
+
+        coordinator.dictationChanged(active: true)
+        let paused = !coordinator.playback.isPlaying && !players[0].isPlaying
+        coordinator.playback.play()
+        let playedDuringTheCapture = coordinator.playback.isPlaying
+        coordinator.dictationCaptureEnded()
+        coordinator.dictationChanged(active: false)
+        let startedByItself = coordinator.playback.isPlaying
+        coordinator.playback.play()
+
+        XCTAssertTrue(paused)
+        XCTAssertFalse(playedDuringTheCapture, "Play, a time link and Space all go through play()")
+        XCTAssertFalse(startedByItself)
+        XCTAssertTrue(coordinator.playback.isPlaying)
+    }
+
+    func testARecordingClosesThePlaybackAndPlayIsOffWhileItRecords() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
+        let coordinator = makeCoordinator()
+        coordinator.playback.open(meeting.id)
+        coordinator.playback.play()
+
+        try await coordinator.startMeeting(source: .manual)
+        let closed = coordinator.playback.meetingID == nil && !players[0].isPlaying
+        coordinator.playback.open(meeting.id)
+        coordinator.playback.play()
+
+        XCTAssertTrue(closed)
+        XCTAssertFalse(coordinator.playback.isPlaying)
+    }
+
+    func testDeletingAMeetingStopsItsPlaybackBeforeItsFilesGo() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
+        let coordinator = makeCoordinator()
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        await coordinator.start()
+        coordinator.playback.open(meeting.id)
+        coordinator.playback.play()
+        var filesAtStop: [MeetingTrack]?
+        players[0].pausing = { [unowned self] in filesAtStop = store.audioTracks(of: meeting.id) }
+
+        try await coordinator.delete(meeting.id)
+
+        XCTAssertEqual(filesAtStop, [.you], "the playback stops while its files are there")
+        XCTAssertNil(coordinator.playback.meetingID)
+        XCTAssertEqual(store.audioTracks(of: meeting.id), [])
+    }
+
+    func testAudioOpenInThePlayerStaysPastItsTimeUntilTheNextCheck() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 8)
+        let first = makeCoordinator()
+        first.updateSettings { $0.audioRetention = .sevenDays }
+        first.playback.open(meeting.id)
+
+        await first.start()
+        let keptWhileOpen = store.audioTracks(of: meeting.id)
+        first.playback.close()
+        await makeCoordinator().start()
+
+        XCTAssertEqual(keptWhileOpen, [.you])
+        XCTAssertEqual(store.audioTracks(of: meeting.id), [], "the next check deletes it")
+    }
+
+    func testRegenerateWritesAtOnceOnlyWhenTheSummaryHasNoEdit() async throws {
+        let edited = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let plain = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        for id in [edited.id, plain.id] {
+            try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: longSentence), to: id)
+            try await store.saveSummary("## Overview\nShip Friday.", for: id)
+        }
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        coordinator.textSaves.stage(.summary, of: edited.id) {
+            await coordinator.editSummary(edited.id, markdown: "## Overview\nShip on Monday.")
+        }
+
+        let wroteEdited = await coordinator.regenerateUnlessEdited(edited.id)
+        let wrotePlain = await coordinator.regenerateUnlessEdited(plain.id)
+        let kept = await coordinator.summary(of: edited.id)
+
+        XCTAssertFalse(wroteEdited, "the edit counts, also while it waits for its save")
+        XCTAssertEqual(kept, "## Overview\nShip on Monday.")
+        XCTAssertEqual(coordinator.record(edited.id)?.status, .done)
+        XCTAssertTrue(wrotePlain)
+        XCTAssertEqual(coordinator.record(plain.id)?.status, .summarizing)
+    }
+
+    func testNotesTypedJustBeforeTheStopCountForTheSummary() async throws {
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+        you.push(silence(3))
+        coordinator.textSaves.stage(.notes, of: id) {
+            await coordinator.saveNotes("Ask legal about the pricing copy.", for: id)
+        }
+
+        await coordinator.stop()
+
+        XCTAssertEqual(coordinator.record(id)?.status, .summarizing, "the notes are enough for a summary")
+    }
+
+    func testAnExportHasTheTextThatWasJustTyped() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        coordinator.textSaves.stage(.notes, of: meeting.id) {
+            await coordinator.saveNotes("Ask legal about the pricing copy.", for: meeting.id)
+        }
+        let url = root.appendingPathComponent("export.md")
+
+        try await coordinator.export(try XCTUnwrap(coordinator.record(meeting.id)), to: url)
+
+        XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("Ask legal about the pricing copy."))
+    }
+
     func testAFailedTranscribeAgainKeepsTheTranscript() async throws {
         let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
         try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words."), to: meeting.id)
@@ -1200,6 +1463,7 @@ private actor WordEngine: TranscriptionServiceProtocol {
 /// until it opens or its task is canceled.
 private actor GatedSummaryModel: MeetingSummaryModel {
     private(set) var kinds: [MeetingSummaryRequest.Kind] = []
+    private(set) var inputs: [String] = []
     private(set) var waiting = false
     private var isOpen = true
 
@@ -1221,6 +1485,7 @@ private actor GatedSummaryModel: MeetingSummaryModel {
 
     func generate(_ request: MeetingSummaryRequest) async throws -> String {
         kinds.append(request.kind)
+        inputs.append(request.input)
         waiting = true
         defer { waiting = false }
         while !isOpen {

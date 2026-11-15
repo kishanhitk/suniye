@@ -1,4 +1,5 @@
 import AppKit
+import SuniyeAnalytics
 import SwiftUI
 
 enum MeetingTab: Int, CaseIterable {
@@ -28,6 +29,10 @@ struct MeetingPage: View {
     /// Nil until the notes are read, so the editor never saves over them.
     @State private var notes: MeetingNotesDraft?
     @State private var notesUnreadable = false
+    /// The parts of the text that the user changed in this visit of the page.
+    @State private var editedParts: Set<MeetingEditedText> = []
+    /// The audio played in this visit of the page.
+    @State private var played = false
 
     init(meetings: MeetingCoordinator, appState: AppState, id: UUID) {
         self.meetings = meetings
@@ -80,7 +85,10 @@ struct MeetingPage: View {
             .padding(.top, AppMetrics.detailPaddingTop)
             .padding(.bottom, AppMetrics.detailPaddingBottom)
             .meetingActionDialogs(actions, meetings: meetings)
-            .task(id: record) {
+            // A new status brings new text: a finished transcript or summary.
+            // The user's own edits change the record too, and must not read
+            // back older text over what they type.
+            .task(id: record.status) {
                 segments = await meetings.transcript(of: id)
                 summary = await meetings.summary(of: id)
             }
@@ -94,8 +102,24 @@ struct MeetingPage: View {
             }
             .onAppear { meetings.pageOnScreen = id }
             .onDisappear {
+                meetings.textSaves.saveNow(id)
+                meetings.playback.close(id)
                 if meetings.pageOnScreen == id {
                     meetings.pageOnScreen = nil
+                }
+            }
+            .onChange(of: tab) {
+                meetings.textSaves.saveNow(id)
+                // The controls are on the Transcript tab: no sound plays
+                // without them in sight.
+                if tab != .transcript {
+                    meetings.playback.pause()
+                }
+            }
+            .onChange(of: meetings.playback.isPlaying && meetings.playback.meetingID == id) { _, playing in
+                if playing, !played {
+                    played = true
+                    meetings.playbackStarted()
                 }
             }
             .onChange(of: live == nil) { _, finished in
@@ -134,15 +158,24 @@ struct MeetingPage: View {
 
     private func header(_ record: MeetingRecord) -> some View {
         HStack(alignment: .center, spacing: 10) {
+            // The hidden text gives the row the height and the room that the
+            // title text had before it could be edited; the text view draws
+            // the title on top, a little taller, so no letter is cut.
             Text(record.title)
                 .font(AppTypography.transcriptsHeadline)
-                .tracking(AppTypography.transcriptsHeadlineTracking)
                 .lineLimit(1)
-                .truncationMode(.tail)
-                .contentTransition(.opacity)
-                .animation(.easeOut(duration: 0.2), value: record.title)
-
-            Spacer(minLength: 12)
+                .hidden()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .topLeading) {
+                    MeetingTitleField(title: record.title) { title in
+                        noteEdit(.title)
+                        meetings.textSaves.save(.title, of: id) {
+                            await meetings.rename(id, to: title)
+                        }
+                    }
+                    .frame(height: MeetingTitleField.height)
+                }
+                .padding(.trailing, 22)
 
             if let live {
                 Button {
@@ -227,11 +260,22 @@ struct MeetingPage: View {
     private func content(_ record: MeetingRecord) -> some View {
         switch live == nil ? tab : .notes {
         case .summary:
-            MeetingSummaryTab(meetings: meetings, appState: appState, actions: actions, record: record, summary: summary)
+            MeetingSummaryTab(
+                meetings: meetings,
+                appState: appState,
+                actions: actions,
+                record: record,
+                summary: summary,
+                isEditable: canEditText(record) && record.status == .done
+            ) { markdown, ended in
+                editSummary(markdown, ended: ended)
+            }
         case .notes:
             if let draft = Binding($notes) {
                 MeetingNotesEditor(draft: draft) { text in
-                    Task { await meetings.saveNotes(text, for: id) }
+                    meetings.textSaves.stage(.notes, of: id) {
+                        await meetings.saveNotes(text, for: id)
+                    }
                 }
             } else if notesUnreadable {
                 Text("Couldn’t read the notes.")
@@ -245,9 +289,62 @@ struct MeetingPage: View {
                     if let pass = meetings.transcriptPasses[id], pass.kind == .again {
                         MeetingTranscriptProgressView(progress: pass.progress, isWaiting: pass.waiting, title: "Transcribing again…")
                     }
-                    MeetingTranscriptView(lines: transcriptLines(record))
+                    MeetingTranscriptPane(
+                        playback: meetings.playback,
+                        id: id,
+                        segments: segments,
+                        lines: transcriptLines(record),
+                        timeline: MeetingTimeline(pauses: record.pauses),
+                        hasAudio: meetings.audioOnMac.contains(id) && record.status.hasFinalTranscript,
+                        isEditable: canEditText(record)
+                    ) { texts, ended in
+                        editTranscript(texts, ended: ended)
+                    }
                 }
             }
+        }
+    }
+
+    /// No edit while a transcript or a summary is written: either would
+    /// replace the text under the user.
+    private func canEditText(_ record: MeetingRecord) -> Bool {
+        live == nil && record.status.hasFinalTranscript && record.status != .summarizing && meetings.transcriptPasses[id] == nil
+    }
+
+    /// The page shows the edit at once; the save waits for a pause in the
+    /// typing, and an emptied line goes only when the edit ends.
+    private func editTranscript(_ texts: [UUID: String], ended: Bool) {
+        noteEdit(.transcript)
+        segments = segments.compactMap { segment in
+            guard let text = texts[segment.id] else { return segment }
+            return text.isEmpty && ended ? nil : segment.withText(text)
+        }
+        let save: () async -> Void = { [meetings, id] in
+            await meetings.editTranscript(id, texts: texts, deleteEmpty: ended)
+        }
+        if ended {
+            meetings.textSaves.save(.transcript, of: id, save: save)
+        } else {
+            meetings.textSaves.stage(.transcript, of: id, save: save)
+        }
+    }
+
+    private func editSummary(_ markdown: String, ended: Bool) {
+        noteEdit(.summary)
+        summary = markdown
+        let save: () async -> Void = { [meetings, id] in
+            await meetings.editSummary(id, markdown: markdown)
+        }
+        if ended {
+            meetings.textSaves.save(.summary, of: id, save: save)
+        } else {
+            meetings.textSaves.stage(.summary, of: id, save: save)
+        }
+    }
+
+    private func noteEdit(_ part: MeetingEditedText) {
+        if editedParts.insert(part).inserted {
+            meetings.textEdited(part)
         }
     }
 

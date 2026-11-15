@@ -179,12 +179,18 @@ struct MeetingCallCardView: View {
     }
 }
 
-/// The app icon, as in the main window's sidebar.
+/// The app icon, as in the main window's sidebar. A macOS icon has a clear
+/// margin of 100/1024 of its side around its tile. The margin draws outside
+/// the layout frame, so the tile lines up with the buttons under it.
 private struct AppGlyph: View {
+    private static let side: CGFloat = 30
+    private static let margin = side * 100 / 1024
+
     var body: some View {
         Image(nsImage: NSApp.applicationIconImage)
             .resizable()
-            .frame(width: 30, height: 30)
+            .frame(width: Self.side, height: Self.side)
+            .padding(-Self.margin)
             .accessibilityHidden(true)
     }
 }

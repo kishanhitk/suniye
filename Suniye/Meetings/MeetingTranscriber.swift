@@ -280,7 +280,7 @@ actor MeetingTranscriber {
             throw MeetingStore.StoreError.unknownMeeting(meetingID)
         }
         let stored = await store.segments(of: meetingID, in: lines)
-        let transcript = MeetingTranscript.final(stored, of: record)
+        let transcript = MeetingTranscript.filtered(stored, of: record)
         if transcript.count != stored.count {
             try await store.replaceSegments(transcript, of: meetingID, in: lines)
         }

@@ -6,7 +6,7 @@ Suniye records a call or a meeting in the room. After the recording stops, it wr
 
 - No audio, transcript, notes or summary leaves the Mac.
 - The audio stays on the Mac until the transcript is ready, or up to 30 days when you choose it (see [Meeting audio](#meeting-audio)).
-- Anonymous counts go to analytics when that setting is on: how a recording starts and stops, its length in whole minutes, the tracks, the number of transcript lines and summary parts, the times, and the answers to the call cards. The [privacy page](https://suniye.app/privacy) lists them.
+- Anonymous counts go to analytics when that setting is on: how a recording starts and stops, its length in whole minutes, the tracks, the number of transcript lines and summary parts, the times, the answers to the call cards, the part of a meeting's text that you edit (title, transcript or summary, once for each part in a visit of the page), and the first play of its audio in a visit. The [privacy page](https://suniye.app/privacy) lists them.
 
 ## Tracks
 
@@ -105,9 +105,19 @@ Limits of this measurement: one meeting, in English, with four speakers; each tr
 - **Until the transcript is ready** (default): the audio goes when the transcript is final.
 - **7 days** or **30 days**: the audio goes that long after the end of the meeting.
 
-Suniye checks at launch and after each transcript, with no timer. A change of the setting applies at the next check, so a wrong click deletes nothing at once. A meeting with no finished transcript keeps its audio for **Finish Transcript**. **Delete Meeting** deletes the audio at once.
+Suniye checks at launch and after each transcript, with no timer. A change of the setting applies at the next check, so a wrong click deletes nothing at once. A meeting with no finished transcript keeps its audio for **Finish Transcript**, and the meeting whose audio plays keeps it until the next check. **Delete Meeting** deletes the audio at once.
 
-While the audio is on the Mac, **Transcribe Again…** in the meeting's ··· menu writes the transcript again with the current **Transcript model**. Suniye asks first. The current transcript stays until the new one is complete: a failure or a quit keeps it. The notes and the summary stay; **Regenerate** writes the summary again.
+### Play
+
+While the audio is on the Mac and the transcript is finished, the Transcript tab has a player above the lines: play or pause, a position bar, and the time as the lines show it.
+
+- A click on the time of a line plays from there. Space plays and pauses while no text that you can edit has the keyboard.
+- The lines that play get a light band: two lines when two people talk at once, and between lines the line that started last. The transcript scrolls to the band until you scroll; play, a click on a time or a move of the position bar starts it again.
+- The playback pauses when you open another tab or start a dictation, and it does not start again by itself. It stops when you leave the meeting page, when a recording starts and when you delete the meeting. Play is off while a meeting or a dictation records.
+- The audio files hold no paused time: the playback goes from the moment of a pause to the moment of the resume, and the time jumps by the length of the pause.
+- Playback only sends sound to the output and opens no input, so call detection does not see it.
+
+While the audio is on the Mac, **Transcribe Again…** in the meeting's ··· menu writes the transcript again with the current **Transcript model**. Suniye asks first. The current transcript stays until the new one is complete: a failure or a quit keeps it. The notes and the summary stay; **Regenerate** writes the summary again. A new transcript replaces your edits to the transcript; the question says so.
 
 ## Summary
 
@@ -134,7 +144,16 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 - The built-in sections (Decisions, Action items, Dates and numbers, Open questions) have fixed rules for what goes in them. A template that you wrote or edited goes to each part as a guide to its sections.
 - The built-in templates have a **Dates and numbers** section for the dates and numbers that fit no other section.
 - A template with no list section is summarized by the model in one step, or from notes on the parts when the transcript is long. So is a template so long that a part would hold less than 1,000 tokens of transcript.
-- **Regenerate** (the arrow at the right of the tabs, on the Summary tab) opens the templates; the current one has a checkmark. The template that you pick writes the summary again. Another template also becomes the **Default template**.
+- **Regenerate** (the arrow at the right of the tabs, on the Summary tab) opens the templates; the current one has a checkmark. The template that you pick writes the summary again. Another template also becomes the **Default template**. A summary that you edited is replaced only after you answer "Replace your edited summary?".
+
+## Edit
+
+- The title: click it to edit it in place. Return or a click elsewhere keeps the new title; Esc drops it. An empty title goes back to the old one. A title that you set stays when a new summary is written.
+- A transcript line: click its text to edit it; its time and speaker stay. Return or Esc ends the edit. A line that you empty goes when the edit ends. ⌘Z undoes typing while the page is open.
+- The summary: click to edit any heading, paragraph or item. Return in an item starts a new item; Return in an empty item ends the list.
+- While a transcript or a summary is written, the transcript and the summary cannot be edited.
+- Copy, Export as Markdown, Search and Regenerate use the edited text.
+- A quit, a tab change or leaving the meeting page saves the text that you typed.
 
 ## Files
 
