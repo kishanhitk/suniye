@@ -228,6 +228,7 @@ private struct MinimalGemmaClient: LocalGemmaClient {
         instructions: String,
         prompt: String,
         maxTokens: Int?,
+        sampling: LocalGemmaSampling,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
@@ -263,6 +264,7 @@ private final class ScriptedGemmaClient: LocalGemmaClient {
         instructions: String,
         prompt: String,
         maxTokens: Int?,
+        sampling: LocalGemmaSampling,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double

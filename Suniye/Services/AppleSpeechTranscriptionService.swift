@@ -184,9 +184,10 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
         AppLogger.shared.log(.info, "apple speech loaded locale=\(supported.identifier(.bcp47))")
     }
 
-    // `purpose` is ignored: this engine reports finalized results only (no
-    // volatile partials), and `appleSpeech` opts out of the live preview, so it
-    // is never asked for a `.partial` decode. `onProgress` is ignored: single pass.
+    // `purpose` only decides the log line: this engine reports finalized
+    // results only (no volatile partials), and `appleSpeech` opts out of the
+    // live preview, so it is never asked for a `.partial` decode. `onProgress`
+    // is ignored: single pass.
     func transcribe(
         samples: [Float],
         sampleRate: Int,
@@ -246,7 +247,9 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
 
         let attributed = try await transcription
         let text = String(attributed.characters).trimmingCharacters(in: .whitespacesAndNewlines)
-        AppLogger.shared.log(.info, "apple speech transcribe done chars=\(text.count)")
+        if purpose.writesDecodeLog {
+            AppLogger.shared.log(.info, "apple speech transcribe done chars=\(text.count)")
+        }
         return text
     }
 

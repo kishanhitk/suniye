@@ -4,9 +4,13 @@ import SwiftUI
 @MainActor
 protocol LearningToastPresenting: AnyObject {
     func showLearnedTerms(_ terms: [String], onUndo: @escaping () -> Void)
+    /// A message with an optional time and an optional action. The toast
+    /// closes after the action runs.
+    func show(message: String, detail: String?, actionTitle: String?, action: (() -> Void)?)
 }
 
-/// Transient bottom-center panel announcing auto-learned vocabulary with an Undo action.
+/// Transient bottom-center panel: auto-learned vocabulary with an Undo action,
+/// and meeting notices.
 @MainActor
 final class LearningToastPresenter: LearningToastPresenting {
     static let displayDuration: TimeInterval = 5
@@ -27,13 +31,26 @@ final class LearningToastPresenter: LearningToastPresenting {
     nonisolated init() {}
 
     func showLearnedTerms(_ terms: [String], onUndo: @escaping () -> Void) {
+        show(
+            message: "✨ Learned \(terms.map { "“\($0)”" }.joined(separator: ", "))",
+            detail: nil,
+            actionTitle: "Undo",
+            action: onUndo
+        )
+    }
+
+    func show(message: String, detail: String?, actionTitle: String?, action: (() -> Void)?) {
         dismiss()
 
-        let hosting = NSHostingController(rootView: LearningToastView(
-            terms: terms,
-            onUndo: { [weak self] in
-                onUndo()
-                self?.dismiss()
+        let hosting = NSHostingController(rootView: ToastView(
+            message: message,
+            detail: detail,
+            actionTitle: actionTitle,
+            action: action.map { action in
+                { [weak self] in
+                    action()
+                    self?.dismiss()
+                }
             }
         ))
 
@@ -109,17 +126,26 @@ final class LearningToastPresenter: LearningToastPresenting {
     }
 }
 
-private struct LearningToastView: View {
-    let terms: [String]
-    let onUndo: () -> Void
+private struct ToastView: View {
+    let message: String
+    let detail: String?
+    let actionTitle: String?
+    let action: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
-            Text("✨ Learned \(terms.map { "“\($0)”" }.joined(separator: ", "))")
+            Text(message)
                 .font(.system(size: 12, weight: .medium))
-            Button("Undo", action: onUndo)
-                .buttonStyle(.link)
-                .font(.system(size: 12, weight: .semibold))
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(.link)
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            if let detail {
+                Text(detail)
+                    .font(.system(size: 12).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)

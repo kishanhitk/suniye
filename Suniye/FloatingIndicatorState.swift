@@ -1,5 +1,4 @@
-import CoreGraphics
-import Foundation
+import AppKit
 
 /// Presentation metrics shared by `FloatingIndicatorView` (pill + bubble) and
 /// `FloatingIndicatorController` (hosting panel) so the two cannot drift.
@@ -27,6 +26,49 @@ enum FloatingIndicatorMetrics {
         source == .editHotkey ? editModeListeningPillSize : listeningPillSize
     }
 
+    /// The meeting pill, sized to what it shows. At rest: the dot, the time
+    /// when it shows, then one level meter, or one glyph while paused or while
+    /// a track has a problem. On hover: the dot, the time when it shows, and
+    /// Pause (or Resume), Stop and Open Notes.
+    static func meetingPillSize(expanded: Bool, isPaused: Bool, hasProblem: Bool, showsTime: Bool) -> CGSize {
+        let lead = meetingPillDotWidth + (showsTime ? meetingPillGap + meetingPillTimeWidth : 0)
+        guard expanded else {
+            let trailing = isPaused || hasProblem ? meetingPillGlyphWidth : meetingPillMeterWidth
+            return CGSize(width: 2 * 14 + lead + meetingPillGap + trailing, height: 34)
+        }
+        let buttons = meetingPillButtonWidth(isPaused ? "Resume" : "Pause", hasIcon: true)
+            + meetingPillButtonWidth("Stop", hasIcon: true)
+            + meetingPillButtonWidth("Open Notes", hasIcon: false)
+        return CGSize(width: 2 * 11 + lead + 3 * meetingPillGap + buttons, height: 40)
+    }
+
+    static let meetingPillGap: CGFloat = 10
+    static let meetingPillDotWidth: CGFloat = 8
+    /// Five bars of 2 pt with 2 pt between them.
+    static let meetingPillMeterWidth: CGFloat = 18
+    static let meetingPillGlyphWidth: CGFloat = 14
+    static let meetingPillIconWidth: CGFloat = 11
+    static let meetingPillTimeFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    static let meetingPillButtonFont = NSFont.systemFont(ofSize: 12, weight: .medium)
+    /// "0:00:00": the widest time of a recording, which stops at 4 hours.
+    static let meetingPillTimeWidth = textWidth("0:00:00", font: meetingPillTimeFont)
+
+    /// A capsule button of the hovered pill: 9 pt on each side, and the icon
+    /// 5 pt before the title.
+    static func meetingPillButtonWidth(_ title: String, hasIcon: Bool) -> CGFloat {
+        9 + (hasIcon ? meetingPillIconWidth + 5 : 0) + textWidth(title, font: meetingPillButtonFont) + 9
+    }
+
+    private static func textWidth(_ text: String, font: NSFont) -> CGFloat {
+        ceil((text as NSString).size(withAttributes: [.font: font]).width)
+    }
+
+    /// Room for the meeting's dot, and its time when it shows, in a
+    /// listening pill. The dot alone takes its width and the pill's 10 pt gap.
+    static func meetingLeadWidth(showsTime: Bool) -> CGFloat {
+        showsTime ? 66 : meetingPillDotWidth + 10
+    }
+
     /// Combined panel size. The panel is bottom-anchored and its content is
     /// bottom-aligned, so extra height for the bubble grows upward only and the
     /// pill stays put on screen. Bubble space is reserved as soon as previews
@@ -35,9 +77,11 @@ enum FloatingIndicatorMetrics {
     /// SwiftUI bubble transition.
     static func listeningPanelSize(
         preview: FloatingIndicatorState.PreviewState,
-        source: FloatingIndicatorState.Source = .hotkey
+        source: FloatingIndicatorState.Source = .hotkey,
+        meetingLeadWidth: CGFloat = 0
     ) -> CGSize {
-        let pillSize = pillSize(source: source)
+        var pillSize = pillSize(source: source)
+        pillSize.width += meetingLeadWidth
         guard preview.reservesBubbleSpace else {
             return pillSize
         }
@@ -142,5 +186,12 @@ enum FloatingIndicatorState: Equatable {
         case .listening, .processing, .error:
             return false
         }
+    }
+}
+
+extension FloatingIndicatorMetrics {
+    @MainActor
+    static func meetingPillSize(for session: MeetingSession, expanded: Bool, showsTime: Bool) -> CGSize {
+        meetingPillSize(expanded: expanded, isPaused: session.isPaused, hasProblem: session.hasTrackProblem, showsTime: showsTime)
     }
 }

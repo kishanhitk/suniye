@@ -395,6 +395,39 @@ describe("buildDataPoint slot registry", () => {
     expect(miss.doubles[13]).toBe(1696);
     expect(miss.doubles[16]).toBe(0);
   });
+
+  test("meeting events map to typed slots", () => {
+    const started = buildDataPoint(event("meeting_started", { source: "automatic" }), b({ device }), "");
+    expect(started.blobs[12]).toBe("automatic"); // blob13 = source
+
+    const ended = buildDataPoint(event("meeting_ended", { duration_ms: 2_280_000, tracks: "you_them", reason: "call_ended" }), b({ device }), "");
+    expect(ended.blobs[13]).toBe("call_ended"); // blob14 = reason (not device arch)
+    expect(ended.blobs[14]).toBe("you_them");   // blob15 = tracks
+    expect(ended.doubles[13]).toBe(2_280_000);  // double14 = duration_ms
+
+    const transcribed = buildDataPoint(
+      event("meeting_transcribed", { outcome: "done", asr_model: "parakeetv3", segments: 412, duration_ms: 2100 }),
+      b({ device }),
+      ""
+    );
+    expect(transcribed.blobs[4]).toBe("parakeetv3"); // blob5 = asr_model
+    expect(transcribed.blobs[14]).toBe("done");      // blob15 = outcome
+    expect(transcribed.doubles[13]).toBe(2100);      // double14 = duration_ms
+    expect(transcribed.doubles[14]).toBe(412);       // double15 = segments
+
+    const summarized = buildDataPoint(
+      event("meeting_summarized", { provider: "local_model", outcome: "done", parts: 3, duration_ms: 71_000 }),
+      b({ device }),
+      ""
+    );
+    expect(summarized.blobs[15]).toBe("local_model"); // blob16 = provider (wins over device chip)
+    expect(summarized.blobs[14]).toBe("done");        // blob15 = outcome
+    expect(summarized.doubles[14]).toBe(3);           // double15 = parts
+
+    const card = buildDataPoint(event("meeting_call_card", { kind: "offer", action: "not_now" }), b({ device }), "");
+    expect(card.blobs[15]).toBe("offer");   // blob16 = kind
+    expect(card.blobs[14]).toBe("not_now"); // blob15 = action
+  });
 });
 
 describe("ingestConfigFromEnv", () => {

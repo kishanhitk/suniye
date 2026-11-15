@@ -66,6 +66,13 @@ private enum MainWindowNSPalette {
             ? NSColor.white.withAlphaComponent(0.08)
             : NSColor.black.withAlphaComponent(0.05)
     })
+
+    /// Text on an orange-tinted tag: dark brown on light, light orange on dark.
+    static let warningTagText = NSColor(name: nil, dynamicProvider: { appearance in
+        appearance.usesDarkMainWindowPalette
+            ? NSColor(srgbRed: 1, green: 0.72, blue: 0.4, alpha: 1)
+            : NSColor(srgbRed: 0.54, green: 0.29, blue: 0, alpha: 1)
+    })
 }
 
 enum MainWindowPalette {
@@ -84,6 +91,7 @@ enum MainWindowPalette {
     static let secondaryText = Color.secondary
     static let tertiaryText = Color.secondary.opacity(0.76)
     static let destructive = Color.red.opacity(0.78)
+    static let warningTagText = Color(nsColor: MainWindowNSPalette.warningTagText)
 }
 
 enum AppTypography {
@@ -162,9 +170,16 @@ enum AppMetrics {
     static let iconButtonSize: CGFloat = 24
 }
 
+enum SidebarRecordingDot {
+    case recording
+    case paused
+}
+
 struct SidebarNavigationRow: View {
     let section: MainWindowSection
     let isSelected: Bool
+    /// A dot that shows a meeting recording from any page.
+    var recording: SidebarRecordingDot?
     let action: () -> Void
     @State private var isHovered = false
 
@@ -179,6 +194,12 @@ struct SidebarNavigationRow: View {
                     .font(isSelected ? AppTypography.sidebarLabelSelected : AppTypography.sidebarLabel)
                     .foregroundStyle(Color.primary)
                 Spacer(minLength: 0)
+                if let recording {
+                    Circle()
+                        .fill(recording == .paused ? Color.secondary : Color.red)
+                        .frame(width: 7, height: 7)
+                        .accessibilityLabel(recording == .paused ? "Recording paused" : "Recording")
+                }
             }
             .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
             .padding(.vertical, 6)
@@ -499,6 +520,11 @@ struct InlineStatusBanner: View {
     /// Trailing button, for banners that can be acted on where they stand.
     var actionTitle: String?
     var action: (() -> Void)?
+    /// False draws the trailing button bordered instead of filled.
+    var actionIsProminent = true
+    /// A bordered button before the trailing one, for a second choice.
+    var secondaryActionTitle: String?
+    var secondaryAction: (() -> Void)?
     /// Makes the whole banner a target, for banners that lead somewhere.
     var onTap: (() -> Void)?
 
@@ -542,10 +568,21 @@ struct InlineStatusBanner: View {
 
                 Spacer(minLength: 12)
 
-                if let actionTitle, let action {
-                    Button(actionTitle, action: action)
-                        .buttonStyle(.borderedProminent)
+                if let secondaryActionTitle, let secondaryAction {
+                    Button(secondaryActionTitle, action: secondaryAction)
+                        .buttonStyle(.bordered)
                         .controlSize(.small)
+                }
+                if let actionTitle, let action {
+                    if actionIsProminent {
+                        Button(actionTitle, action: action)
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                    } else {
+                        Button(actionTitle, action: action)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
                 }
             }
 
@@ -587,10 +624,19 @@ struct AttentionTile: View {
     }
 }
 
-struct EmptyStateCard: View {
+struct EmptyStateCard<Action: View>: View {
     let icon: String
     let title: String
     let detail: String
+    private let action: Action
+
+    /// `action` shows under the detail, inside the centered group.
+    init(icon: String, title: String, detail: String, @ViewBuilder action: () -> Action) {
+        self.icon = icon
+        self.title = title
+        self.detail = detail
+        self.action = action()
+    }
 
     var body: some View {
         VStack(spacing: AppMetrics.emptyStateSpacing) {
@@ -604,8 +650,15 @@ struct EmptyStateCard: View {
                 .foregroundStyle(MainWindowPalette.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: AppMetrics.emptyStateMaxWidth)
+            action
         }
         .frame(maxWidth: .infinity, minHeight: AppMetrics.emptyStateMinHeight)
+    }
+}
+
+extension EmptyStateCard where Action == EmptyView {
+    init(icon: String, title: String, detail: String) {
+        self.init(icon: icon, title: title, detail: detail) { EmptyView() }
     }
 }
 

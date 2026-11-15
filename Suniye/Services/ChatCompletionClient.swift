@@ -65,6 +65,9 @@ struct ChatCompletionPayload: Encodable {
     let topP: Int?
     let maxTokens: Int?
     let stream: Bool?
+    /// llama-server's DRY sampler: a penalty on tokens that extend a repeat.
+    let dryMultiplier: Double?
+    let dryPenaltyLastN: Int?
 
     init(
         model: String,
@@ -73,7 +76,9 @@ struct ChatCompletionPayload: Encodable {
         topK: Int? = nil,
         topP: Int? = nil,
         maxTokens: Int? = nil,
-        stream: Bool? = nil
+        stream: Bool? = nil,
+        dryMultiplier: Double? = nil,
+        dryPenaltyLastN: Int? = nil
     ) {
         self.model = model
         self.messages = messages
@@ -82,6 +87,8 @@ struct ChatCompletionPayload: Encodable {
         self.topP = topP
         self.maxTokens = maxTokens
         self.stream = stream
+        self.dryMultiplier = dryMultiplier
+        self.dryPenaltyLastN = dryPenaltyLastN
     }
 
     enum CodingKeys: String, CodingKey {
@@ -92,6 +99,8 @@ struct ChatCompletionPayload: Encodable {
         case topP = "top_p"
         case maxTokens = "max_tokens"
         case stream
+        case dryMultiplier = "dry_multiplier"
+        case dryPenaltyLastN = "dry_penalty_last_n"
     }
 }
 

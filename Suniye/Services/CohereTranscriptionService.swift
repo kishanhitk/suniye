@@ -82,7 +82,7 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         )
     }
 
-    // `purpose` is always `.final`: this family opts out of the live preview.
+    // `purpose` is `.final` or `.meeting`: this family opts out of the live preview.
     func transcribe(
         samples: [Float],
         sampleRate: Int,
@@ -101,15 +101,17 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         let audio = try AudioResampler.resample(samples, from: max(8_000, sampleRate), to: CohereTranscribe.sampleRate)
         let allChunks = CohereTranscribe.chunker.split(audio)
         let chunks = allChunks.filter { model.speechDetector.containsSpeech(Array(audio[$0])) }
-        AppLogger.shared.log(
-            .info,
-            String(
-                format: "cohere transcribe start duration=%.2fs chunks=%d skipped=%d",
-                Double(audio.count) / Double(CohereTranscribe.sampleRate),
-                chunks.count,
-                allChunks.count - chunks.count
+        if purpose.writesDecodeLog {
+            AppLogger.shared.log(
+                .info,
+                String(
+                    format: "cohere transcribe start duration=%.2fs chunks=%d skipped=%d",
+                    Double(audio.count) / Double(CohereTranscribe.sampleRate),
+                    chunks.count,
+                    allChunks.count - chunks.count
+                )
             )
-        )
+        }
 
         // A chunk can block for seconds on slower Macs; a dedicated queue keeps
         // that off the cooperative pool. `model` is captured strongly, so an
@@ -120,19 +122,23 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
             let started = DispatchTime.now()
             let tokens = try await Self.decode(Array(audio[chunk]), model: model)
             texts.append(model.vocabulary.text(for: tokens))
-            AppLogger.shared.log(
-                .info,
-                String(
-                    format: "cohere chunk done seconds=%.2f tokens=%d in %.2fs",
-                    Double(chunk.count) / Double(CohereTranscribe.sampleRate),
-                    tokens.count,
-                    Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1e9
+            if purpose.writesDecodeLog {
+                AppLogger.shared.log(
+                    .info,
+                    String(
+                        format: "cohere chunk done seconds=%.2f tokens=%d in %.2fs",
+                        Double(chunk.count) / Double(CohereTranscribe.sampleRate),
+                        tokens.count,
+                        Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1e9
+                    )
                 )
-            )
+            }
         }
 
         let text = CohereTranscribe.joinChunkTexts(texts, language: model.language)
-        AppLogger.shared.log(.info, "cohere transcribe done chars=\(text.count)")
+        if purpose.writesDecodeLog {
+            AppLogger.shared.log(.info, "cohere transcribe done chars=\(text.count)")
+        }
         return text
     }
 

@@ -334,6 +334,16 @@ enum CoreAudioDeviceCatalog {
         ) ?? 16_000
     }
 
+    /// The default output device's transport and its data source, such as
+    /// 'ispk' (built-in speakers) or 'hdpn' (headphone jack).
+    static func defaultOutput() -> (transport: AudioDeviceTransport, dataSource: UInt32?)? {
+        guard let deviceID = defaultDeviceID(selector: kAudioHardwarePropertyDefaultOutputDevice) else { return nil }
+        return (
+            transport(for: deviceID),
+            uint32Property(deviceID, selector: kAudioDevicePropertyDataSource, scope: kAudioDevicePropertyScopeOutput)
+        )
+    }
+
     static func transport(for deviceID: AudioObjectID) -> AudioDeviceTransport {
         guard let raw = uint32Property(deviceID, selector: kAudioDevicePropertyTransportType) else {
             return .other

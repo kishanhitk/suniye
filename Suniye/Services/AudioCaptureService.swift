@@ -118,6 +118,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     private var activeCapture: ActiveCapture?
 
     static let releaseTail: DispatchTimeInterval = .milliseconds(200)
+    /// Maps a block's RMS to the 0...1 level that the meters draw.
+    static let levelMeterGain: Float = 14
 
     init(
         deviceMonitor: AudioDeviceMonitorProtocol = CoreAudioDeviceMonitor(),
@@ -435,7 +437,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                 sum += value * value
             }
             let rms = Float((sum / Double(end - start)).squareRoot())
-            next[index] = min(max(rms * 14, 0), 1)
+            next[index] = min(max(rms * Self.levelMeterGain, 0), 1)
         }
         for index in next.indices {
             // Weight the freshly measured level more heavily so the meter tracks

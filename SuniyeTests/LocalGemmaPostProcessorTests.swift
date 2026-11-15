@@ -174,6 +174,7 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
             instructions: "Clean text.",
             prompt: "<transcript>raw</transcript>",
             maxTokens: 64,
+            sampling: .greedy,
             modelName: "Gemma",
             timeoutSeconds: 3
         )
@@ -308,6 +309,7 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         instructions: String,
         prompt: String,
         maxTokens: Int?,
+        sampling: LocalGemmaSampling,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double

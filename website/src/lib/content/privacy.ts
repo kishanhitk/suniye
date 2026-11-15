@@ -23,12 +23,14 @@ export const COLLECTED: readonly (readonly [term: string, detail: string])[] = [
   ["What you use", "Which speech model is selected, whether AI cleanup is on, and other feature toggles — as on/off flags and counts. Also how you start a dictation (hold, double-tap, or the on-screen pill), whether you cancel one with Esc, whether you open or copy the original text of a history entry, and whether you click Restart to Update. These are counts only."],
   ["Where text lands", "A coarse category of the target app (email, editor, browser, terminal, …) — never the specific app or its identifier."],
   ["Setup", "Which first-run screens you reach and how long setup takes, whether permissions were granted, and whether the built-in speech engine works on your Mac — as steps, durations, and yes/no flags."],
+  ["Meetings", "How a meeting recording starts (by hand, from the call offer, or by itself) and why it stops, its length in whole minutes, which tracks it recorded (your microphone, the call audio), how many transcript lines and summary parts it made, how long the transcript and the summary took, how you answer the call cards, whether you edit a meeting's title, transcript or summary, and whether you play its audio. Never the audio, the transcript, your notes, the summary, the words you change, or which call app you use."],
   ["Reliability", "Error types (no messages), why a dictation came back empty (no speech heard, or no text from the speech model), why Suniye recorded from a different microphone than the one you chose (never the microphone's name), whether the macOS Globe key setting keeps double-tap off, and a coarse country. The country is derived from your connection's IP — the IP itself is never stored, but the country is kept as coarse metadata."],
 ];
 
 export const NEVER_COLLECTED: readonly string[] = [
   "Your audio",
   "Any transcribed or corrected text",
+  "Meeting notes and summaries",
   "Words you learn / custom vocabulary",
   "Your IP address",
   "Serial numbers or hardware IDs",
@@ -42,6 +44,7 @@ export const HOW_IT_STAYS_PRIVATE: readonly string[] = [
   "Each install gets a random identifier so we can count returning users, but it maps to no name, email, or device serial — it can't identify you and isn't shared with anyone. This makes the data **pseudonymous**: we can see trends, never people. We collect it on a legitimate-interest basis, disclose it here, and let you opt out.",
   "Data is stored on our own Cloudflare infrastructure — never sold, never shared with third-party trackers. We keep one small record per install (its random id, the days it was first and last seen, coarse hardware — Mac model, chip, CPU cores, memory tier, macOS version — and coarse country). All per-event usage data — word counts, timings, feature flags, target-app category, error types, language, and the rest of the list above — is kept for about 90 days, after which only aggregate counts remain.",
   "Turn it off: **Settings → Privacy → Share Anonymous Analytics**. When off, nothing is sent and any queued data is discarded.",
+  "Meeting audio never leaves your Mac. Suniye deletes it when the transcript is ready, or 7 or 30 days after the meeting when you choose to keep it in **Settings → General → Meetings**.",
 ];
 
 export const WEBSITE_ANALYTICS =
