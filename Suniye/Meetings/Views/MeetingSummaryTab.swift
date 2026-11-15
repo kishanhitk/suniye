@@ -9,18 +9,12 @@ struct MeetingSummaryTab: View {
     let summary: String?
 
     var body: some View {
-        VStack(spacing: 12) {
-            ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 16) {
-                    state
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(.vertical, 4)
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 16) {
+                state
             }
-            if record.status == .done {
-                MeetingRegenerateMenu(title: "Regenerate", meetings: meetings, actions: actions, record: record)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.vertical, 4)
         }
     }
 
@@ -130,9 +124,9 @@ struct MeetingSummaryTab: View {
     }
 }
 
-/// "Regenerate" with the same template; its menu picks another template.
+/// The regenerate icon. Its menu writes the summary again with the template
+/// that the user picks; the current template has a checkmark.
 struct MeetingRegenerateMenu: View {
-    let title: String
     let meetings: MeetingCoordinator
     let actions: MeetingActions
     let record: MeetingRecord
@@ -140,26 +134,34 @@ struct MeetingRegenerateMenu: View {
 
     var body: some View {
         Menu {
-            ForEach(templates) { template in
-                Button {
-                    Task { await meetings.regenerate(record.id, templateID: template.id) }
-                } label: {
-                    if template.id == record.templateID {
-                        Label(template.name, systemImage: "checkmark")
-                    } else {
-                        Text(template.name)
+            Section("Regenerate With") {
+                ForEach(templates) { template in
+                    let isCurrent = template.id == record.templateID
+                    Button {
+                        // Another template also becomes the default; the
+                        // current one leaves the default as it is.
+                        Task { await meetings.regenerate(record.id, templateID: isCurrent ? nil : template.id) }
+                    } label: {
+                        if isCurrent {
+                            Label(template.name, systemImage: "checkmark")
+                        } else {
+                            Text(template.name)
+                        }
                     }
                 }
             }
             Divider()
             Button("Edit Templates…") { actions.editingTemplates = true }
         } label: {
-            Text(title)
-        } primaryAction: {
-            Task { await meetings.regenerate(record.id) }
+            MeetingIcon(systemName: "arrow.clockwise")
         }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
         .fixedSize()
         .disabled(!record.status.canRegenerate)
+        .help("Regenerate Summary")
+        .accessibilityLabel("Regenerate Summary")
         .task(id: actions.editingTemplates) {
             templates = await meetings.templates.templates()
         }

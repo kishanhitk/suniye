@@ -69,6 +69,7 @@ After a quit or a crash, the next launch writes no transcript by itself: it does
 ## Transcript
 
 - No speech recognition runs while the meeting records. The meeting page shows the notes, the meters and the warnings.
+- The pill shows a red dot, the recorded time and one level meter for the louder track.
 - After the stop, the transcript model writes the transcript from the audio files. The meeting page shows "Finishing the transcript…" with the minutes done.
 - **Settings → General → Meetings → Transcript model**:
   - **Same as dictation** (default): the dictation model, on the dictation engine.
@@ -133,7 +134,7 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 - The built-in sections (Decisions, Action items, Dates and numbers, Open questions) have fixed rules for what goes in them. A template that you wrote or edited goes to each part as a guide to its sections.
 - The built-in templates have a **Dates and numbers** section for the dates and numbers that fit no other section.
 - A template with no list section is summarized by the model in one step, or from notes on the parts when the transcript is long. So is a template so long that a part would hold less than 1,000 tokens of transcript.
-- **Regenerate** writes the summary again, with the same or another template.
+- **Regenerate** (the arrow at the right of the tabs, on the Summary tab) opens the templates; the current one has a checkmark. The template that you pick writes the summary again. Another template also becomes the **Default template**.
 
 ## Files
 
