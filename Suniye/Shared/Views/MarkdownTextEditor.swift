@@ -22,6 +22,8 @@ struct MarkdownTextEditor: NSViewRepresentable {
     func updateNSView(_ host: Host, context: Context) {
         host.model.edited = edited
         host.model.isEditable = isEditable
+        // The engine skips its own update while Writing Tools run.
+        host.editorTextView?.isEditable = isEditable
         host.model.load(markdown)
     }
 
