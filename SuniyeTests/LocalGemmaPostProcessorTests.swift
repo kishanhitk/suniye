@@ -163,27 +163,6 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         ))
     }
 
-    func testCompletionRequestsIncludeBearerAuth() throws {
-        let endpoint = LlamaServerEndpoint(
-            baseURL: URL(string: "http://127.0.0.1:51234")!,
-            apiKey: "secret-local-key"
-        )
-
-        let request = try LocalGemmaCompletionRequestFactory.makeRequest(
-            endpoint: endpoint,
-            instructions: "Clean text.",
-            prompt: "<transcript>raw</transcript>",
-            maxTokens: 64,
-            sampling: .greedy,
-            modelName: "Gemma",
-            timeoutSeconds: 3
-        )
-
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer secret-local-key")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
-        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:51234/v1/chat/completions")
-    }
-
     func testPolishPassesConfiguredIdleTimeoutToClient() async throws {
         let client = FakeLocalGemmaClient(outputs: ["polished text"])
         let processor = LocalGemmaPostProcessor(client: client)

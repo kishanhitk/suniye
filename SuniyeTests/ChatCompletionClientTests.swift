@@ -51,8 +51,8 @@ final class ChatCompletionClientTests: XCTestCase {
                 timeoutSeconds: 0.2
             )
             XCTFail("Expected timeout")
-        } catch let error as LLMPostProcessorError {
-            XCTAssertEqual(error.logValue, LLMPostProcessorError.timeout.logValue)
+        } catch let error as ChatCompletionError {
+            XCTAssertEqual(error, .timeout)
         } catch {
             XCTFail("Unexpected error: \(error)")
         }

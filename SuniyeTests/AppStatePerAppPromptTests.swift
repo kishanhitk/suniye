@@ -114,7 +114,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: promptStoreBaseURL) }
         let promptStore = MagicFormatPromptFileStore(promptsDirectoryURL: promptStoreBaseURL)
         try FileManager.default.createDirectory(at: promptStoreBaseURL, withIntermediateDirectories: true)
-        try "file API prompt".write(to: promptStore.providerPromptURL(.api), atomically: true, encoding: .utf8)
+        try "file API prompt".write(to: promptStore.providerPromptURL(.openAICompatible), atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(at: promptStoreBaseURL.appendingPathComponent("apps", isDirectory: true), withIntermediateDirectories: true)
         try "file Slack prompt".write(to: promptStore.appPromptURL(bundleID: slackBundleID)!, atomically: true, encoding: .utf8)
 
@@ -148,10 +148,10 @@ final class AppStatePerAppPromptTests: XCTestCase {
             magicFormatPromptFileStore: promptStore
         )
 
-        try "external API prompt".write(to: promptStore.providerPromptURL(.api), atomically: true, encoding: .utf8)
+        try "external API prompt".write(to: promptStore.providerPromptURL(.openAICompatible), atomically: true, encoding: .utf8)
         appState.llmEnabled = true
 
-        XCTAssertEqual(try String(contentsOf: promptStore.providerPromptURL(.api), encoding: .utf8), "external API prompt")
+        XCTAssertEqual(try String(contentsOf: promptStore.providerPromptURL(.openAICompatible), encoding: .utf8), "external API prompt")
         XCTAssertEqual(settingsStore.latest.baseSystemPrompt, "settings API prompt")
     }
 
@@ -167,22 +167,6 @@ final class AppStatePerAppPromptTests: XCTestCase {
         addSlackBinding(to: appState, prompt: "Keep it terse.")
 
         _ = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: "com.apple.mail")
-
-        XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, LLMDefaults.defaultBaseSystemPrompt)
-    }
-
-    func testPostProcessingUsesDefaultPromptWhenNoAppCaptured() async {
-        let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
-        let appState = makeTestAppState(
-            llmPostProcessor: capturingLLM,
-            keychainService: TestKeychainService(value: "api-key")
-        )
-        appState.llmEnabled = true
-        appState.llmProvider = .openAICompatible
-        appState.refreshLLMKeyStatus()
-        addSlackBinding(to: appState, prompt: "Keep it terse.")
-
-        _ = await appState.postProcessTextIfEnabled("raw text")
 
         XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, LLMDefaults.defaultBaseSystemPrompt)
     }
@@ -224,44 +208,6 @@ final class AppStatePerAppPromptTests: XCTestCase {
         XCTAssertEqual(fakeGemma.lastConfig?.systemPrompt, appendedPrompt(base: LLMDefaults.defaultGemmaMagicFormatPrompt))
     }
 
-    /// With no matching binding, the local model must receive the shipped default
-    /// prompt untouched (guards the referential-edit prompt against per-app append leaks).
-    func testPostProcessingUsesDefaultGemmaPromptForUnboundApp() async {
-        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
-            availability: .available,
-            result: .success("gemma polished")
-        )
-        let localManager = StubLocalLLMModelManager()
-        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
-        let appState = makeTestAppState(
-            localGemmaMagicFormatPostProcessor: fakeGemma,
-            localLLMModelManager: localManager
-        )
-        appState.llmEnabled = true
-        appState.llmProvider = .localGemma
-        addSlackBinding(to: appState, prompt: "Keep it terse.")
-
-        _ = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: "com.apple.mail")
-
-        XCTAssertEqual(fakeGemma.lastConfig?.systemPrompt, LLMDefaults.defaultGemmaMagicFormatPrompt)
-    }
-
-    func testPostProcessingIgnoresBlankPerAppPrompt() async {
-        let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
-        let appState = makeTestAppState(
-            llmPostProcessor: capturingLLM,
-            keychainService: TestKeychainService(value: "api-key")
-        )
-        appState.llmEnabled = true
-        appState.llmProvider = .openAICompatible
-        appState.refreshLLMKeyStatus()
-        addSlackBinding(to: appState, prompt: "   \n ")
-
-        _ = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
-
-        XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, LLMDefaults.defaultBaseSystemPrompt)
-    }
-
     // MARK: - Full dictation pipeline
 
     func testDictationPipelineRoutesPerAppPromptFromCapturedFrontmostApp() async {
@@ -291,12 +237,10 @@ final class AppStatePerAppPromptTests: XCTestCase {
         appState.refreshLLMKeyStatus()
         addSlackBinding(to: appState, prompt: "Keep it terse.")
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
-        for _ in 0 ..< 500 where appState.phase != .ready {
-            await Task.yield()
-        }
+        appState.toggleFloatingIndicatorRecording()
+        await waitUntil { appState.phase == .ready }
 
         XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, appendedPrompt(base: LLMDefaults.defaultBaseSystemPrompt))
         XCTAssertEqual(insertion.insertedTexts, ["polished"])

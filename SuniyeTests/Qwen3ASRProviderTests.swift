@@ -14,7 +14,7 @@ final class Qwen3ASRProviderTests: XCTestCase {
         XCTAssertEqual(entry.family, .qwen3ASR)
         XCTAssertFalse(entry.isSystemManaged)
         XCTAssertFalse(entry.family.supportsLivePreview)
-        XCTAssertEqual(entry.isAvailableOnThisDevice, LocalLLMHardware.isAppleSilicon, "the bundled helper is Apple Silicon only")
+        XCTAssertEqual(entry.isAvailableOnThisDevice, LlamaServer.isSupportedHardware, "the bundled helper is Apple Silicon only")
 
         guard case let .remoteFiles(files) = entry.downloadSource else {
             return XCTFail("expected remote files")

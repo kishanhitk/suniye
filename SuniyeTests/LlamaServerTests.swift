@@ -290,7 +290,7 @@ final class LlamaServerTests: XCTestCase {
         )
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [NonHTTPResponseURLProtocol.self]
-        let server = LlamaServer(healthSession: URLSession(configuration: config))
+        let server = LlamaServer(session: URLSession(configuration: config))
 
         do {
             _ = try await server.endpoint(for: makeLaunch(helperURL: helperURL), startupTimeoutSeconds: 0.8, idleTimeoutSeconds: 30)

@@ -5,12 +5,10 @@ import Foundation
 /// within free-tier headroom at scale. Counts, durations, enums, and per-stage
 /// latencies only — never the transcript.
 public struct DictationMetrics: Sendable, Equatable {
-    // Volume (counts, never content)
     public var wordCount: Int
     public var charCount: Int
     public var audioDurationMs: Int
 
-    // What ran
     public var source: DictationSource
     public var destination: DictationDestination
     public var asrModel: SafeLabel

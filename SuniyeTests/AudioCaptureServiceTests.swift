@@ -317,6 +317,41 @@ final class AudioCaptureServiceTests: XCTestCase {
         XCTAssertEqual(factory.drivers.last?.stopCallCount, 1)
     }
 
+    func testFirstFrameDeadlineDuringTheReleaseTailStartsNoFallback() async throws {
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1)
+        )
+        let tail = StubReleaseTail()
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 0.05,
+            scheduleReleaseTail: tail.schedule
+        )
+        var interruptions = 0
+        service.onEvent = { event in
+            if case .interrupted = event { interruptions += 1 }
+        }
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+
+        let stop = Task { await service.stopCapture(sessionID: sessionID) }
+        await fulfillment(of: [tail.armed], timeout: 1)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        tail.end()
+        let captured = await stop.value
+
+        XCTAssertEqual(factory.startedBackends, [.inputOnlyHAL])
+        XCTAssertEqual(interruptions, 0)
+        XCTAssertEqual(captured.sessionID, sessionID)
+        XCTAssertEqual(factory.drivers.last?.stopCallCount, 1)
+    }
+
     func testInterruptionDuringTheReleaseTailKeepsTheDictation() async throws {
         let monitor = StubAudioDeviceMonitor()
         let tail = StubReleaseTail()

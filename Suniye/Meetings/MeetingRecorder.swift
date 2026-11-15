@@ -251,7 +251,7 @@ final class MeetingRecorder: @unchecked Sendable {
                 onEvent?(.callAudioReturned)
             }
         }
-        lastLevel[track] = min(max(level * AudioCaptureService.levelMeterGain, 0), 1)
+        lastLevel[track] = AudioLevelMeter.level(rms: level)
         if arrival - lastLevelEmission >= Self.levelInterval {
             lastLevelEmission = arrival
             onEvent?(.levels(you: lastLevel[.you] ?? 0, them: lastLevel[.them] ?? 0))

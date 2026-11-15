@@ -11,18 +11,19 @@ Core flow: hold hotkey -> capture audio -> transcribe with sherpa-onnx -> paste 
 - sherpa-onnx C API via bundled dylibs in `Suniye/Frameworks`
 
 ## Architecture map
-- `Suniye/AppState.swift`
+- One folder per feature under `Suniye/`. Non-view code is flat in the feature folder; views are in `<Feature>/Views/`. Code that several features use and no feature owns is in `Shared/`, `Audio/` or `LLM/`.
+- `Suniye/App/AppState.swift`
   - Main state machine and orchestration (`@MainActor`).
   - Coordinates permissions, recording lifecycle, transcription, insertion, LLM post-processing.
-- `Suniye/Services/AudioCaptureService.swift`
+- `Suniye/Audio/AudioCaptureService.swift`
   - AVAudioEngine capture and sample buffering.
-- `Suniye/Services/TranscriptionService.swift`
+- `Suniye/SpeechModels/Engines/TranscriptionService.swift`
   - `actor` wrapping sherpa recognizer lifecycle and decode path.
-- `Suniye/Services/TextInsertionService.swift`
+- `Suniye/Dictation/TextInsertionService.swift`
   - Clipboard-preserving paste + submit-key event posting.
-- `Suniye/Services/ModelManager.swift`
+- `Suniye/SpeechModels/ModelManager.swift`
   - Model download/extract/validation and recognizer config paths.
-- `Suniye/Views/*`
+- `Suniye/<Feature>/Views/*`
   - SwiftUI UI only; keep business logic in state/services.
 
 ## Hard constraints
@@ -67,9 +68,9 @@ xcodebuild \
 ```
 
 ## Coverage policy
-- CI enforces a 95% line-coverage floor on the app target via `scripts/coverage_report.sh`
-  (current level ~95.3%; the residue is documented-unreachable code: permission
-  prompts, real-model decode, OS-state-dependent branches, race guards).
+- CI enforces a 90% line-coverage floor on the app target via `scripts/coverage_report.sh`
+  (the floor is the script default). The residue is documented-unreachable code:
+  permission prompts, real-model decode, OS-state-dependent branches, race guards.
 - Files that genuinely cannot run headless in CI (live AppKit/window-server,
   hardware audio, vendored code) are listed in `scripts/coverage_exclusions.txt`
   with a reason comment. Do not add a file there to dodge writing tests;

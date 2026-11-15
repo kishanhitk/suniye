@@ -9,8 +9,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         localManager.installedModelIDs = []
         let client = LocalGemmaLlamaCppClient(
             locator: LocalGemmaRuntimeLocator(modelManager: localManager),
-            server: LlamaServer(),
-            session: .shared
+            server: LlamaServer()
         )
 
         let warm = await client.isRuntimeWarm()
@@ -33,8 +32,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
     func testStopRuntimeForwardsToServer() async {
         let client = LocalGemmaLlamaCppClient(
             locator: LocalGemmaRuntimeLocator(modelManager: StubLocalLLMModelManager()),
-            server: LlamaServer(),
-            session: .shared
+            server: LlamaServer()
         )
 
         // Nothing is running; stop must be a safe no-op that returns.
@@ -98,13 +96,15 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         let notAProgram = tempDir.appendingPathComponent("not-a-program")
         try Data("not a program".utf8).write(to: notAProgram)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: notAProgram.path)
-        let cases: [(URL, LLMPostProcessorError)] = [
-            (notAProgram, .provider("server_start_failed")),
-            (try makeExecutableScript(in: tempDir, named: "exiting-helper", body: "exit 7"), .provider("server_exited_7")),
-            (try makeExecutableScript(in: tempDir, named: "silent-helper", body: "while :; do sleep 0.1; done"), .timeout),
+        // A helper that fails or exits ends the start at once, so its window
+        // only needs to be long enough for a slow process start.
+        let cases: [(URL, Double, LLMPostProcessorError)] = [
+            (notAProgram, 10, .provider("server_start_failed")),
+            (try makeExecutableScript(in: tempDir, named: "exiting-helper", body: "exit 7"), 10, .provider("server_exited_7")),
+            (try makeExecutableScript(in: tempDir, named: "silent-helper", body: "while :; do sleep 0.1; done"), 0.8, .timeout),
         ]
 
-        for (helperURL, expected) in cases {
+        for (helperURL, startupTimeoutSeconds, expected) in cases {
             overrideHelperPath(helperURL)
             let server = LlamaServer()
             let client = makeClient(rootDirectory: tempDir, server: server)
@@ -115,7 +115,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
                     prompt: "Connection test.",
                     maxTokens: 8,
                     sampling: .greedy,
-                    startupTimeoutSeconds: 0.8,
+                    startupTimeoutSeconds: startupTimeoutSeconds,
                     idleTimeoutSeconds: 600,
                     timeoutSeconds: 5
                 )
@@ -127,6 +127,30 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         }
     }
 
+    func testGenerateReportsRequestFailuresAsPostProcessorErrors() async throws {
+        let tempDir = try makeTemporaryDirectory()
+        let logURL = tempDir.appendingPathComponent("starts.log")
+        overrideHelperPath(try FakeLlamaServer.make(in: tempDir, logURL: logURL, completionStatus: 500))
+        let server = LlamaServer()
+        let client = makeClient(rootDirectory: tempDir, server: server)
+
+        do {
+            _ = try await client.generate(
+                instructions: "Reply with OK.",
+                prompt: "Connection test.",
+                maxTokens: 8,
+                sampling: .greedy,
+                startupTimeoutSeconds: 8,
+                idleTimeoutSeconds: 600,
+                timeoutSeconds: 5
+            )
+            XCTFail("Expected the helper's 500 to fail the generation")
+        } catch let error as LLMPostProcessorError {
+            XCTAssertEqual(error.errorDescription, LLMPostProcessorError.provider("http_500").errorDescription)
+        }
+        await server.stop()
+    }
+
     // MARK: - Helpers
 
     private func makeClient(rootDirectory: URL, server: LlamaServer = LlamaServer()) -> LocalGemmaLlamaCppClient {
@@ -135,8 +159,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
         return LocalGemmaLlamaCppClient(
             locator: LocalGemmaRuntimeLocator(modelManager: localManager),
-            server: server,
-            session: .shared
+            server: server
         )
     }
 

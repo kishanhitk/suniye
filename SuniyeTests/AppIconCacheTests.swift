@@ -4,9 +4,12 @@ import XCTest
 
 @MainActor
 final class AppIconCacheTests: XCTestCase {
+    private var resolveCount = 0
+
     private func makeCache(installed: Set<String>) -> AppIconCache {
-        AppIconCache { bundleID in
-            installed.contains(bundleID) ? NSImage(size: NSSize(width: 1, height: 1)) : nil
+        AppIconCache { [unowned self] bundleID in
+            resolveCount += 1
+            return installed.contains(bundleID) ? NSImage(size: NSSize(width: 1, height: 1)) : nil
         }
     }
 
@@ -18,7 +21,7 @@ final class AppIconCacheTests: XCTestCase {
 
         XCTAssertNotNil(first)
         XCTAssertTrue(first === second, "the same instance is handed back, not a fresh resolve")
-        XCTAssertEqual(cache.resolveCount, 1)
+        XCTAssertEqual(resolveCount, 1)
     }
 
     func testCachesNegativeLookups() {
@@ -30,7 +33,7 @@ final class AppIconCacheTests: XCTestCase {
         XCTAssertNil(cache.icon(for: "com.example.gone"))
         XCTAssertNil(cache.icon(for: "com.example.gone"))
 
-        XCTAssertEqual(cache.resolveCount, 1)
+        XCTAssertEqual(resolveCount, 1)
     }
 
     func testDistinctBundleIDsResolveIndependently() {
@@ -41,6 +44,6 @@ final class AppIconCacheTests: XCTestCase {
         XCTAssertNotNil(cache.icon(for: "com.example.a"))
         XCTAssertNil(cache.icon(for: "com.example.b"))
 
-        XCTAssertEqual(cache.resolveCount, 2)
+        XCTAssertEqual(resolveCount, 2)
     }
 }

@@ -88,6 +88,23 @@ final class MeetingMicCaptureTests: XCTestCase {
         XCTAssertEqual(factory.startedBackends.count, 1)
     }
 
+    func testFallbackOpensTheMicrophoneChosenNowWhenTheFirstOneWentAway() throws {
+        let catalog = FakeMeetingCatalog(route: Self.route(id: "usb", name: "USB Microphone"))
+        let factory = FakeMeetingDriverFactory(rate: 16_000, samples: [0.1])
+        factory.failingBackends = [.inputOnlyHAL]
+        factory.onFailedStart = {
+            catalog.route = Self.route(id: "built-in", name: "MacBook Air Microphone")
+            catalog.inputDeviceID = 43
+        }
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory)
+
+        try capture.start()
+        capture.stop()
+
+        XCTAssertEqual(factory.startedBackends, [.inputOnlyHAL, .standardEngine])
+        XCTAssertEqual(factory.startedDeviceIDs, [42, 43])
+    }
+
     func testNoAudioMovesToTheStandardEngineAndThenEndsTheTrack() throws {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: [])
@@ -625,6 +642,7 @@ private final class FakeMeetingMonitor: AudioDeviceMonitorProtocol {
 
 private final class FakeMeetingCatalog: AudioCaptureHardwareCatalogProtocol {
     var route: AudioDeviceRoute
+    var inputDeviceID: AudioObjectID = 42
 
     init(route: AudioDeviceRoute) {
         self.route = route
@@ -635,7 +653,7 @@ private final class FakeMeetingCatalog: AudioCaptureHardwareCatalogProtocol {
     }
 
     func resolveDeviceRoute(preferredInputDeviceID: String?) throws -> CoreAudioRouteResolution {
-        CoreAudioRouteResolution(inputDeviceID: 42, route: route)
+        CoreAudioRouteResolution(inputDeviceID: inputDeviceID, route: route)
     }
 
     func deviceID(forUID uid: String) -> AudioObjectID? { 42 }
@@ -662,10 +680,12 @@ private final class FakeMeetingDriverFactory: AudioCaptureDriverFactoryProtocol,
     let rate: Int
     let samples: [Float]
     private(set) var startedBackends: [AudioCaptureBackend] = []
+    private(set) var startedDeviceIDs: [AudioObjectID] = []
     private(set) var drivers: [FakeMeetingDriver] = []
     private(set) var configurationChangeHandlers: [() -> Void] = []
     var failingBackends: Set<AudioCaptureBackend> = []
     var onStart: ((Int) -> Void)?
+    var onFailedStart: (() -> Void)?
 
     init(rate: Int, samples: [Float]) {
         self.rate = rate
@@ -679,7 +699,9 @@ private final class FakeMeetingDriverFactory: AudioCaptureDriverFactoryProtocol,
         onConfigurationChange: @escaping () -> Void
     ) throws -> AudioCaptureDriverStart {
         startedBackends.append(plan.backend)
+        startedDeviceIDs.append(inputDeviceID)
         if failingBackends.contains(plan.backend) {
+            onFailedStart?()
             throw AudioCaptureServiceError.ringBufferUnavailable
         }
         if !samples.isEmpty {

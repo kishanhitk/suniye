@@ -16,6 +16,7 @@ schemes:
       gatherCoverageData: false
       targets:
         - name: SuniyeTests
+        - package: SuniyeAnalytics/SuniyeAnalyticsTests
 settings:
   configs:
     Release:

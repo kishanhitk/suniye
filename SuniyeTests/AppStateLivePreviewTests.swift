@@ -17,7 +17,7 @@ final class AppStateLivePreviewTests: XCTestCase {
             scheduler: scheduler
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         await drainScheduledTasks()
         XCTAssertTrue(scheduler.isActive)
@@ -57,7 +57,7 @@ final class AppStateLivePreviewTests: XCTestCase {
             scheduler: scheduler
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         await drainScheduledTasks()
 
@@ -86,17 +86,17 @@ final class AppStateLivePreviewTests: XCTestCase {
             scheduler: scheduler
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [captureStarted], timeout: 1)
         await drainScheduledTasks()
         await scheduler.tickNow()
         XCTAssertEqual(appState.livePartialTranscript, "Alpha, beta")
 
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try await waitUntil { appState.phase == .ready }
 
         captureStarted = expectation(description: "capture 2 started")
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [captureStarted], timeout: 1)
         await drainScheduledTasks()
         await scheduler.tickNow()
@@ -118,7 +118,7 @@ final class AppStateLivePreviewTests: XCTestCase {
             scheduler: scheduler
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         await drainScheduledTasks()
         await scheduler.tickNow()
@@ -147,7 +147,7 @@ final class AppStateLivePreviewTests: XCTestCase {
             scheduler: scheduler
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         await drainScheduledTasks()
 
@@ -177,7 +177,7 @@ final class AppStateLivePreviewTests: XCTestCase {
         )
         appState.loadedASRModelID = .whisperLargeV3
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         await drainScheduledTasks()
 
@@ -220,7 +220,7 @@ final class AppStateLivePreviewTests: XCTestCase {
             scheduler: scheduler
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         await drainScheduledTasks()
 
@@ -228,7 +228,7 @@ final class AppStateLivePreviewTests: XCTestCase {
         let blockedTick = Task { await scheduler.tickNow() }
         await fulfillment(of: [partialDecodeStarted], timeout: 1)
 
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try await waitUntil { appState.phase == .ready }
         XCTAssertEqual(textInsertion.insertedTexts.count, 1)
         XCTAssertTrue(try XCTUnwrap(textInsertion.insertedTexts.first).contains("final text"))
@@ -262,7 +262,7 @@ final class AppStateLivePreviewTests: XCTestCase {
         )
         appState.liveTranscriptionPreviewEnabled = false
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         await drainScheduledTasks()
         XCTAssertFalse(scheduler.isActive)
@@ -270,7 +270,7 @@ final class AppStateLivePreviewTests: XCTestCase {
         XCTAssertEqual(transcription.transcribeCallCount, 0)
         XCTAssertNil(appState.livePartialTranscript)
 
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try await waitUntil { appState.phase == .ready }
 
         XCTAssertEqual(transcription.transcribeCallCount, 1)
@@ -293,7 +293,7 @@ final class AppStateLivePreviewTests: XCTestCase {
             scheduler: scheduler
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         await drainScheduledTasks()
         await scheduler.tickNow()
@@ -320,7 +320,7 @@ final class AppStateLivePreviewTests: XCTestCase {
             scheduler: scheduler
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         await drainScheduledTasks()
         await scheduler.tickNow()

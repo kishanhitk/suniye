@@ -145,7 +145,7 @@ enum AnalyticsMapping {
     /// `dictation_completed` metric — more precise than the requested provider.
     /// Labeled `effective:` so it never overloads-ambiguously with the
     /// `MagicFormatProvider` variant (both enums share case names).
-    static func cleanupProvider(effective provider: EffectiveMagicFormatProvider) -> CleanupProvider {
+    static func cleanupProvider(effective provider: MagicFormatEngine) -> CleanupProvider {
         switch provider {
         case .appleFoundationModels: return .appleFoundationModels
         case .localGemma: return .localGemma

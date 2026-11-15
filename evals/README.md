@@ -236,7 +236,7 @@ Both harnesses handle a spoken "new paragraph" the way `MagicFormatPipeline.poli
 - The first word after a blank line gets a capital letter, unless it already has a capital inside ("iPhone").
 - If the answer has no blank line and one line break per dictated break, each of those line breaks becomes a blank line. The app does this only when the dictation has no list cue; the harnesses have no list-cue detector and always do it.
 - Blank lines are compared. Before KIS-252 both harnesses changed "\n\n" to "\n", so a paragraph case passed even though the app rejected the answer.
-- The Apple harness compiles `Suniye/Services/MagicFormatParagraphBreaks.swift` through a symlink. `scripts/eval_magic_format.py` has a Python copy of it.
+- The Apple harness compiles `Suniye/MagicFormat/MagicFormatParagraphBreaks.swift` through a symlink. `scripts/eval_magic_format.py` has a Python copy of it.
 - Neither harness runs the app's output check, its retry or the prompt composer's list section.
 
 The 39-case suite (now 44) has three "new paragraph" cases (`paragraph_command_001`, lowercase; `paragraph_command_002`, ASR punctuation; `paragraph_command_003`, the Apple Speech style with commas around the command) and one content case (`paragraph_phrase_kept_001`, "add a new paragraph about pricing").

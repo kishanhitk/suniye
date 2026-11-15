@@ -1,0 +1,325 @@
+import Foundation
+
+struct ChatCompletionMessage: Encodable {
+    /// OpenAI-compatible message content: a plain string or a list of typed parts.
+    enum Content: Encodable, Equatable {
+        case text(String)
+        case parts([Part])
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            switch self {
+            case let .text(text):
+                try container.encode(text)
+            case let .parts(parts):
+                try container.encode(parts)
+            }
+        }
+    }
+
+    enum Part: Encodable, Equatable {
+        /// A whole audio file, base64-encoded; `format` is its container, e.g. `wav`.
+        case inputAudio(base64: String, format: String)
+
+        private enum CodingKeys: String, CodingKey {
+            case type
+            case inputAudio = "input_audio"
+        }
+
+        private enum AudioKeys: String, CodingKey {
+            case data
+            case format
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            switch self {
+            case let .inputAudio(base64, format):
+                try container.encode("input_audio", forKey: .type)
+                var audio = container.nestedContainer(keyedBy: AudioKeys.self, forKey: .inputAudio)
+                try audio.encode(base64, forKey: .data)
+                try audio.encode(format, forKey: .format)
+            }
+        }
+    }
+
+    let role: String
+    let content: Content
+
+    init(role: String, content: String) {
+        self.role = role
+        self.content = .text(content)
+    }
+
+    init(role: String, parts: [Part]) {
+        self.role = role
+        self.content = .parts(parts)
+    }
+}
+
+struct ChatCompletionPayload: Encodable {
+    let model: String
+    let messages: [ChatCompletionMessage]
+    let temperature: Int?
+    let topK: Int?
+    let topP: Int?
+    let maxTokens: Int?
+    let stream: Bool?
+    /// llama-server's DRY sampler: a penalty on tokens that extend a repeat.
+    let dryMultiplier: Double?
+    let dryPenaltyLastN: Int?
+
+    init(
+        model: String,
+        messages: [ChatCompletionMessage],
+        temperature: Int? = 0,
+        topK: Int? = nil,
+        topP: Int? = nil,
+        maxTokens: Int? = nil,
+        stream: Bool? = nil,
+        dryMultiplier: Double? = nil,
+        dryPenaltyLastN: Int? = nil
+    ) {
+        self.model = model
+        self.messages = messages
+        self.temperature = temperature
+        self.topK = topK
+        self.topP = topP
+        self.maxTokens = maxTokens
+        self.stream = stream
+        self.dryMultiplier = dryMultiplier
+        self.dryPenaltyLastN = dryPenaltyLastN
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case messages
+        case temperature
+        case topK = "top_k"
+        case topP = "top_p"
+        case maxTokens = "max_tokens"
+        case stream
+        case dryMultiplier = "dry_multiplier"
+        case dryPenaltyLastN = "dry_penalty_last_n"
+    }
+}
+
+/// Per-generation counters llama-server attaches to its OpenAI-compatible response
+/// (`timings`). Absent from other providers, so always optional on the result.
+/// `cachedTokens` is the prompt-prefix reused from the slot's KV cache — the direct
+/// measure of whether the prewarm probe primed the cache for this request.
+struct ChatCompletionTimings: Decodable, Equatable {
+    let promptTokens: Int
+    let cachedTokens: Int
+    let predictedTokens: Int
+    let prefillMs: Int
+    let decodeMs: Int
+
+    enum CodingKeys: String, CodingKey {
+        case promptTokens = "prompt_n"
+        case cachedTokens = "cache_n"
+        case predictedTokens = "predicted_n"
+        case prefillMs = "prompt_ms"
+        case decodeMs = "predicted_ms"
+    }
+
+    init(promptTokens: Int, cachedTokens: Int, predictedTokens: Int, prefillMs: Int, decodeMs: Int) {
+        self.promptTokens = promptTokens
+        self.cachedTokens = cachedTokens
+        self.predictedTokens = predictedTokens
+        self.prefillMs = prefillMs
+        self.decodeMs = decodeMs
+    }
+
+    // llama-server sends prompt_ms/predicted_ms as floats; decode every field as
+    // Double and round so a float duration doesn't throw and drop the whole block.
+    // Int(Double) traps on non-finite / out-of-range input and `try?` can't catch a
+    // trap, so range-check before converting.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        func int(_ key: CodingKeys) throws -> Int {
+            let value = try container.decodeIfPresent(Double.self, forKey: key) ?? 0
+            guard value.isFinite, let int = Int(exactly: value.rounded()) else {
+                throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "timing out of Int range")
+            }
+            return int
+        }
+        promptTokens = try int(.promptTokens)
+        cachedTokens = try int(.cachedTokens)
+        predictedTokens = try int(.predictedTokens)
+        prefillMs = try int(.prefillMs)
+        decodeMs = try int(.decodeMs)
+    }
+}
+
+struct ChatCompletionResult: Equatable {
+    let text: String
+    let timings: ChatCompletionTimings?
+    /// OpenAI-compatible `finish_reason`; nil when the provider omits it.
+    let finishReason: String?
+
+    static let lengthStop = "length"
+}
+
+enum ChatCompletionError: Error, Equatable {
+    case timeout
+    case unauthorized
+    /// `http_<status>` for a status other than 2xx, 401 and 403.
+    case provider(String)
+    case malformedResponse
+    case network(String)
+
+    var logValue: String {
+        switch self {
+        case .timeout:
+            return "timeout"
+        case .unauthorized:
+            return "unauthorized"
+        case .provider:
+            return "provider_error"
+        case .malformedResponse:
+            return "malformed_response"
+        case .network:
+            return "network"
+        }
+    }
+}
+
+final class ChatCompletionClient {
+    private let session: URLSession
+
+    init(session: URLSession = .shared) {
+        self.session = session
+    }
+
+    func complete(
+        endpointURL: URL,
+        apiKey: String,
+        payload: ChatCompletionPayload,
+        timeoutSeconds: Double
+    ) async throws -> ChatCompletionResult {
+        var request = URLRequest(url: endpointURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeoutSeconds
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        do {
+            let (data, response) = try await withTimeout(seconds: timeoutSeconds) {
+                try await self.session.data(for: request)
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                throw ChatCompletionError.malformedResponse
+            }
+
+            switch http.statusCode {
+            case 200 ..< 300:
+                break
+            case 401, 403:
+                throw ChatCompletionError.unauthorized
+            default:
+                throw ChatCompletionError.provider("http_\(http.statusCode)")
+            }
+
+            return try ChatCompletionResponse.extractResult(from: data)
+        } catch let error as ChatCompletionError {
+            throw error
+        } catch {
+            // Caller canceled (e.g. a prewarm probe preempted by a real request):
+            // surface it as cancellation, not as a timeout/network failure. URLSession
+            // reports this as URLError(.cancelled) rather than CancellationError.
+            if Task.isCancelled {
+                throw CancellationError()
+            }
+            if (error as NSError).code == NSURLErrorTimedOut || error is TimeoutError {
+                throw ChatCompletionError.timeout
+            }
+            throw ChatCompletionError.network(error.localizedDescription)
+        }
+    }
+}
+
+private struct ChatCompletionResponse: Decodable {
+    struct Choice: Decodable {
+        let message: Message?
+        let text: String?
+        let finishReason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case message
+            case text
+            case finishReason = "finish_reason"
+        }
+    }
+
+    struct Message: Decodable {
+        let content: Content
+    }
+
+    enum Content: Decodable {
+        case string(String)
+        case parts([Part])
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let string = try? container.decode(String.self) {
+                self = .string(string)
+                return
+            }
+            self = .parts(try container.decode([Part].self))
+        }
+
+        var text: String {
+            switch self {
+            case let .string(value):
+                return value
+            case let .parts(parts):
+                return parts.compactMap(\.text).joined(separator: "\n")
+            }
+        }
+    }
+
+    struct Part: Decodable {
+        let text: String?
+    }
+
+    let choices: [Choice]
+    /// Diagnostics only — a malformed `timings` block must not fail the response.
+    let timings: ChatCompletionTimings?
+
+    enum CodingKeys: String, CodingKey {
+        case choices
+        case timings
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        choices = try container.decode([Choice].self, forKey: .choices)
+        timings = try? container.decodeIfPresent(ChatCompletionTimings.self, forKey: .timings)
+    }
+
+    static func extractResult(from data: Data) throws -> ChatCompletionResult {
+        let response: Self
+        do {
+            response = try JSONDecoder().decode(Self.self, from: data)
+        } catch {
+            throw ChatCompletionError.malformedResponse
+        }
+        guard let first = response.choices.first else {
+            throw ChatCompletionError.malformedResponse
+        }
+        let result = ChatCompletionResult(
+            text: first.message?.content.text ?? first.text ?? "",
+            timings: response.timings,
+            finishReason: first.finishReason
+        )
+        // A length stop with nothing generated is still a truncation, not a
+        // malformed reply: the context was already full.
+        guard !result.text.isEmpty || result.finishReason == ChatCompletionResult.lengthStop else {
+            throw ChatCompletionError.malformedResponse
+        }
+        return result
+    }
+}
