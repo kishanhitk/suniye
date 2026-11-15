@@ -15,6 +15,12 @@ final class MeetingListTextTests: XCTestCase {
         XCTAssertEqual(text.snippet(for: .interrupted), "Thanks for joining.")
     }
 
+    func testTheSnippetSkipsHeadingsOfEveryLevel() {
+        let text = MeetingListText(summary: "# Release 2.4\n### Overview\n#hashtag stays. It is no heading.", notes: "", transcript: [])
+
+        XCTAssertEqual(text.snippet(for: .done), "#hashtag stays.")
+    }
+
     func testASearchFindsTheLineInTheSummaryNotesOrTranscript() {
         XCTAssertEqual(text.line(matching: "legal about"), "Ask legal about the pricing page.")
         XCTAssertEqual(text.line(matching: "old copy"), "- Keep the old copy")
