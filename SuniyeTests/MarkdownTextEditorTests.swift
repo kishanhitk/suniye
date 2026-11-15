@@ -116,7 +116,6 @@ final class MarkdownTextEditorTests: XCTestCase {
         XCTAssertTrue(window.makeFirstResponder(text))
         text.setSelectedRange(NSRange(location: (text.string as NSString).range(of: "Thursday**.").location, length: 0))
         text.insertText("next ", replacementRange: text.selectedRange())
-        try await settle()
         text.breakUndoCoalescing()
 
         try XCTUnwrap(text.undoManager).undo()

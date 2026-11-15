@@ -133,9 +133,13 @@ struct MarkdownTextEditor: NSViewRepresentable {
             }
             guard let undoManager = found.undoManager else { return }
             for name in [Notification.Name.NSUndoManagerDidUndoChange, .NSUndoManagerDidRedoChange] {
-                undoObservers.append(NotificationCenter.default.addObserver(forName: name, object: undoManager, queue: .main) { [weak found] _ in
-                    guard let found else { return }
-                    NotificationCenter.default.post(name: NSText.didChangeNotification, object: found)
+                // Queued behind the engine's own binding update for the text
+                // before the undo, so the engine compares the undone text with it.
+                undoObservers.append(NotificationCenter.default.addObserver(forName: name, object: undoManager, queue: nil) { [weak found] _ in
+                    DispatchQueue.main.async {
+                        guard let found else { return }
+                        NotificationCenter.default.post(name: NSText.didChangeNotification, object: found)
+                    }
                 })
             }
         }
