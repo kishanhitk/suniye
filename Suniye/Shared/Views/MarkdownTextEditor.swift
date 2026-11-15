@@ -185,7 +185,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
         configuration.paragraph = ParagraphStyle(spacingFactor: 0.5, lineHeightExtraSpacing: 0)
         configuration.textInsets = TextInsets(horizontal: 0, vertical: 4)
         configuration.overscroll = OverscrollPolicy(percent: 0, maxPoints: 0, minPoints: 0)
-        configuration.theme = MarkdownEditorTheme(headingMarker: .tertiaryLabelColor, link: .controlAccentColor)
+        configuration.theme = MarkdownEditorTheme(headingMarker: .tertiaryLabelColor)
         return configuration
     }
 }
