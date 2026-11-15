@@ -31,9 +31,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
     @MainActor
     @Observable
     final class Model {
-        var text: String {
-            didSet { textChanged() }
-        }
+        private(set) var text: String
         var isEditable = false
         var isFocused = false {
             didSet { focusChanged() }
@@ -45,7 +43,6 @@ struct MarkdownTextEditor: NSViewRepresentable {
         @ObservationIgnored private var source: String
         /// The user changed the text since the edit began.
         @ObservationIgnored private var changed = false
-        @ObservationIgnored private var loading = false
 
         init(markdown: String, documentID: String) {
             text = markdown
@@ -53,20 +50,21 @@ struct MarkdownTextEditor: NSViewRepresentable {
             self.documentID = documentID
         }
 
+        /// Text from the page: it shows, and it is no edit.
         func load(_ markdown: String) {
             guard markdown != source else { return }
             source = markdown
             guard markdown != text else { return }
-            loading = true
             text = markdown
-            loading = false
+            changed = false
         }
 
-        private func textChanged() {
-            guard !loading, text != source else { return }
-            source = text
+        /// Text from the engine, as the user changed it.
+        func typed(_ markdown: String) {
+            guard markdown != text else { return }
+            text = markdown
             changed = true
-            edited(text, false)
+            edited(markdown, false)
         }
 
         private func focusChanged() {
@@ -164,7 +162,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
 
         var body: some View {
             NativeTextViewWrapper(
-                text: $model.text,
+                text: Binding(get: { model.text }, set: model.typed),
                 configuration: MarkdownTextEditor.configuration,
                 fontSize: MarkdownTextEditor.bodyFont.pointSize,
                 documentId: model.documentID,

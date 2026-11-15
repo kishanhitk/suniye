@@ -141,6 +141,21 @@ final class MarkdownTextEditorTests: XCTestCase {
         XCTAssertEqual(reports.last?.markdown.hasSuffix("Keep the old onboarding. Today."), true)
     }
 
+    func testAPageTextDuringAnEditIsNoEditWhenTheEditEnds() async throws {
+        let text = try await open(summary)
+        XCTAssertTrue(window.makeFirstResponder(text))
+        text.setSelectedRange(NSRange(location: (summary as NSString).length, length: 0))
+        text.insertText(" Today.", replacementRange: text.selectedRange())
+        try await settle()
+
+        host.model.load("## Overview\nA new summary.")
+        try await settle()
+        window.makeFirstResponder(nil)
+        try await settle()
+
+        XCTAssertEqual(reports.map(\.ended), [false])
+    }
+
     func testAPageTextThatChangesShowsAndIsNoEdit() async throws {
         let text = try await open(summary)
 
