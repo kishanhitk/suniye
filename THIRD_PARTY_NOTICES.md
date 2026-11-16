@@ -24,6 +24,12 @@ Suniye depends on third-party software and model artifacts.
   - Change: one commit on `0.15.0`. `dismantleNSView` removes the two clip-view observers that `makeNSView` adds, so a closed editor is released. The two changed files carry a change notice.
   - Pinned by: `project.yml` (revision `c80c69c58c313a39d1a9273878032c0cbf43ad0c`, the `MarkdownEngine` product only)
   - Used for: the Markdown editor of a meeting summary
+  - SwiftMath (MIT, https://github.com/mgriebling/SwiftMath) resolves in `Package.resolved` as a dependency of the engine's opt-in `MarkdownEngineLatex` product. The app does not build or link it.
+- Sparkle 2.9.2 (MIT)
+  - Source: https://github.com/sparkle-project/Sparkle
+  - Pinned by: `project.yml` (exact version)
+  - Used for: app updates; embedded as `Contents/Frameworks/Sparkle.framework`
+  - Includes code under its own licenses: bsdiff (BSD-2-Clause), sais-lite (MIT), ed25519 (zlib) and `SUSignatureVerifier.m` (BSD-2-Clause). See Sparkle's `LICENSE`.
 
 ## Model artifacts
 - Model: `sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`
