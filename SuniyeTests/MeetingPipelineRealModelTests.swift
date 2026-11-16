@@ -255,6 +255,7 @@ final class MeetingPipelineRealModelTests: XCTestCase {
         }
         let plain = Set(kept["plain"] ?? [])
         let markdown = Set(kept["markdown"] ?? [])
+        XCTAssertTrue(Self.noteFacts.contains { plain.contains($0.line) }, "\(engine): the plain notes gave the summary no fact")
         XCTAssertEqual(plain.subtracting(markdown), [], "\(engine): facts that only the plain notes kept")
     }
 
