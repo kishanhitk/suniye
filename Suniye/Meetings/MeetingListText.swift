@@ -45,12 +45,13 @@ struct MeetingListText: Equatable, Sendable {
         var items: Set<Int> = []
         return text.runs[\.presentationIntent].flatMap { intent, range -> [String] in
             let blocks = intent?.components ?? []
+            let item = blocks.first { if case .listItem = $0.kind { true } else { false } }
+            let opensItem = item.map { items.insert($0.identity).inserted } ?? false
             if blocks.contains(where: { if case .header = $0.kind { true } else { false } }) {
                 return []
             }
             var block = text[range]
-            if let item = blocks.first(where: { if case .listItem = $0.kind { true } else { false } }),
-               items.insert(item.identity).inserted {
+            if opensItem, case .paragraph = blocks.first?.kind {
                 block = withoutTaskMarker(block)
             }
             return String(block.characters).components(separatedBy: .newlines)

@@ -46,6 +46,12 @@ final class MeetingListTextTests: XCTestCase {
 
           [x] stays: a task mark starts only the first paragraph.
         - `[x] stays in code`
+        - # Section
+
+          [x] stays after a heading
+        - ```
+          [x] stays in a code block
+          ```
         > quoted **line**
 
         | A | B |
@@ -61,6 +67,7 @@ final class MeetingListTextTests: XCTestCase {
         XCTAssertEqual(MeetingListText(summary: summary, notes: "", transcript: []).summaryLines, [
             "Para one.", "Para two on two lines.", "outer", "inner task",
             "[x] stays: a task mark starts only the first paragraph.", "[x] stays in code",
+            "[x] stays after a heading", "[x] stays in a code block",
             "quoted line", "A", "B", "1", "2", "code one", "code two",
         ])
     }
