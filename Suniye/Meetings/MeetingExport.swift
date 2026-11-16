@@ -29,33 +29,3 @@ enum MeetingExport {
         return parts.joined(separator: "\n\n") + "\n"
     }
 }
-
-/// One block of a summary for the meeting page.
-enum MeetingSummaryBlock: Equatable {
-    case heading(String)
-    case item(String)
-    case paragraph(String)
-
-    static func parse(_ markdown: String) -> [MeetingSummaryBlock] {
-        markdown.components(separatedBy: .newlines).compactMap { line in
-            let text = line.trimmingCharacters(in: .whitespaces)
-            if text.isEmpty {
-                return nil
-            }
-            if let heading = headingText(text) {
-                return .heading(heading)
-            }
-            if text.hasPrefix("- ") {
-                return .item(String(text.dropFirst(2)))
-            }
-            return .paragraph(text)
-        }
-    }
-
-    /// The text of a `#` to `######` heading line.
-    private static func headingText(_ line: String) -> String? {
-        let marks = line.prefix { $0 == "#" }.count
-        guard (1 ... 6).contains(marks), line.dropFirst(marks).first == " " else { return nil }
-        return String(line.dropFirst(marks + 1))
-    }
-}

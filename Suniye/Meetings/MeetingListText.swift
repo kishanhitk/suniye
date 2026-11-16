@@ -2,10 +2,17 @@ import Foundation
 
 /// What the meetings list shows and searches for one meeting.
 struct MeetingListText: Equatable, Sendable {
-    let summary: String?
+    /// The summary as plain text, without its headings.
+    let summaryLines: [String]
     let notes: String
     /// The transcript's segment texts, in time order.
     let transcript: [String]
+
+    init(summary: String?, notes: String, transcript: [String]) {
+        summaryLines = summary.map(Self.contentLines) ?? []
+        self.notes = notes
+        self.transcript = transcript
+    }
 
     /// The line under the meeting's title.
     func snippet(for status: MeetingStatus) -> String? {
@@ -15,7 +22,7 @@ struct MeetingListText: Equatable, Sendable {
         case .noSpeech:
             return MeetingStatus.noSpeechTitle + "."
         case .done:
-            return summary.flatMap(Self.firstSentence)
+            return summaryLines.first.map(Self.firstSentence)
         case .notTranscribed:
             return "No transcript yet."
         case .recording, .paused, .finishing, .summarizing, .interrupted:
@@ -25,25 +32,46 @@ struct MeetingListText: Equatable, Sendable {
 
     /// The first summary, notes or transcript line that contains `query`.
     func line(matching query: String) -> String? {
-        let lines = Self.contentLines(of: summary ?? "") + notes.components(separatedBy: .newlines) + transcript
+        let lines = summaryLines + notes.components(separatedBy: .newlines) + transcript
         return lines.first { $0.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
     }
 
-    /// A summary's list items and plain lines, without its headings.
-    private static func contentLines(of summary: String) -> [String] {
-        MeetingSummaryBlock.parse(summary).compactMap { block in
-            switch block {
-            case .heading:
-                return nil
-            case let .item(text), let .paragraph(text):
-                return text
+    /// Markdown as plain lines: one for each paragraph, list item and table
+    /// cell, with no marks. Headings are no content. CommonMark joins the
+    /// lines of one paragraph.
+    private static func contentLines(of markdown: String) -> [String] {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .full, failurePolicy: .returnPartiallyParsedIfPossible)
+        let text = (try? AttributedString(markdown: markdown, options: options)) ?? AttributedString(markdown)
+        var items: Set<Int> = []
+        return text.runs[\.presentationIntent].flatMap { intent, range -> [String] in
+            let blocks = intent?.components ?? []
+            let item = blocks.first { if case .listItem = $0.kind { true } else { false } }
+            let opensItem = item.map { items.insert($0.identity).inserted } ?? false
+            if blocks.contains(where: { if case .header = $0.kind { true } else { false } }) {
+                return []
             }
+            var block = text[range]
+            if opensItem, case .paragraph = blocks.first?.kind {
+                block = withoutTaskMarker(block)
+            }
+            return String(block.characters).components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
         }
     }
 
-    /// The first sentence of the first plain line of a summary body.
-    static func firstSentence(of summary: String) -> String? {
-        guard let text = contentLines(of: summary).first else { return nil }
+    /// The first paragraph of a list item without a GFM task marker, which
+    /// Foundation does not read.
+    private static func withoutTaskMarker(_ paragraph: AttributedSubstring) -> AttributedSubstring {
+        guard let first = paragraph.runs.first, first.inlinePresentationIntent?.contains(.code) != true else { return paragraph }
+        let start = String(paragraph[first.range].characters)
+        for marker in ["[ ] ", "[x] ", "[X] "] where start.hasPrefix(marker) {
+            return paragraph[paragraph.index(paragraph.startIndex, offsetByCharacters: marker.count)...]
+        }
+        return paragraph
+    }
+
+    private static func firstSentence(of text: String) -> String {
         var sentence = text
         text.enumerateSubstrings(in: text.startIndex ..< text.endIndex, options: .bySentences) { substring, _, _, stop in
             if let substring {
