@@ -35,15 +35,19 @@ final class MarkdownTextEditorTests: XCTestCase {
         model.isEditable = true
         model.edited = { [weak self] markdown, ended in self?.reports.append((markdown, ended)) }
         host = MarkdownTextEditor.Host(model: model)
-        host.frame = CGRect(origin: .zero, size: size)
-        window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        try await show(host, size: size)
+        return try XCTUnwrap(host.editorTextView)
+    }
+
+    private func show(_ view: NSView, size: CGSize) async throws {
+        view.frame = CGRect(origin: .zero, size: size)
+        window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.alphaValue = 0
         window.ignoresMouseEvents = true
-        window.contentView = host
-        host.layoutSubtreeIfNeeded()
+        window.contentView = view
+        view.layoutSubtreeIfNeeded()
         try await settle()
-        return try XCTUnwrap(host.editorTextView)
     }
 
     /// The engine sends its text to the binding on the next turn of the main queue.
@@ -205,6 +209,35 @@ final class MarkdownTextEditorTests: XCTestCase {
             try await settle()
         }
         XCTAssertNil(closed)
+    }
+
+    func testAnEditorThatOpensFocusedTakesTypingWithNoClick() async throws {
+        let editor = MarkdownTextEditor(markdown: "", documentID: UUID().uuidString, isEditable: true, focusesOnOpen: true) { [weak self] markdown, ended in
+            self?.reports.append((markdown, ended))
+        }
+        try await show(NSHostingView(rootView: editor), size: CGSize(width: 600, height: 400))
+
+        let text = try XCTUnwrap(window.firstResponder as? NSTextView, "the caret is in the text")
+        text.insertText("Ask legal.", replacementRange: text.selectedRange())
+        try await settle()
+
+        XCTAssertEqual(reports.last?.markdown, "Ask legal.")
+    }
+
+    func testAnEditorThatOpensFocusedLeavesTheCaretInAnotherField() async throws {
+        let container = NSView()
+        try await show(container, size: CGSize(width: 600, height: 400))
+        let field = NSTextField(frame: CGRect(x: 0, y: 360, width: 200, height: 24))
+        container.addSubview(field)
+        XCTAssertTrue(window.makeFirstResponder(field))
+
+        let editor = NSHostingView(rootView: MarkdownTextEditor(markdown: "", documentID: UUID().uuidString, isEditable: true, focusesOnOpen: true))
+        editor.frame = CGRect(x: 0, y: 0, width: 600, height: 300)
+        container.addSubview(editor)
+        editor.layoutSubtreeIfNeeded()
+        try await settle()
+
+        XCTAssertTrue((window.firstResponder as? NSText)?.delegate === field, "the field keeps the caret")
     }
 
     func testCommandFOpensTheFindBarOverTheText() async throws {

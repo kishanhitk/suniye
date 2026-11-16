@@ -254,6 +254,27 @@ final class MeetingSummaryWriterTests: XCTestCase {
         }
     }
 
+    func testTheModelReadsMarkdownNotesAsPlainLines() async throws {
+        let model = FakeSummaryModel(context: 4_096)
+        let notes = """
+        ## Venue
+        - **Ravi** books the venue by *Monday*.
+        - [ ] Ask [legal](https://example.com/legal) about the `German` copy.
+
+        Ship on Friday
+        Tell support
+        """
+
+        _ = try await MeetingSummaryWriter(model: model).write(input(conversation(turns: 4, words: 10), notes: notes))
+        let request = await model.requests.first { $0.kind == .userNotes }
+
+        XCTAssertEqual(
+            request?.input.contains("<notes>\nVenue\nRavi books the venue by Monday.\nAsk legal about the German copy.\nShip on Friday\nTell support\n</notes>"),
+            true,
+            request?.input ?? "no notes request"
+        )
+    }
+
     func testTooLittleSpeechAndNoNotesIsNeverSent() async throws {
         let model = FakeSummaryModel(context: 4_096)
         let writer = MeetingSummaryWriter(model: model)

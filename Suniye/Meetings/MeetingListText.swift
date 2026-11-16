@@ -2,15 +2,17 @@ import Foundation
 
 /// What the meetings list shows and searches for one meeting.
 struct MeetingListText: Equatable, Sendable {
-    /// The summary as plain text, without its headings.
+    /// The summary as plain text, without its headings: they are the
+    /// template's section names.
     let summaryLines: [String]
-    let notes: String
+    /// The notes as plain text, with their headings.
+    let noteLines: [String]
     /// The transcript's segment texts, in time order.
     let transcript: [String]
 
     init(summary: String?, notes: String, transcript: [String]) {
-        summaryLines = summary.map(Self.contentLines) ?? []
-        self.notes = notes
+        summaryLines = summary.map { MarkdownPlainText.lines(of: $0, headings: false) } ?? []
+        noteLines = MarkdownPlainText.lines(of: notes, headings: true)
         self.transcript = transcript
     }
 
@@ -32,43 +34,8 @@ struct MeetingListText: Equatable, Sendable {
 
     /// The first summary, notes or transcript line that contains `query`.
     func line(matching query: String) -> String? {
-        let lines = summaryLines + notes.components(separatedBy: .newlines) + transcript
+        let lines = summaryLines + noteLines + transcript
         return lines.first { $0.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
-    }
-
-    /// Markdown as plain lines: one for each paragraph, list item and table
-    /// cell, with no marks. Headings are no content. CommonMark joins the
-    /// lines of one paragraph.
-    private static func contentLines(of markdown: String) -> [String] {
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .full, failurePolicy: .returnPartiallyParsedIfPossible)
-        let text = (try? AttributedString(markdown: markdown, options: options)) ?? AttributedString(markdown)
-        var items: Set<Int> = []
-        return text.runs[\.presentationIntent].flatMap { intent, range -> [String] in
-            let blocks = intent?.components ?? []
-            let item = blocks.first { if case .listItem = $0.kind { true } else { false } }
-            let opensItem = item.map { items.insert($0.identity).inserted } ?? false
-            if blocks.contains(where: { if case .header = $0.kind { true } else { false } }) {
-                return []
-            }
-            var block = text[range]
-            if opensItem, case .paragraph = blocks.first?.kind {
-                block = withoutTaskMarker(block)
-            }
-            return String(block.characters).components(separatedBy: .newlines)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-        }
-    }
-
-    /// The first paragraph of a list item without a GFM task marker, which
-    /// Foundation does not read.
-    private static func withoutTaskMarker(_ paragraph: AttributedSubstring) -> AttributedSubstring {
-        guard let first = paragraph.runs.first, first.inlinePresentationIntent?.contains(.code) != true else { return paragraph }
-        let start = String(paragraph[first.range].characters)
-        for marker in ["[ ] ", "[x] ", "[X] "] where start.hasPrefix(marker) {
-            return paragraph[paragraph.index(paragraph.startIndex, offsetByCharacters: marker.count)...]
-        }
-        return paragraph
     }
 
     private static func firstSentence(of text: String) -> String {

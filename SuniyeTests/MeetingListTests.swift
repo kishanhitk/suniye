@@ -65,16 +65,24 @@ final class MeetingListTextTests: XCTestCase {
         """
 
         XCTAssertEqual(MeetingListText(summary: summary, notes: "", transcript: []).summaryLines, [
-            "Para one.", "Para two on two lines.", "outer", "inner task",
+            "Para one.", "Para two", "on two lines.", "outer", "inner task",
             "[x] stays: a task mark starts only the first paragraph.", "[x] stays in code",
             "[x] stays after a heading", "[x] stays in a code block",
             "quoted line", "A", "B", "1", "2", "code one", "code two",
         ])
     }
 
+    func testASearchReadsTheNotesAsPlainTextWithTheirHeadings() {
+        let text = MeetingListText(summary: nil, notes: "## Pricing\n1. **Keep** the old copy\n- [ ] Ask [legal](https://example.com/legal)", transcript: [])
+
+        XCTAssertEqual(text.line(matching: "pricing"), "Pricing")
+        XCTAssertEqual(text.line(matching: "old copy"), "Keep the old copy")
+        XCTAssertEqual(text.line(matching: "legal"), "Ask legal")
+    }
+
     func testASearchFindsTheLineInTheSummaryNotesOrTranscript() {
         XCTAssertEqual(text.line(matching: "legal about"), "Ask legal about the pricing page.")
-        XCTAssertEqual(text.line(matching: "old copy"), "- Keep the old copy")
+        XCTAssertEqual(text.line(matching: "old copy"), "Keep the old copy")
         XCTAssertEqual(text.line(matching: "bluetooth"), "QA found one crash with Bluetooth headsets.")
         XCTAssertNil(text.line(matching: "Overview"), "headings are not content")
     }
@@ -113,23 +121,5 @@ final class MeetingExportTests: XCTestCase {
         [01:40] You: Yes.
 
         """)
-    }
-}
-
-final class MeetingNotesDraftTests: XCTestCase {
-    func testOnlyAnEditIsSavedAndEachEditOnce() {
-        var draft = MeetingNotesDraft(saved: "Ask legal.")
-
-        let unchanged = draft.takeUnsaved()
-        draft.text = "Ask legal.\nShip Thursday."
-        let edited = draft.takeUnsaved()
-        let again = draft.takeUnsaved()
-        draft.text = "Ask legal."
-        let undone = draft.takeUnsaved()
-
-        XCTAssertNil(unchanged, "notes that only loaded are never written over")
-        XCTAssertEqual(edited, "Ask legal.\nShip Thursday.")
-        XCTAssertNil(again)
-        XCTAssertEqual(undone, "Ask legal.", "the loaded text saves again after an edit was saved")
     }
 }

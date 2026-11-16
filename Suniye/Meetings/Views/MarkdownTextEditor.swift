@@ -11,12 +11,14 @@ struct MarkdownTextEditor: NSViewRepresentable {
     /// Keeps the undo history of one document apart from another.
     let documentID: String
     var isEditable = false
+    /// Puts the caret in the text when the editor opens.
+    var focusesOnOpen = false
     var edited: (_ markdown: String, _ ended: Bool) -> Void = { _, _ in }
 
     func makeNSView(context: Context) -> Host {
         let model = Model(markdown: markdown, documentID: documentID)
         model.isEditable = isEditable
-        return Host(model: model)
+        return Host(model: model, focusesOnOpen: focusesOnOpen)
     }
 
     func updateNSView(_ host: Host, context: Context) {
@@ -85,13 +87,15 @@ struct MarkdownTextEditor: NSViewRepresentable {
     /// show.
     final class Host: NSView {
         let model: Model
+        private var focusesOnOpen: Bool
         private let hosting: NSHostingView<EditorView>
         private weak var textView: NSTextView?
         private var undoObservers: [NSObjectProtocol] = []
         private var heightObservation: NSKeyValueObservation?
 
-        init(model: Model) {
+        init(model: Model, focusesOnOpen: Bool = false) {
             self.model = model
+            self.focusesOnOpen = focusesOnOpen
             hosting = NSHostingView(rootView: EditorView(model: model))
             super.init(frame: .zero)
             hosting.translatesAutoresizingMaskIntoConstraints = false
@@ -111,6 +115,17 @@ struct MarkdownTextEditor: NSViewRepresentable {
 
         deinit {
             undoObservers.forEach(NotificationCenter.default.removeObserver)
+        }
+
+        /// Leaves the caret where the user put it: a text that another field
+        /// edits keeps it.
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard focusesOnOpen, let window else { return }
+            focusesOnOpen = false
+            if (window.firstResponder as? NSTextView)?.isEditable != true {
+                model.isFocused = true
+            }
         }
 
         override func layout() {

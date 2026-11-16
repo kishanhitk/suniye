@@ -759,8 +759,8 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.saveNotes("Ship Monday", for: meeting.id)
         let after = await coordinator.listText(for: meeting.id)
 
-        XCTAssertEqual(before.notes, "Ship Friday")
-        XCTAssertEqual(after.notes, "Ship Monday")
+        XCTAssertEqual(before.noteLines, ["Ship Friday"])
+        XCTAssertEqual(after.noteLines, ["Ship Monday"])
     }
 
     func testExportWritesTheSummaryNotesAndTranscriptOfTheMeeting() async throws {

@@ -63,6 +63,16 @@ final class MeetingTextSaves {
         start(Key(meetingID: meetingID, part: part))
     }
 
+    /// Stages the text of an edit that goes on; saves the text of an edit
+    /// that ended now.
+    func edited(_ part: MeetingTextPart, of meetingID: UUID, ended: Bool, save: @escaping () async -> Void) {
+        if ended {
+            self.save(part, of: meetingID, save: save)
+        } else {
+            stage(part, of: meetingID, save: save)
+        }
+    }
+
     /// Starts the waiting saves of one meeting: its page goes away or shows
     /// another tab.
     func saveNow(_ meetingID: UUID) {

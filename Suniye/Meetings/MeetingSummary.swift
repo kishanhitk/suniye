@@ -76,10 +76,19 @@ protocol MeetingSummaryModel {
 
 struct MeetingSummaryInput: Sendable {
     let segments: [MeetingSegment]
+    /// The user's notes as plain lines: a model copies Markdown marks into
+    /// the summary.
     let notes: String
     let template: MeetingTemplate
     /// False when the meeting had no call track, so no line has a speaker.
     let speakerLabels: Bool
+
+    init(segments: [MeetingSegment], notes: String, template: MeetingTemplate, speakerLabels: Bool) {
+        self.segments = segments
+        self.notes = MarkdownPlainText.lines(of: notes, headings: true).joined(separator: "\n")
+        self.template = template
+        self.speakerLabels = speakerLabels
+    }
 }
 
 struct MeetingSummary: Equatable, Sendable {
