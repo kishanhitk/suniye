@@ -21,6 +21,50 @@ final class MeetingListTextTests: XCTestCase {
         XCTAssertEqual(text.snippet(for: .done), "#hashtag stays.")
     }
 
+    func testASummaryShowsWithoutMarkdownMarks() {
+        let text = MeetingListText(
+            summary: "## Decisions\n1. **Decision:** ship on *Friday*. QA signs off.\n2. Read [the spec](https://example.com/spec) and run `make test`.\n- [ ] Ask legal\n- [x] Tell support",
+            notes: "",
+            transcript: []
+        )
+
+        XCTAssertEqual(text.snippet(for: .done), "Decision: ship on Friday.")
+        XCTAssertEqual(text.line(matching: "spec"), "Read the spec and run make test.")
+        XCTAssertEqual(text.line(matching: "legal"), "Ask legal")
+        XCTAssertEqual(text.line(matching: "support"), "Tell support")
+        XCTAssertNil(text.line(matching: "example.com"), "a link shows only its text")
+    }
+
+    func testEachBlockOfASummaryIsOneLine() {
+        let summary = """
+        Para one.
+        ## Mid
+        Para two
+        on two lines.
+        - outer
+          - [ ] inner task
+
+          [x] stays: a task mark starts only the first paragraph.
+        - `[x] stays in code`
+        > quoted **line**
+
+        | A | B |
+        |---|---|
+        | 1 | 2 |
+
+        ```
+        code one
+        code two
+        ```
+        """
+
+        XCTAssertEqual(MeetingListText(summary: summary, notes: "", transcript: []).summaryLines, [
+            "Para one.", "Para two on two lines.", "outer", "inner task",
+            "[x] stays: a task mark starts only the first paragraph.", "[x] stays in code",
+            "quoted line", "A", "B", "1", "2", "code one", "code two",
+        ])
+    }
+
     func testASearchFindsTheLineInTheSummaryNotesOrTranscript() {
         XCTAssertEqual(text.line(matching: "legal about"), "Ask legal about the pricing page.")
         XCTAssertEqual(text.line(matching: "old copy"), "- Keep the old copy")
@@ -62,13 +106,6 @@ final class MeetingExportTests: XCTestCase {
         [01:40] You: Yes.
 
         """)
-    }
-
-    func testSummaryBlocksAreHeadingsItemsAndParagraphs() {
-        XCTAssertEqual(
-            MeetingSummaryBlock.parse("## Overview\nShip it.\n\n- Ask legal."),
-            [.heading("Overview"), .paragraph("Ship it."), .item("Ask legal.")]
-        )
     }
 }
 
