@@ -12,7 +12,7 @@ struct MeetingSummaryTab: View {
 
     var body: some View {
         if record.status == .done, let summary {
-            MeetingSummaryEditor(markdown: summary, isEditable: isEditable, edited: edited)
+            MarkdownTextEditor(markdown: summary, documentID: record.id.uuidString, isEditable: isEditable, edited: edited)
         } else {
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 16) {

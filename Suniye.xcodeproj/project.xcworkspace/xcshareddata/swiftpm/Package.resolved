@@ -1,5 +1,4 @@
 {
-  "originHash" : "e721da7f9826abdffcb6185e886155efa2514bd6234475f1afa893e29eb258d6",
   "pins" : [
     {
       "identity" : "sparkle",
@@ -9,7 +8,24 @@
         "revision" : "6276ba2b404829d139c45ff98427cf90e2efc59b",
         "version" : "2.9.2"
       }
+    },
+    {
+      "identity" : "swift-markdown-engine",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kishanhitk/swift-markdown-engine",
+      "state" : {
+        "revision" : "c80c69c58c313a39d1a9273878032c0cbf43ad0c"
+      }
+    },
+    {
+      "identity" : "swiftmath",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mgriebling/SwiftMath",
+      "state" : {
+        "revision" : "fa8244ed032f4a1ade4cb0571bf87d2f1a9fd2d7",
+        "version" : "1.7.3"
+      }
     }
   ],
-  "version" : 3
+  "version" : 2
 }

@@ -150,8 +150,10 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 
 - The title: click it to edit it in place. Return or a click elsewhere keeps the new title; Esc drops it. An empty title goes back to the old one. A title that you set stays when a new summary is written.
 - A transcript line: click its text to edit it; its time and speaker stay. Return or Esc ends the edit. A line that you empty goes when the edit ends. ⌘Z undoes typing while the page is open.
-- The summary: click to edit any heading, paragraph or item. Return in an item starts a new item; Return in an empty item ends the list.
+- The summary is Markdown with a live preview: `#` and `##` headings, `**bold**`, `*italic*`, `-` and `1.` lists. The marks show only on the line or the span that holds the caret. Return in an item starts a new item; Return in an empty item ends the list. ⌘F opens the find bar.
+- A link or a web address in the summary opens in the browser when you click it, also while you edit. A click at its first or last letter puts the caret next to it.
 - While a transcript or a summary is written, the transcript and the summary cannot be edited.
+- The summary editor is MarkdownEngine `0.15.0` from the fork `kishanhitk/swift-markdown-engine` (commit `c80c69c`). The fork adds one change: a closed editor removes its view observers, so it does not stay in memory.
 - Copy, Export as Markdown, Search and Regenerate use the edited text.
 - A quit, a tab change or leaving the meeting page saves the text that you typed.
 

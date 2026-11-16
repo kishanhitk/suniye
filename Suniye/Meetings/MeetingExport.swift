@@ -42,13 +42,20 @@ enum MeetingSummaryBlock: Equatable {
             if text.isEmpty {
                 return nil
             }
-            if text.hasPrefix("## ") {
-                return .heading(String(text.dropFirst(3)))
+            if let heading = headingText(text) {
+                return .heading(heading)
             }
             if text.hasPrefix("- ") {
                 return .item(String(text.dropFirst(2)))
             }
             return .paragraph(text)
         }
+    }
+
+    /// The text of a `#` to `######` heading line.
+    private static func headingText(_ line: String) -> String? {
+        let marks = line.prefix { $0 == "#" }.count
+        guard (1 ... 6).contains(marks), line.dropFirst(marks).first == " " else { return nil }
+        return String(line.dropFirst(marks + 1))
     }
 }

@@ -18,6 +18,13 @@ Suniye depends on third-party software and model artifacts.
   - Used for: the `llama-server` runtime for Local Gemma and Qwen3-ASR
   - Local file: `Suniye/LocalLLM/llama-server`, embedded as `Contents/Helpers/llama-server`
 
+- MarkdownEngine 0.15.0 (Apache-2.0), from a fork
+  - Upstream: https://github.com/nodes-app/swift-markdown-engine, tag `0.15.0`
+  - Fork: https://github.com/kishanhitk/swift-markdown-engine, branch `fix/release-view-observers`
+  - Change: one commit on `0.15.0`. `dismantleNSView` removes the two clip-view observers that `makeNSView` adds, so a closed editor is released. The two changed files carry a change notice.
+  - Pinned by: `project.yml` (revision `c80c69c58c313a39d1a9273878032c0cbf43ad0c`, the `MarkdownEngine` product only)
+  - Used for: the Markdown editor of a meeting summary
+
 ## Model artifacts
 - Model: `sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`
 - Download source: sherpa-onnx releases
