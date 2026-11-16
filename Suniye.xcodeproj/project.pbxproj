@@ -1301,7 +1301,7 @@
 			mainGroup = 80BAA1F67F5D858DF2C17254;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				174FBC495A2E85F29ADCEECC /* XCRemoteSwiftPackageReference "swift-markdown-engine" */,
+				4121C75CE8F539C228AC00F9 /* XCRemoteSwiftPackageReference "swift-markdown-engine" */,
 				1D53E53679565392F02B0140 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				5E25D423E06ED26074A50D1D /* XCLocalSwiftPackageReference "SuniyeAnalytics" */,
 			);
@@ -1930,14 +1930,6 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		174FBC495A2E85F29ADCEECC /* XCRemoteSwiftPackageReference "swift-markdown-engine" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/nodes-app/swift-markdown-engine";
-			requirement = {
-				kind = exactVersion;
-				version = 0.15.0;
-			};
-		};
 		1D53E53679565392F02B0140 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
@@ -1946,12 +1938,20 @@
 				version = 2.9.2;
 			};
 		};
+		4121C75CE8F539C228AC00F9 /* XCRemoteSwiftPackageReference "swift-markdown-engine" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kishanhitk/swift-markdown-engine";
+			requirement = {
+				kind = revision;
+				revision = c80c69c58c313a39d1a9273878032c0cbf43ad0c;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		0FF1DC62F7BF984F54656529 /* MarkdownEngine */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 174FBC495A2E85F29ADCEECC /* XCRemoteSwiftPackageReference "swift-markdown-engine" */;
+			package = 4121C75CE8F539C228AC00F9 /* XCRemoteSwiftPackageReference "swift-markdown-engine" */;
 			productName = MarkdownEngine;
 		};
 		1F908BB9A2C4E07874586F5D /* SuniyeAnalytics */ = {

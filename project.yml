@@ -8,8 +8,8 @@ packages:
   SuniyeAnalytics:
     path: SuniyeAnalytics
   MarkdownEngine:
-    url: https://github.com/nodes-app/swift-markdown-engine
-    exactVersion: 0.15.0
+    url: https://github.com/kishanhitk/swift-markdown-engine
+    revision: c80c69c58c313a39d1a9273878032c0cbf43ad0c
 schemes:
   Suniye:
     build:

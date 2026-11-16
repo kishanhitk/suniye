@@ -192,6 +192,21 @@ final class MarkdownTextEditorTests: XCTestCase {
         return count
     }
 
+    func testAClosedEditorReleasesItsTextView() async throws {
+        weak var closed = try await open(summary)
+        window.contentView = nil
+        window.close()
+        window = nil
+        host = nil
+
+        // AppKit releases a text view after its delayed spell-check work runs.
+        let deadline = Date().addingTimeInterval(5)
+        while closed != nil, Date() < deadline {
+            try await settle()
+        }
+        XCTAssertNil(closed)
+    }
+
     func testCommandFOpensTheFindBarOverTheText() async throws {
         let text = try await open(summary)
         XCTAssertTrue(window.makeFirstResponder(text))
