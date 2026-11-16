@@ -319,26 +319,16 @@ struct MeetingPage: View {
             guard let text = texts[segment.id] else { return segment }
             return text.isEmpty && ended ? nil : segment.withText(text)
         }
-        let save: () async -> Void = { [meetings, id] in
+        meetings.textSaves.edited(.transcript, of: id, ended: ended) { [meetings, id] in
             await meetings.editTranscript(id, texts: texts, deleteEmpty: ended)
-        }
-        if ended {
-            meetings.textSaves.save(.transcript, of: id, save: save)
-        } else {
-            meetings.textSaves.stage(.transcript, of: id, save: save)
         }
     }
 
     private func editSummary(_ markdown: String, ended: Bool) {
         noteEdit(.summary)
         summary = markdown
-        let save: () async -> Void = { [meetings, id] in
+        meetings.textSaves.edited(.summary, of: id, ended: ended) { [meetings, id] in
             await meetings.editSummary(id, markdown: markdown)
-        }
-        if ended {
-            meetings.textSaves.save(.summary, of: id, save: save)
-        } else {
-            meetings.textSaves.stage(.summary, of: id, save: save)
         }
     }
 
