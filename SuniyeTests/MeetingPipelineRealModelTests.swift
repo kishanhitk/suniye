@@ -196,6 +196,68 @@ final class MeetingPipelineRealModelTests: XCTestCase {
         #endif
     }
 
+    /// The same facts in plain notes and in Markdown notes, for one meeting:
+    /// the summary from the Markdown notes keeps each fact that the summary
+    /// from the plain notes keeps, and copies no Markdown mark.
+    func testTheLocalModelReadsMarkdownNotesLikePlainNotes() async throws {
+        let client = LocalGemmaLlamaCppClient()
+        try XCTSkipUnless(client.availability == .available, "The local model or llama-server is not available")
+        addTeardownBlock { await client.stopRuntime() }
+        try await compareNotes(engine: "local") { LocalGemmaMeetingSummaryModel(client: client) }
+    }
+
+    func testAppleIntelligenceReadsMarkdownNotesLikePlainNotes() async throws {
+        #if canImport(FoundationModels)
+        guard #available(macOS 26.0, *) else { throw XCTSkip("Apple Intelligence needs macOS 26") }
+        try XCTSkipUnless(SystemLanguageModel.default.availability == .available, "Apple Intelligence is not available")
+        try await compareNotes(engine: "apple") { AppleMeetingSummaryModel() }
+        #else
+        throw XCTSkip("No FoundationModels")
+        #endif
+    }
+
+    private static let noteFacts: [Fact] = [
+        Fact(line: "Ravi books the venue by Monday.") { $0.contains("ravi") && $0.contains("venue") && $0.contains("monday") },
+        Fact(line: "The catering budget is 1,200 euros.") { ($0.contains("1,200") || $0.contains("1200")) && $0.contains("euro") && $0.contains("catering") },
+        Fact(line: "Ask legal about the German copy.") { $0.contains("legal") && $0.contains("german") },
+    ]
+
+    private static let plainNotes = noteFacts.map(\.line).joined(separator: "\n")
+
+    private static let markdownNotes = """
+    ## Venue
+    - **Ravi** books the venue by *Monday*.
+
+    ## Budget
+    1. The catering budget is **1,200 euros**.
+
+    ## Open
+    - [ ] Ask [legal](https://example.com/legal) about the `German` copy.
+    """
+
+    private func compareNotes(engine: String, model: () -> MeetingSummaryModel) async throws {
+        let minutes = Int(ProcessInfo.processInfo.environment["SUNIYE_EVAL_MINUTES"] ?? "") ?? 20
+        let segments = Self.meeting(minutes: minutes, variant: 0)
+        let facts = Self.facts + Self.noteFacts
+        var kept: [String: [String]] = [:]
+        for (form, notes) in [("plain", Self.plainNotes), ("markdown", Self.markdownNotes)] {
+            let input = MeetingSummaryInput(segments: segments, notes: notes, template: .general, speakerLabels: true)
+            let summary = try await MeetingSummaryWriter(model: model()).write(input)
+            let text = ((summary.title ?? "") + "\n" + summary.body).lowercased()
+            kept[form] = facts.filter { $0.found(in: text) }.map(\.line)
+            print("NOTES engine=\(engine) minutes=\(minutes) notes=\(form) kept=\(kept[form]?.count ?? 0)/\(facts.count) missing=\(facts.filter { !$0.found(in: text) }.map(\.line))")
+            print(summary.title ?? "(no title)")
+            print(summary.body)
+            if form == "markdown" {
+                let marks = ["*", "](", "[ ]", "`"].filter { summary.body.contains($0) }
+                XCTAssertEqual(marks, [], "\(engine): Markdown marks of the notes in the summary")
+            }
+        }
+        let plain = Set(kept["plain"] ?? [])
+        let markdown = Set(kept["markdown"] ?? [])
+        XCTAssertEqual(plain.subtracting(markdown), [], "\(engine): facts that only the plain notes kept")
+    }
+
     private struct EvalSet {
         let name: String
         let facts: [Fact]
