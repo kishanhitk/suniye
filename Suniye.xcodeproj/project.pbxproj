@@ -204,6 +204,7 @@
 		A9F8D4988A17664D6A427FF2 /* MeetingPipelineRealModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF750791FCB07A12AC56E6D /* MeetingPipelineRealModelTests.swift */; };
 		AAD111439F0F00767FB978CC /* TranscriptRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA73BA41B4C1D29882739D09 /* TranscriptRows.swift */; };
 		ABBE39ACCFDBB6ADD2342962 /* AppAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A15D7D20796CE98FF1612651 /* AppAnalytics.swift */; };
+		AD3FEEFC71CB4B5FDBC5BB40 /* MarkdownPlainText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DB69B8EB1406A11E2B610DB /* MarkdownPlainText.swift */; };
 		AD4B3865600E1270C50BDB96 /* MeetingAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C00C743730B7934B1EF776 /* MeetingAnalytics.swift */; };
 		AD87116EBACBA4A58B56D11A /* AppStateAudioCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5599BFF26E7C9256D7B0F4A8 /* AppStateAudioCaptureTests.swift */; };
 		AE2822F6E9A1357A8EB1FCAA /* MagicFormatOutputPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4DBA9D496A76A822CB680DA /* MagicFormatOutputPolicy.swift */; };
@@ -401,6 +402,7 @@
 		3C602055B3CC305FEC183E6E /* HotkeyServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyServiceTests.swift; sourceTree = "<group>"; };
 		3C9096A76DF0F31897E428C4 /* CohereTranscribeDecoding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CohereTranscribeDecoding.swift; sourceTree = "<group>"; };
 		3DA12B4973440B4D8638C5FB /* onnxruntime_ep_c_api.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = onnxruntime_ep_c_api.h; sourceTree = "<group>"; };
+		3DB69B8EB1406A11E2B610DB /* MarkdownPlainText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPlainText.swift; sourceTree = "<group>"; };
 		3DD3D8E1B7A6DE71A7093683 /* MagicFormatPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatPage.swift; sourceTree = "<group>"; };
 		436F8EBC13268D2B033EA389 /* onnxruntime_error_code.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = onnxruntime_error_code.h; sourceTree = "<group>"; };
 		45B4345BE4906F835B2CB1DD /* AppStateOnboardingFunnelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateOnboardingFunnelTests.swift; sourceTree = "<group>"; };
@@ -1119,6 +1121,7 @@
 				FDAD759BE5A7EA047B00E206 /* AppleMeetingSummaryModel.swift */,
 				B803A9C9D6A243793C60B771 /* CoreAudioMicrophoneUsers.swift */,
 				52F7F9D385457F3C172F8EE7 /* LocalGemmaMeetingSummaryModel.swift */,
+				3DB69B8EB1406A11E2B610DB /* MarkdownPlainText.swift */,
 				25C00C743730B7934B1EF776 /* MeetingAnalytics.swift */,
 				28CA2448FDB9C0892DB41AFE /* MeetingAudioFile.swift */,
 				71EBDECB0F3799211969A8F1 /* MeetingAudioPlayer.swift */,
@@ -1434,6 +1437,7 @@
 				DD2DF879055EDA81608657AF /* MainWindowController.swift in Sources */,
 				D86E625941C2BF82BDED6971 /* MainWindowSection.swift in Sources */,
 				81C475C8CB38315402BF6943 /* MainWindowView.swift in Sources */,
+				AD3FEEFC71CB4B5FDBC5BB40 /* MarkdownPlainText.swift in Sources */,
 				2BB5E3932215625BAF576391 /* MarkdownTextEditor.swift in Sources */,
 				D1F68AE64F5891F4B8C65F71 /* MeetingActions.swift in Sources */,
 				AD4B3865600E1270C50BDB96 /* MeetingAnalytics.swift in Sources */,

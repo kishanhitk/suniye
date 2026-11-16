@@ -156,7 +156,7 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 - The Notes tab puts the caret in the notes when it opens, also while the meeting records. The notes can be edited at all times. An empty Notes tab shows the empty editor.
 - The editor is MarkdownEngine `0.15.0` from the fork `kishanhitk/swift-markdown-engine` (commit `c80c69c`). The fork adds one change: a closed editor removes its view observers, so it does not stay in memory.
 - Copy, Export as Markdown, Search and Regenerate use the edited text.
-- The meetings list and Search read the summary as plain text: no list numbers, no bold, italic, code or link marks. Headings are not searched. Lines with no blank line between them are one paragraph, as in CommonMark.
+- The meetings list and Search read the summary and the notes as plain text: no list numbers, no bold, italic, code or link marks. Search leaves out the headings of the summary and finds the headings of the notes. Each line shows as it does in the editor.
 - A quit, a tab change or leaving the meeting page saves the text that you typed.
 
 ## Files
