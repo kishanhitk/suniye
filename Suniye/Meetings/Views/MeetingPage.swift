@@ -27,7 +27,7 @@ struct MeetingPage: View {
     @State private var segments: [MeetingSegment] = []
     @State private var summary: String?
     /// Nil until the notes are read, so the editor never saves over them.
-    @State private var notes: MeetingNotesDraft?
+    @State private var notes: String?
     @State private var notesUnreadable = false
     /// The parts of the text that the user changed in this visit of the page.
     @State private var editedParts: Set<MeetingEditedText> = []
@@ -96,9 +96,8 @@ struct MeetingPage: View {
                 segments = await meetings.transcript(of: id)
             }
             .task(id: id) {
-                let saved = await meetings.notes(of: id)
-                notes = saved.map(MeetingNotesDraft.init(saved:))
-                notesUnreadable = saved == nil
+                notes = await meetings.notes(of: id)
+                notesUnreadable = notes == nil
             }
             .onAppear { meetings.pageOnScreen = id }
             .onDisappear {
@@ -123,7 +122,7 @@ struct MeetingPage: View {
                 }
             }
             .onChange(of: live == nil) { _, finished in
-                if finished, tab == .notes, notes?.text.isEmpty ?? true {
+                if finished, tab == .notes, notes?.isEmpty ?? true {
                     tab = .summary
                 }
             }
@@ -236,7 +235,7 @@ struct MeetingPage: View {
         case .summary:
             return !(summary ?? "").allSatisfy(\.isWhitespace)
         case .notes:
-            return !(notes?.text ?? "").allSatisfy(\.isWhitespace)
+            return !(notes ?? "").allSatisfy(\.isWhitespace)
         case .transcript:
             return segments.contains { !$0.text.allSatisfy(\.isWhitespace) }
         }
@@ -247,7 +246,7 @@ struct MeetingPage: View {
         case .summary:
             return summary ?? ""
         case .notes:
-            return notes?.text ?? ""
+            return notes ?? ""
         case .transcript:
             return MeetingExport.transcript(record: record, segments: segments)
         }
@@ -271,11 +270,9 @@ struct MeetingPage: View {
                 editSummary(markdown, ended: ended)
             }
         case .notes:
-            if let draft = Binding($notes) {
-                MeetingNotesEditor(draft: draft) { text in
-                    meetings.textSaves.stage(.notes, of: id) {
-                        await meetings.saveNotes(text, for: id)
-                    }
+            if let notes {
+                MarkdownTextEditor(markdown: notes, documentID: "\(id.uuidString)-notes", isEditable: true, focusesOnOpen: true) { markdown, ended in
+                    editNotes(markdown, ended: ended)
                 }
             } else if notesUnreadable {
                 Text("Couldn’t read the notes.")
@@ -329,6 +326,13 @@ struct MeetingPage: View {
         summary = markdown
         meetings.textSaves.edited(.summary, of: id, ended: ended) { [meetings, id] in
             await meetings.editSummary(id, markdown: markdown)
+        }
+    }
+
+    private func editNotes(_ markdown: String, ended: Bool) {
+        notes = markdown
+        meetings.textSaves.edited(.notes, of: id, ended: ended) { [meetings, id] in
+            await meetings.saveNotes(markdown, for: id)
         }
     }
 

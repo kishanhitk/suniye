@@ -9,38 +9,6 @@ struct MeetingTranscriptLine: Equatable {
     let text: String
 }
 
-/// The notes that the user types. Each edit hands its text to `save`, which
-/// stages it with the meeting's text saves.
-struct MeetingNotesEditor: View {
-    @Binding var draft: MeetingNotesDraft
-    let save: (String) -> Void
-
-    /// TextEditor's text view starts its text this far in, so the notes
-    /// would sit right of the tabs above them.
-    private static let textInset = NSTextContainer().lineFragmentPadding
-
-    var body: some View {
-        TextEditor(text: $draft.text)
-            .font(AppTypography.body)
-            .foregroundStyle(.primary)
-            .scrollContentBackground(.hidden)
-            .padding(.horizontal, -Self.textInset)
-            .overlay(alignment: .topLeading) {
-                if draft.text.isEmpty {
-                    Text("Notes")
-                        .font(AppTypography.body)
-                        .foregroundStyle(MainWindowPalette.tertiaryText)
-                        .allowsHitTesting(false)
-                }
-            }
-            .onChange(of: draft.text) {
-                if let text = draft.takeUnsaved() {
-                    save(text)
-                }
-            }
-    }
-}
-
 /// "Finishing the transcript…" and the minutes of audio done, while the
 /// transcript is written after the recording.
 struct MeetingTranscriptProgressView: View {
