@@ -123,11 +123,14 @@ final class AppStateOnboardingTests: XCTestCase {
     }
 
     func testWelcomeStartsModelDownloadBeforeLeavingWelcome() async {
+        let gate = AsyncGate()
+        defer { gate.open() }
         let modelManager = StubModelManager()
+        modelManager.downloadGate = gate
         let appState = freshOnboardingState(modelManager: modelManager)
 
         appState.startOnboardingIfNeeded()
-        await waitForOnboardingDownloadToStart(appState)
+        await waitUntil { appState.phase == .downloadingModel }
 
         XCTAssertEqual(appState.activeOnboardingStep, .welcome)
         XCTAssertEqual(appState.phase, .downloadingModel)
@@ -272,24 +275,18 @@ final class AppStateOnboardingTests: XCTestCase {
     }
 
     func testSetupMenuItemTitleTracksProgressAndDownloads() async {
-        let appState = freshOnboardingState()
+        let gate = AsyncGate()
+        defer { gate.open() }
+        let modelManager = StubModelManager()
+        modelManager.downloadGate = gate
+        let appState = freshOnboardingState(modelManager: modelManager)
         appState.startOnboardingIfNeeded()
-        await waitForOnboardingDownloadToStart(appState)
+        await waitUntil { appState.downloadProgress == 0.1 }
 
-        XCTAssertEqual(appState.setupMenuItemTitle, "Downloading speech model — 0%")
+        XCTAssertEqual(appState.setupMenuItemTitle, "Downloading speech model — 10%")
 
-        appState.phase = .downloadingModel
         appState.downloadProgress = 0.47
         XCTAssertEqual(appState.setupMenuItemTitle, "Downloading speech model — 47%")
-    }
-
-    private func waitForOnboardingDownloadToStart(_ appState: AppState) async {
-        for _ in 0 ..< 100 {
-            if appState.phase == .downloadingModel {
-                return
-            }
-            await Task.yield()
-        }
     }
 
     func testSetupMenuItemTitleNilOnceFinished() {
