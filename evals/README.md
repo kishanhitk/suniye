@@ -125,6 +125,36 @@ The runner starts `llama-server` itself, uses the Gemma-style single user turn, 
 ~/Library/Application Support/Suniye/llm/gemma-4-e2b-Q4_K_M.gguf
 ```
 
+Options for a comparison of llama-server builds or flags:
+
+- `--cases` takes more than one file. `--rounds N` runs all of them N times on one server.
+- `--server-arg` adds one llama-server argument. Repeat it, and write `--server-arg=--flag` for a value that starts with a dash.
+- The script sends one warm-up request first, like the app. The report has p50 and p90 latency, decode speed, draft token counts, and the peak memory of llama-server.
+
+```bash
+python3 scripts/eval_magic_format.py \
+  --server Suniye/LocalLLM/llama-server \
+  --cases evals/magic_format_cases.json evals/magic_format_advanced_cases.json evals/magic_format_edit_cases.json \
+  --rounds 2 --server-arg=--jinja \
+  --server-arg=--spec-type --server-arg=draft-mtp \
+  --server-arg=--spec-draft-model --server-arg="$HOME/Library/Application Support/Suniye/llm/mtp-gemma-4-E2B-it-Q4_0.gguf" \
+  --json-output evals/runs/gemma_mtp.json
+```
+
+### llama.cpp 7e960f40 and the MTP drafter (KIS-268, 21 Nov 2026)
+
+Gemma v14 prompt, round 2 of 2, one Mac, runs back to back. The 144 outputs of each run are byte-identical to the run on the old build.
+
+| llama-server | main (44) | advanced (4) | referential (24) | main p50 | main p90 | decode tokens/s |
+|---|---|---|---|---|---|---|
+| 06938ac1 | 44 | 4 | 24 | 741 ms | 1095 ms | 29.8 |
+| 7e960f40 | 44 | 4 | 24 | 654 ms | 1043 ms | 28.5 |
+| 7e960f40 with the drafter | 44 | 4 | 24 | 383 ms | 588 ms | 54.5 |
+
+- The drafter proposed 888 tokens in the main suite, and Gemma accepted 718 (81%).
+- With the drafter, each case after the warm-up request reads 2,438 to 2,441 prompt tokens from the server's cache.
+- Peak physical footprint of llama-server: 379 MB without the drafter, 484 MB with it.
+
 The default prompt is `evals/prompts/gemma_magic_format_v14.txt`. Earlier prompt files are kept as useful baselines for comparing simple-to-improved prompt behavior. Tuning candidates live in `evals/prompts/candidates/`.
 
 ## Version scores (39-case suite, Gemma 4 E2B Q4_K_M, temp 0)

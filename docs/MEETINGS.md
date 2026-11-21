@@ -136,6 +136,8 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 | The local model | Set A: 4 to 5. Set B: 1 to 2. | 0 to 1 | 0 |
 | Apple Intelligence | 4 to 5 | 14 to 79 | 0 to 38 |
 
+The local model on llama.cpp `7e960f40` with the drafter ([LOCAL_GEMMA.md](LOCAL_GEMMA.md)), 21 Nov 2026, same meetings, one run: set A 4 and 4, set B 2 and 1. Before, on llama.cpp `06938ac1`: set A 4 and 4, set B 2 and 2. The summary of a 120-minute meeting takes 18 to 23 s, down from 51 to 58 s.
+
 - Templates: General, 1:1, Stand-up, Interview, and your own (**Settings → General → Meetings → Summary templates**).
 - You can rename and edit a built-in template. **Reset to Default** brings back its shipped name and text.
 - When you delete the template that is the **Default template**, General is the default again.
