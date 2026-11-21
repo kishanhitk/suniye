@@ -588,6 +588,60 @@ final class AppStateLocalModelTests: XCTestCase {
         XCTAssertFalse(appState.canStartLocalGemmaDownload)
     }
 
+    func testLocalGemmaDownloadFetchesTheDrafterAfterTheModel() async {
+        let localManager = StubLocalLLMModelManager()
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+
+        appState.startLocalGemmaDownload()
+        XCTAssertEqual(localManager.drafterDownloadCallCount, 0)
+
+        await waitUntil(timeout: 1) {
+            localManager.drafterDownloadCallCount == 1
+        }
+        XCTAssertTrue(appState.localGemmaInstallState.isInstalled)
+    }
+
+    func testDeleteCancelsARunningDrafterDownloadAndWaitsForIt() async {
+        let gate = AsyncGate()
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        localManager.drafterDownloadGate = gate
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+        appState.downloadLocalGemmaDrafterIfNeeded()
+        await waitUntil(timeout: 1) {
+            localManager.drafterDownloadCallCount == 1
+        }
+
+        let delete = Task { await appState.deleteLocalGemmaModel() }
+        for _ in 0 ..< 20 {
+            await Task.yield()
+        }
+        XCTAssertEqual(localManager.deleteCallCount, 0)
+
+        gate.open()
+        await delete.value
+
+        XCTAssertTrue(localManager.drafterDownloadWasCanceled)
+        XCTAssertEqual(localManager.deleteCallCount, 1)
+        XCTAssertEqual(appState.localGemmaInstallState, .notInstalled)
+    }
+
+    func testAnInstalledLocalGemmaWithoutDrafterFetchesIt() async {
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+
+        appState.downloadLocalGemmaDrafterIfNeeded()
+        appState.downloadLocalGemmaDrafterIfNeeded()
+
+        await waitUntil(timeout: 1) {
+            localManager.drafterDownloadCallCount == 1
+        }
+        await appState.deleteLocalGemmaModel()
+        XCTAssertEqual(localManager.drafterDownloadCallCount, 1)
+        XCTAssertEqual(appState.localGemmaInstallState, .notInstalled)
+    }
+
     func testLocalGemmaDownloadIgnoresStaleProgressAfterInstall() async {
         let localManager = StubLocalLLMModelManager()
         let appState = makeTestAppState(localLLMModelManager: localManager)

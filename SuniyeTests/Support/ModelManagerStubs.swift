@@ -181,6 +181,11 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
     var preferredModelID: LocalLLMModelID = LocalLLMModelCatalog.preferredModelID
     var isHardwareSupported = true
     var installedModelIDs: Set<LocalLLMModelID> = []
+    var installedDrafterURLs: [LocalLLMModelID: URL] = [:]
+    var drafterDownloadCallCount = 0
+    /// When set, a drafter download waits for the gate before it finishes.
+    var drafterDownloadGate: AsyncGate?
+    var drafterDownloadWasCanceled = false
     var installedByteCounts: [LocalLLMModelID: Int64] = [
         LocalLLMModelCatalog.preferredModelID: LocalLLMModelCatalog.entry(for: LocalLLMModelCatalog.preferredModelID).expectedSizeBytes
     ]
@@ -204,6 +209,18 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
 
     func modelFileURL(for modelID: LocalLLMModelID) throws -> URL {
         rootDirectory.appendingPathComponent(catalogEntry(for: modelID).filename)
+    }
+
+    func drafterFileURL(for modelID: LocalLLMModelID) -> URL? {
+        installedDrafterURLs[modelID]
+    }
+
+    func downloadDrafter(for modelID: LocalLLMModelID) async throws {
+        drafterDownloadCallCount += 1
+        if let drafterDownloadGate {
+            await drafterDownloadGate.wait()
+            drafterDownloadWasCanceled = Task.isCancelled
+        }
     }
 
     func isInstalled(_ modelID: LocalLLMModelID) -> Bool {

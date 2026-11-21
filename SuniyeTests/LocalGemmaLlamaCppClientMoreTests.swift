@@ -71,6 +71,57 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         await server.stop()
     }
 
+    func testADrafterInstalledWhileTheServerRunsWaitsForTheNextStart() async throws {
+        let tempDir = try makeTemporaryDirectory()
+        let logURL = tempDir.appendingPathComponent("starts.log")
+        overrideHelperPath(try FakeLlamaServer.make(in: tempDir, logURL: logURL))
+        let localManager = StubLocalLLMModelManager()
+        localManager.rootDirectory = tempDir
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let server = LlamaServer()
+        let client = LocalGemmaLlamaCppClient(
+            locator: LocalGemmaRuntimeLocator(modelManager: localManager),
+            server: server
+        )
+        func generate() async throws {
+            _ = try await client.generate(
+                instructions: "Reply with OK.",
+                prompt: "Connection test.",
+                maxTokens: 8,
+                sampling: .greedy,
+                startupTimeoutSeconds: 8,
+                idleTimeoutSeconds: 600,
+                timeoutSeconds: 5
+            )
+        }
+        func logLines() -> [String] {
+            FakeLlamaServer.logContents(at: logURL).split(separator: "\n").map(String.init)
+        }
+
+        do {
+            try await generate()
+            localManager.installedDrafterURLs[.gemma4E2BQ4KM] = tempDir.appendingPathComponent("drafter.gguf")
+
+            try await generate()
+            let isWarm = await client.isRuntimeWarm()
+            XCTAssertTrue(isWarm)
+            XCTAssertEqual(logLines(), ["start", "request", "request"])
+
+            await server.stop()
+            try await generate()
+            XCTAssertEqual(logLines().filter { $0 == "start" }.count, 2)
+
+            localManager.installedDrafterURLs[.gemma4E2BQ4KM] = nil
+            try await generate()
+            XCTAssertEqual(logLines().filter { $0 == "start" }.count, 2)
+        } catch {
+            await server.stop()
+            XCTFail("Expected the fake llama-server to answer, got \(error). Helper log: \(FakeLlamaServer.logContents(at: logURL))")
+            return
+        }
+        await server.stop()
+    }
+
     func testTokenCountAsksTheServerTokenizer() async throws {
         let tempDir = try makeTemporaryDirectory()
         let logURL = tempDir.appendingPathComponent("starts.log")

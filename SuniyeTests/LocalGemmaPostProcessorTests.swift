@@ -149,11 +149,32 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         ])
     }
 
+    func testAStartWithTheDrafterPassesItAfterTheGemmaArguments() {
+        let runtime = LocalGemmaRuntime(
+            serverExecutableURL: URL(fileURLWithPath: "/tmp/llama-server"),
+            model: LocalGemmaDefaults.modelEntry,
+            modelURL: URL(fileURLWithPath: "/tmp/model.gguf"),
+            drafterURL: URL(fileURLWithPath: "/tmp/drafter.gguf")
+        )
+
+        let arguments = LlamaServer.arguments(for: runtime.launch, port: 4242, apiKey: "key")
+
+        XCTAssertEqual(arguments.prefix(12), [
+            "--model", "/tmp/model.gguf",
+            "--ctx-size", "16384",
+            "--parallel", "1",
+            "--reasoning", "off",
+            "--spec-type", "draft-mtp",
+            "--spec-draft-model", "/tmp/drafter.gguf",
+        ])
+    }
+
     func testRuntimeLaunchRunsTheHelperWithGemmaArguments() {
         let runtime = LocalGemmaRuntime(
             serverExecutableURL: URL(fileURLWithPath: "/tmp/llama-server"),
             model: LocalGemmaDefaults.modelEntry,
-            modelURL: URL(fileURLWithPath: "/tmp/model.gguf")
+            modelURL: URL(fileURLWithPath: "/tmp/model.gguf"),
+            drafterURL: nil
         )
 
         XCTAssertEqual(runtime.launch, LlamaServerLaunch(

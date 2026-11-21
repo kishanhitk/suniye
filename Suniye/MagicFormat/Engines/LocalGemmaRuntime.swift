@@ -4,11 +4,15 @@ struct LocalGemmaRuntime: Equatable {
     let serverExecutableURL: URL
     let model: LocalLLMModelCatalogEntry
     let modelURL: URL
+    let drafterURL: URL?
 
+    /// The drafter is optional for the launch: a server that started before
+    /// the drafter was installed serves until it stops.
     var launch: LlamaServerLaunch {
         LlamaServerLaunch(
             executableURL: serverExecutableURL,
             arguments: LocalGemmaDefaults.serverArguments(modelPath: modelURL.path),
+            optionalArguments: drafterURL.map { LocalGemmaDefaults.drafterArguments(drafterPath: $0.path) } ?? [],
             modelName: model.displayName
         )
     }
@@ -45,7 +49,8 @@ struct LocalGemmaRuntimeLocator {
         return .success(LocalGemmaRuntime(
             serverExecutableURL: serverURL,
             model: LocalGemmaDefaults.modelEntry,
-            modelURL: modelURL
+            modelURL: modelURL,
+            drafterURL: modelManager.drafterFileURL(for: LocalGemmaDefaults.modelID)
         ))
     }
 }

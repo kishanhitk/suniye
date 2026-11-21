@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LLAMA_CPP_REPO="${LLAMA_CPP_REPO:-https://github.com/ggml-org/llama.cpp.git}"
-LLAMA_CPP_COMMIT="${LLAMA_CPP_COMMIT:-06938ac129e5feee1e731323e5c37dc973de5573}"
+LLAMA_CPP_COMMIT="${LLAMA_CPP_COMMIT:-7e960f40fb0bd2eede76406f807d6bc3f7aa339c}"
 SOURCE_DIR="${ROOT_DIR}/.build/llama.cpp/source"
 BUILD_DIR="${ROOT_DIR}/.build/llama.cpp/build"
 OUTPUT_PATH="${SUNIYE_LLAMA_SERVER_OUTPUT:-${ROOT_DIR}/Suniye/LocalLLM/llama-server}"

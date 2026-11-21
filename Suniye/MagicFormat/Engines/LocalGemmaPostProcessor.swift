@@ -28,6 +28,10 @@ enum LocalGemmaDefaults {
             "--reasoning", "off",
         ]
     }
+
+    static func drafterArguments(drafterPath: String) -> [String] {
+        ["--spec-type", "draft-mtp", "--spec-draft-model", drafterPath]
+    }
 }
 
 /// How the local model picks each token.
