@@ -139,7 +139,7 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
     }
 
     func testServerArgumentsDisableReasoning() {
-        let arguments = LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf", drafterPath: nil)
+        let arguments = LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf")
 
         XCTAssertEqual(arguments, [
             "--model", "/tmp/model.gguf",
@@ -149,10 +149,17 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         ])
     }
 
-    func testServerArgumentsAddTheDrafterWhenThereIsOne() {
-        let arguments = LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf", drafterPath: "/tmp/drafter.gguf")
+    func testAStartWithTheDrafterPassesItAfterTheGemmaArguments() {
+        let runtime = LocalGemmaRuntime(
+            serverExecutableURL: URL(fileURLWithPath: "/tmp/llama-server"),
+            model: LocalGemmaDefaults.modelEntry,
+            modelURL: URL(fileURLWithPath: "/tmp/model.gguf"),
+            drafterURL: URL(fileURLWithPath: "/tmp/drafter.gguf")
+        )
 
-        XCTAssertEqual(arguments, [
+        let arguments = LlamaServer.arguments(for: runtime.launch, port: 4242, apiKey: "key")
+
+        XCTAssertEqual(arguments.prefix(12), [
             "--model", "/tmp/model.gguf",
             "--ctx-size", "16384",
             "--parallel", "1",
@@ -167,12 +174,12 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
             serverExecutableURL: URL(fileURLWithPath: "/tmp/llama-server"),
             model: LocalGemmaDefaults.modelEntry,
             modelURL: URL(fileURLWithPath: "/tmp/model.gguf"),
-            drafterURL: URL(fileURLWithPath: "/tmp/drafter.gguf")
+            drafterURL: nil
         )
 
         XCTAssertEqual(runtime.launch, LlamaServerLaunch(
             executableURL: URL(fileURLWithPath: "/tmp/llama-server"),
-            arguments: LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf", drafterPath: "/tmp/drafter.gguf"),
+            arguments: LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf"),
             modelName: LocalGemmaDefaults.modelDisplayName
         ))
     }

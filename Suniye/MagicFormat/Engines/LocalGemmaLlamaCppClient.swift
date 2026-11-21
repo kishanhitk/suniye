@@ -25,7 +25,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         guard case let .success(runtime) = locator.resolve() else {
             return false
         }
-        return await server.isWarm(for: launch(for: runtime))
+        return await server.isWarm(for: runtime.launch)
     }
 
     func generate(
@@ -47,7 +47,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
                     sampling: sampling,
                     modelName: runtime.model.displayName
                 ),
-                launch: await launch(for: runtime),
+                launch: runtime.launch,
                 startupTimeoutSeconds: startupTimeoutSeconds,
                 idleTimeoutSeconds: idleTimeoutSeconds,
                 timeoutSeconds: timeoutSeconds
@@ -70,7 +70,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         return try await mappingErrors {
             try await server.tokenCount(
                 text,
-                launch: await launch(for: runtime),
+                launch: runtime.launch,
                 startupTimeoutSeconds: startupTimeoutSeconds,
                 idleTimeoutSeconds: idleTimeoutSeconds
             )
@@ -79,13 +79,6 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
 
     func stopRuntime() async {
         await server.stop()
-    }
-
-    /// A server that started before the drafter was installed keeps its launch
-    /// until it stops: a new launch would stop it under the request it serves.
-    private func launch(for runtime: LocalGemmaRuntime) async -> LlamaServerLaunch {
-        let withoutDrafter = runtime.launchWithoutDrafter
-        return await server.currentLaunch == withoutDrafter ? withoutDrafter : runtime.launch
     }
 
     private func resolveRuntime() throws -> LocalGemmaRuntime {

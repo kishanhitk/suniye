@@ -6,18 +6,13 @@ struct LocalGemmaRuntime: Equatable {
     let modelURL: URL
     let drafterURL: URL?
 
+    /// The drafter is optional for the launch: a server that started before
+    /// the drafter was installed serves until it stops.
     var launch: LlamaServerLaunch {
-        launch(drafterURL: drafterURL)
-    }
-
-    var launchWithoutDrafter: LlamaServerLaunch {
-        launch(drafterURL: nil)
-    }
-
-    private func launch(drafterURL: URL?) -> LlamaServerLaunch {
         LlamaServerLaunch(
             executableURL: serverExecutableURL,
-            arguments: LocalGemmaDefaults.serverArguments(modelPath: modelURL.path, drafterPath: drafterURL?.path),
+            arguments: LocalGemmaDefaults.serverArguments(modelPath: modelURL.path),
+            optionalArguments: drafterURL.map { LocalGemmaDefaults.drafterArguments(drafterPath: $0.path) } ?? [],
             modelName: model.displayName
         )
     }

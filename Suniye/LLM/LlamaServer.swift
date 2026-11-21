@@ -15,8 +15,16 @@ struct LlamaServerEndpoint: Equatable {
 struct LlamaServerLaunch: Equatable {
     let executableURL: URL
     let arguments: [String]
+    /// Arguments that a running server may have or lack. A request does not
+    /// replace a server whose launch differs from its own only here: the
+    /// restart would end the requests that the server is serving.
+    var optionalArguments: [String] = []
     /// Passed to the load and eviction callbacks.
     let modelName: String
+
+    func canShareServer(with other: LlamaServerLaunch) -> Bool {
+        executableURL == other.executableURL && arguments == other.arguments && modelName == other.modelName
+    }
 }
 
 enum LlamaServerError: Error, Equatable {
@@ -131,7 +139,7 @@ actor LlamaServer {
     }
 
     static func arguments(for launch: LlamaServerLaunch, port: Int, apiKey: String) -> [String] {
-        launch.arguments + [
+        launch.arguments + launch.optionalArguments + [
             "--host", "127.0.0.1",
             "--port", "\(port)",
             "--api-key", apiKey,
@@ -200,13 +208,8 @@ actor LlamaServer {
         let tokens: [Int]
     }
 
-    /// The launch of the process that runs or starts now.
-    var currentLaunch: LlamaServerLaunch? {
-        startup?.launch ?? (process?.isRunning == true ? launch : nil)
-    }
-
     func isWarm(for launch: LlamaServerLaunch) -> Bool {
-        process?.isRunning == true && self.launch == launch && endpoint != nil
+        process?.isRunning == true && self.launch?.canShareServer(with: launch) == true && endpoint != nil
     }
 
     /// `idleTimeoutSeconds` of 0 or less keeps the server up until `stop()`.
@@ -216,7 +219,7 @@ actor LlamaServer {
             return endpoint
         }
 
-        if let startup, startup.launch == launch {
+        if let startup, startup.launch.canShareServer(with: launch) {
             let endpoint = try await startup.task.value
             scheduleIdleShutdown(after: idleTimeoutSeconds)
             return endpoint

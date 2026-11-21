@@ -110,8 +110,10 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
             await server.stop()
             try await generate()
             XCTAssertEqual(logLines().filter { $0 == "start" }.count, 2)
-            let launch = await server.currentLaunch
-            XCTAssertEqual(launch?.arguments.suffix(2), ["--spec-draft-model", tempDir.appendingPathComponent("drafter.gguf").path])
+
+            localManager.installedDrafterURLs[.gemma4E2BQ4KM] = nil
+            try await generate()
+            XCTAssertEqual(logLines().filter { $0 == "start" }.count, 2)
         } catch {
             await server.stop()
             XCTFail("Expected the fake llama-server to answer, got \(error). Helper log: \(FakeLlamaServer.logContents(at: logURL))")
