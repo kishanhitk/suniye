@@ -601,6 +601,31 @@ final class AppStateLocalModelTests: XCTestCase {
         XCTAssertTrue(appState.localGemmaInstallState.isInstalled)
     }
 
+    func testDeleteCancelsARunningDrafterDownloadAndWaitsForIt() async {
+        let gate = AsyncGate()
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        localManager.drafterDownloadGate = gate
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+        appState.downloadLocalGemmaDrafterIfNeeded()
+        await waitUntil(timeout: 1) {
+            localManager.drafterDownloadCallCount == 1
+        }
+
+        let delete = Task { await appState.deleteLocalGemmaModel() }
+        for _ in 0 ..< 20 {
+            await Task.yield()
+        }
+        XCTAssertEqual(localManager.deleteCallCount, 0)
+
+        gate.open()
+        await delete.value
+
+        XCTAssertTrue(localManager.drafterDownloadWasCanceled)
+        XCTAssertEqual(localManager.deleteCallCount, 1)
+        XCTAssertEqual(appState.localGemmaInstallState, .notInstalled)
+    }
+
     func testAnInstalledLocalGemmaWithoutDrafterFetchesIt() async {
         let localManager = StubLocalLLMModelManager()
         localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
