@@ -20,13 +20,17 @@ enum LocalGemmaDefaults {
     /// fixed 12 MiB sliding-window cache.
     static let contextSize = 16_384
 
-    static func serverArguments(modelPath: String) -> [String] {
-        return [
+    static func serverArguments(modelPath: String, drafterPath: String?) -> [String] {
+        var arguments = [
             "--model", modelPath,
             "--ctx-size", "\(contextSize)",
             "--parallel", "1",
             "--reasoning", "off",
         ]
+        if let drafterPath {
+            arguments += ["--spec-type", "draft-mtp", "--spec-draft-model", drafterPath]
+        }
+        return arguments
     }
 }
 

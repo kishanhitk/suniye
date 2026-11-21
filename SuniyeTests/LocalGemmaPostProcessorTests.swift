@@ -139,7 +139,7 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
     }
 
     func testServerArgumentsDisableReasoning() {
-        let arguments = LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf")
+        let arguments = LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf", drafterPath: nil)
 
         XCTAssertEqual(arguments, [
             "--model", "/tmp/model.gguf",
@@ -149,16 +149,30 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         ])
     }
 
+    func testServerArgumentsAddTheDrafterWhenThereIsOne() {
+        let arguments = LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf", drafterPath: "/tmp/drafter.gguf")
+
+        XCTAssertEqual(arguments, [
+            "--model", "/tmp/model.gguf",
+            "--ctx-size", "16384",
+            "--parallel", "1",
+            "--reasoning", "off",
+            "--spec-type", "draft-mtp",
+            "--spec-draft-model", "/tmp/drafter.gguf",
+        ])
+    }
+
     func testRuntimeLaunchRunsTheHelperWithGemmaArguments() {
         let runtime = LocalGemmaRuntime(
             serverExecutableURL: URL(fileURLWithPath: "/tmp/llama-server"),
             model: LocalGemmaDefaults.modelEntry,
-            modelURL: URL(fileURLWithPath: "/tmp/model.gguf")
+            modelURL: URL(fileURLWithPath: "/tmp/model.gguf"),
+            drafterURL: URL(fileURLWithPath: "/tmp/drafter.gguf")
         )
 
         XCTAssertEqual(runtime.launch, LlamaServerLaunch(
             executableURL: URL(fileURLWithPath: "/tmp/llama-server"),
-            arguments: LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf"),
+            arguments: LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf", drafterPath: "/tmp/drafter.gguf"),
             modelName: LocalGemmaDefaults.modelDisplayName
         ))
     }
