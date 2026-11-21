@@ -148,9 +148,10 @@ Gemma v14 prompt, round 2 of 2, one Mac, runs back to back. The 144 outputs of e
 | llama-server | main (44) | advanced (4) | referential (24) | main p50 | main p90 | decode tokens/s |
 |---|---|---|---|---|---|---|
 | 06938ac1 | 44 | 4 | 24 | 741 ms | 1095 ms | 29.8 |
-| 7e960f40 | 44 | 4 | 24 | 654 ms | 1043 ms | 28.5 |
-| 7e960f40 with the drafter | 44 | 4 | 24 | 383 ms | 588 ms | 54.5 |
+| 7e960f40 | 44 | 4 | 24 | 654 ms | 1043 ms | 27.3 |
+| 7e960f40 with the drafter | 44 | 4 | 24 | 383 ms | 588 ms | 52.2 |
 
+- Decode speed is the server's own rate. 7e960f40 leaves the first token of each answer out of it, and 06938ac1 counts it.
 - The drafter proposed 888 tokens in the main suite, and Gemma accepted 718 (81%).
 - With the drafter, each case after the warm-up request reads 2,438 to 2,441 prompt tokens from the server's cache.
 - Peak physical footprint of llama-server: 379 MB without the drafter, 484 MB with it.

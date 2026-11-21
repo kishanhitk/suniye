@@ -367,6 +367,12 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     accepted = sum(int(result["server"].get("draft_n_accepted") or 0) for result in results)
     predicted = sum(int(result["server"].get("predicted_n") or 0) for result in results)
     predicted_ms = sum(float(result["server"].get("predicted_ms") or 0) for result in results)
+    # The server's own rate: newer builds leave the first token out of it,
+    # because that token comes from the prompt pass.
+    timed_tokens = sum(
+        float(result["server"].get("predicted_per_second") or 0) * float(result["server"].get("predicted_ms") or 0) / 1000
+        for result in results
+    )
     return {
         "cases": len(results),
         "passed": sum(1 for result in results if result["passed"]),
@@ -381,7 +387,7 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         "latency_avg_ms": round(statistics.mean(latencies)) if latencies else None,
         "latency_max_ms": round(max(latencies)) if latencies else None,
         "predicted_tokens": predicted,
-        "decode_tokens_per_second": round(predicted / predicted_ms * 1000, 1) if predicted_ms else None,
+        "decode_tokens_per_second": round(timed_tokens / predicted_ms * 1000, 1) if predicted_ms else None,
         "draft_tokens": drafted,
         "draft_tokens_accepted": accepted,
     }
