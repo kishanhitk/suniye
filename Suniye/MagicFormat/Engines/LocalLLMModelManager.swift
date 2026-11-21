@@ -8,9 +8,8 @@ enum LocalLLMModelID: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-struct LocalLLMModelCatalogEntry: Identifiable, Equatable {
-    let id: LocalLLMModelID
-    let displayName: String
+/// A file on Hugging Face, pinned to a revision.
+struct LocalLLMRemoteFile: Equatable {
     let repository: String
     let filename: String
     let revision: String
@@ -20,9 +19,41 @@ struct LocalLLMModelCatalogEntry: Identifiable, Equatable {
     var downloadURL: URL {
         URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(filename)")!
     }
+}
 
+struct LocalLLMModelCatalogEntry: Identifiable, Equatable {
+    let id: LocalLLMModelID
+    let displayName: String
+    let repository: String
+    let filename: String
+    let revision: String
+    let expectedSizeBytes: Int64
+    let expectedSHA256: String
+    /// A small model that proposes the next tokens for this model to check in
+    /// one pass (llama-server `--spec-type draft-mtp`). Greedy output stays the
+    /// same and decoding gets faster. The model runs without it.
+    var drafter: LocalLLMRemoteFile? = nil
+
+    var modelFile: LocalLLMRemoteFile {
+        LocalLLMRemoteFile(
+            repository: repository,
+            filename: filename,
+            revision: revision,
+            expectedSizeBytes: expectedSizeBytes,
+            expectedSHA256: expectedSHA256
+        )
+    }
+
+    var downloadURL: URL {
+        modelFile.downloadURL
+    }
+
+    /// The model and its drafter.
     var expectedSizeText: String {
-        ByteCountFormatter.string(fromByteCount: expectedSizeBytes, countStyle: .file)
+        ByteCountFormatter.string(
+            fromByteCount: expectedSizeBytes + (drafter?.expectedSizeBytes ?? 0),
+            countStyle: .file
+        )
     }
 }
 
@@ -34,7 +65,14 @@ enum LocalLLMModelCatalog {
         filename: "gemma-4-e2b-Q4_K_M.gguf",
         revision: "4f3551c3ccd2cb0c06bd09ac57ad0539392a0d5c",
         expectedSizeBytes: 3_427_873_408,
-        expectedSHA256: "d075ddeea9b056b6488af98e4c3776604c7c3196f1e55155c88a085027ab6d31"
+        expectedSHA256: "d075ddeea9b056b6488af98e4c3776604c7c3196f1e55155c88a085027ab6d31",
+        drafter: LocalLLMRemoteFile(
+            repository: "ggml-org/gemma-4-E2B-it-GGUF",
+            filename: "mtp-gemma-4-E2B-it-Q4_0.gguf",
+            revision: "2a8538c2e2d4687953a86c422c7c623cfd022880",
+            expectedSizeBytes: 59_235_872,
+            expectedSHA256: "718d3a44057924d5840c65a0aeedf7929366adeeda92a2006955ccabaf645ef4"
+        )
     )
 
     static let entries: [LocalLLMModelCatalogEntry] = [
@@ -100,10 +138,16 @@ protocol LocalLLMModelManagerProtocol: AnyObject {
     var isHardwareSupported: Bool { get }
     func modelsRootDirectoryURL() throws -> URL
     func modelFileURL(for modelID: LocalLLMModelID) throws -> URL
+    /// The drafter of an installed model, or nil when the model has none or
+    /// its file is not on disk.
+    func drafterFileURL(for modelID: LocalLLMModelID) -> URL?
     func isInstalled(_ modelID: LocalLLMModelID) -> Bool
     func installedByteCount(for modelID: LocalLLMModelID) -> Int64
     func installState(for modelID: LocalLLMModelID) -> LocalLLMInstallState
     func downloadModel(_ modelID: LocalLLMModelID, progress: @escaping @Sendable (LocalLLMDownloadProgress) -> Void) async throws
+    /// Fetches the drafter of an installed model. Does nothing when the model
+    /// has no drafter, is not installed, or already has the file.
+    func downloadDrafter(for modelID: LocalLLMModelID) async throws
     func cancelDownload()
     func deleteModel(_ modelID: LocalLLMModelID) throws
 }
@@ -192,26 +236,36 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
     }
 
     func modelFileURL(for modelID: LocalLLMModelID) throws -> URL {
-        try modelsRootDirectoryURL().appendingPathComponent(catalogEntry(for: modelID).filename)
+        try fileURL(for: catalogEntry(for: modelID).modelFile)
+    }
+
+    private func fileURL(for file: LocalLLMRemoteFile) throws -> URL {
+        try modelsRootDirectoryURL().appendingPathComponent(file.filename)
+    }
+
+    func drafterFileURL(for modelID: LocalLLMModelID) -> URL? {
+        guard isInstalled(modelID),
+              let drafter = catalogEntry(for: modelID).drafter,
+              let url = try? fileURL(for: drafter),
+              fileSize(at: url) == drafter.expectedSizeBytes else {
+            return nil
+        }
+        return url
     }
 
     func isInstalled(_ modelID: LocalLLMModelID) -> Bool {
-        guard isHardwareSupported,
-              let modelURL = try? modelFileURL(for: modelID),
-              fileManager.fileExists(atPath: modelURL.path) else {
+        guard isHardwareSupported, let modelURL = try? modelFileURL(for: modelID) else {
             return false
         }
-        let entry = catalogEntry(for: modelID)
-        return installedByteCount(for: modelID) == entry.expectedSizeBytes
+        return fileSize(at: modelURL) == catalogEntry(for: modelID).expectedSizeBytes
     }
 
+    /// The model file plus its drafter file, whichever are on disk.
     func installedByteCount(for modelID: LocalLLMModelID) -> Int64 {
-        guard let modelURL = try? modelFileURL(for: modelID),
-              let attributes = try? fileManager.attributesOfItem(atPath: modelURL.path),
-              let size = attributes[.size] as? NSNumber else {
-            return 0
-        }
-        return size.int64Value
+        let entry = catalogEntry(for: modelID)
+        return ([entry.modelFile] + [entry.drafter].compactMap { $0 })
+            .compactMap { try? fileURL(for: $0) }
+            .reduce(0) { $0 + fileSize(at: $1) }
     }
 
     func installState(for modelID: LocalLLMModelID) -> LocalLLMInstallState {
@@ -231,8 +285,27 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
         guard isHardwareSupported else {
             throw ModelError.unsupportedHardware
         }
+        try await download(catalogEntry(for: modelID).modelFile, progress: progress)
+    }
 
-        let entry = catalogEntry(for: modelID)
+    func downloadDrafter(for modelID: LocalLLMModelID) async throws {
+        guard isInstalled(modelID),
+              let drafter = catalogEntry(for: modelID).drafter,
+              drafterFileURL(for: modelID) == nil else {
+            return
+        }
+        try await download(drafter, progress: { _ in })
+        if !isInstalled(modelID) {
+            try? fileManager.removeItem(at: fileURL(for: drafter))
+        }
+    }
+
+    /// Downloads `entry`, checks its size and SHA-256, and puts it in place of
+    /// any file with its name.
+    private func download(
+        _ entry: LocalLLMRemoteFile,
+        progress: @escaping @Sendable (LocalLLMDownloadProgress) -> Void
+    ) async throws {
         let rootDirectory = try modelsRootDirectoryURL()
         let stagingURL = rootDirectory
             .appendingPathComponent(".\(entry.filename)-\(UUID().uuidString)", isDirectory: false)
@@ -274,7 +347,7 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
         }
         try fileManager.moveItem(at: downloadedURL, to: stagingURL)
 
-        let liveURL = try modelFileURL(for: modelID)
+        let liveURL = try fileURL(for: entry)
         try Self.replaceInstalledModel(at: liveURL, with: stagingURL, fileManager: fileManager)
         progress(LocalLLMDownloadProgress(
             fractionCompleted: 1,
@@ -288,9 +361,12 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
     }
 
     func deleteModel(_ modelID: LocalLLMModelID) throws {
-        let modelURL = try modelFileURL(for: modelID)
-        if fileManager.fileExists(atPath: modelURL.path) {
-            try fileManager.removeItem(at: modelURL)
+        let entry = catalogEntry(for: modelID)
+        for file in [entry.modelFile] + [entry.drafter].compactMap({ $0 }) {
+            let url = try fileURL(for: file)
+            if fileManager.fileExists(atPath: url.path) {
+                try fileManager.removeItem(at: url)
+            }
         }
     }
 

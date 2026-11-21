@@ -126,6 +126,79 @@ final class LocalLLMModelManagerTests: XCTestCase {
         XCTAssertEqual(manager.installState(for: entry.id), .notInstalled)
     }
 
+    func testDrafterDownloadInstallsItBesideTheModel() async throws {
+        let root = try makeTemporaryDirectory()
+        let (manager, entry, downloader) = makeManagerWithDrafter(root: root)
+
+        try await manager.downloadModel(entry.id) { _ in }
+        XCTAssertNil(manager.drafterFileURL(for: entry.id))
+
+        try await manager.downloadDrafter(for: entry.id)
+
+        let drafterURL = try XCTUnwrap(manager.drafterFileURL(for: entry.id))
+        XCTAssertEqual(drafterURL.lastPathComponent, "tiny-drafter.gguf")
+        XCTAssertEqual(try Data(contentsOf: drafterURL), Self.drafterData)
+        XCTAssertEqual(
+            manager.installState(for: entry.id),
+            .installed(Int64(Self.modelData.count + Self.drafterData.count))
+        )
+
+        try await manager.downloadDrafter(for: entry.id)
+        XCTAssertEqual(downloader.requestedURLs.map(\.lastPathComponent), ["tiny.gguf", "tiny-drafter.gguf"])
+    }
+
+    func testDrafterDownloadDoesNothingWithoutTheModel() async throws {
+        let root = try makeTemporaryDirectory()
+        let (manager, entry, downloader) = makeManagerWithDrafter(root: root)
+
+        try await manager.downloadDrafter(for: entry.id)
+
+        XCTAssertTrue(downloader.requestedURLs.isEmpty)
+        XCTAssertNil(manager.drafterFileURL(for: entry.id))
+    }
+
+    func testADrafterThatFailsItsChecksumLeavesTheModelInstalled() async throws {
+        let root = try makeTemporaryDirectory()
+        let (manager, entry, _) = makeManagerWithDrafter(root: root, drafterSHA256: "wrong")
+        try await manager.downloadModel(entry.id) { _ in }
+
+        do {
+            try await manager.downloadDrafter(for: entry.id)
+            XCTFail("Expected a checksum mismatch")
+        } catch let error as LocalLLMModelManager.ModelError {
+            XCTAssertEqual(error, .checksumMismatch(expected: "wrong", actual: sha256Hex(Self.drafterData)))
+        }
+
+        XCTAssertNil(manager.drafterFileURL(for: entry.id))
+        XCTAssertEqual(manager.installState(for: entry.id), .installed(Int64(Self.modelData.count)))
+    }
+
+    func testDeleteModelRemovesTheDrafter() async throws {
+        let root = try makeTemporaryDirectory()
+        let (manager, entry, _) = makeManagerWithDrafter(root: root)
+        try await manager.downloadModel(entry.id) { _ in }
+        try await manager.downloadDrafter(for: entry.id)
+
+        try manager.deleteModel(entry.id)
+
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), [])
+        XCTAssertEqual(manager.installState(for: entry.id), .notInstalled)
+    }
+
+    func testExpectedSizeTextCountsTheDrafter() {
+        var entry = makeTinyEntry(expectedSizeBytes: 3_000_000_000, expectedSHA256: "")
+        XCTAssertEqual(entry.expectedSizeText, "3 GB")
+
+        entry.drafter = LocalLLMRemoteFile(
+            repository: "example/tiny",
+            filename: "tiny-drafter.gguf",
+            revision: "def456",
+            expectedSizeBytes: 500_000_000,
+            expectedSHA256: ""
+        )
+        XCTAssertEqual(entry.expectedSizeText, "3.5 GB")
+    }
+
     func testCancelDownloadForwardsToDownloader() throws {
         let root = try makeTemporaryDirectory()
         let downloader = FakeLocalLLMDownloader(data: Data())
@@ -413,6 +486,32 @@ final class LocalLLMModelManagerTests: XCTestCase {
         )
     }
 
+    private static let modelData = Data("tiny model".utf8)
+    private static let drafterData = Data("tiny drafter".utf8)
+
+    private func makeManagerWithDrafter(
+        root: URL,
+        drafterSHA256: String? = nil
+    ) -> (LocalLLMModelManager, LocalLLMModelCatalogEntry, FakeLocalLLMDownloader) {
+        var entry = makeTinyEntry(expectedSHA256: sha256Hex(Self.modelData))
+        entry.drafter = LocalLLMRemoteFile(
+            repository: "example/tiny",
+            filename: "tiny-drafter.gguf",
+            revision: "def456",
+            expectedSizeBytes: Int64(Self.drafterData.count),
+            expectedSHA256: drafterSHA256 ?? sha256Hex(Self.drafterData)
+        )
+        let downloader = FakeLocalLLMDownloader(data: Self.modelData)
+        downloader.dataByFilename["tiny-drafter.gguf"] = Self.drafterData
+        let manager = LocalLLMModelManager(
+            catalog: [entry],
+            isHardwareSupported: true,
+            rootDirectoryProvider: { root },
+            downloader: downloader
+        )
+        return (manager, entry, downloader)
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("suniye-local-llm-tests-\(UUID().uuidString)", isDirectory: true)
@@ -430,8 +529,11 @@ final class LocalLLMModelManagerTests: XCTestCase {
 
 private final class FakeLocalLLMDownloader: LocalLLMDownloading {
     let data: Data
+    /// Files served in place of `data`, by the last path component of the URL.
+    var dataByFilename: [String: Data] = [:]
     let statusCode: Int
     private(set) var cancelCallCount = 0
+    private(set) var requestedURLs: [URL] = []
 
     init(data: Data, statusCode: Int = 200) {
         self.data = data
@@ -446,6 +548,8 @@ private final class FakeLocalLLMDownloader: LocalLLMDownloading {
     ) async throws -> (URL, URLResponse) {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(temporaryFileBasename)-\(UUID().uuidString)", isDirectory: false)
+        requestedURLs.append(url)
+        let data = dataByFilename[url.lastPathComponent] ?? self.data
         try data.write(to: fileURL)
         progress(LocalLLMDownloadProgress(
             fractionCompleted: fallbackExpectedSizeBytes > 0 ? min(Double(data.count) / Double(fallbackExpectedSizeBytes), 1) : 1,

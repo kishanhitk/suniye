@@ -181,6 +181,8 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
     var preferredModelID: LocalLLMModelID = LocalLLMModelCatalog.preferredModelID
     var isHardwareSupported = true
     var installedModelIDs: Set<LocalLLMModelID> = []
+    var installedDrafterURLs: [LocalLLMModelID: URL] = [:]
+    var drafterDownloadCallCount = 0
     var installedByteCounts: [LocalLLMModelID: Int64] = [
         LocalLLMModelCatalog.preferredModelID: LocalLLMModelCatalog.entry(for: LocalLLMModelCatalog.preferredModelID).expectedSizeBytes
     ]
@@ -204,6 +206,14 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
 
     func modelFileURL(for modelID: LocalLLMModelID) throws -> URL {
         rootDirectory.appendingPathComponent(catalogEntry(for: modelID).filename)
+    }
+
+    func drafterFileURL(for modelID: LocalLLMModelID) -> URL? {
+        installedDrafterURLs[modelID]
+    }
+
+    func downloadDrafter(for modelID: LocalLLMModelID) async throws {
+        drafterDownloadCallCount += 1
     }
 
     func isInstalled(_ modelID: LocalLLMModelID) -> Bool {

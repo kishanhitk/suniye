@@ -1017,6 +1017,7 @@ final class AppState {
     @ObservationIgnored private var hasPromptedAccessibilityForClipboardDictation = false
     private var asrDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
+    private var localGemmaDrafterDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
     private var localGemmaDownloadStartedAt: Date?
     private let llmE2EMode: LLME2EMode
@@ -1361,6 +1362,7 @@ final class AppState {
         }
         startOnboardingIfNeeded()
         resumeInterruptedLocalGemmaDownloadIfNeeded()
+        downloadLocalGemmaDrafterIfNeeded()
         setFloatingIndicatorState(.idle)
         AppLogger.shared.log(.info, "bootstrap done")
     }
@@ -2117,6 +2119,7 @@ final class AppState {
                 self.magicFormatSetupTestResult = nil
                 self.trackModelDownload(kind: .cleanup, model: modelID.rawValue, outcome: .completed, startedAt: self.localGemmaDownloadStartedAt)
                 AppLogger.shared.log(.info, "local gemma download complete model=\(entry.filename)")
+                self.downloadLocalGemmaDrafterIfNeeded()
             } catch {
                 self.localGemmaDownloadID = nil
                 let message: String
@@ -2152,6 +2155,27 @@ final class AppState {
         startLocalGemmaDownload()
     }
 
+    /// Fetches the drafter for an installed local model that does not have it:
+    /// after the model download, and at launch for a fetch that failed or a
+    /// model installed before the drafter existed. The model works without the
+    /// drafter, so a failure only waits for the next launch.
+    func downloadLocalGemmaDrafterIfNeeded() {
+        guard localGemmaInstallState.isInstalled, localGemmaDrafterDownloadTask == nil else {
+            return
+        }
+        let modelID = localLLMModelManager.preferredModelID
+        localGemmaDrafterDownloadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.localLLMModelManager.downloadDrafter(for: modelID)
+                self.refreshLocalGemmaInstallState()
+            } catch {
+                AppLogger.shared.log(.info, "local gemma drafter download failed error=\(error.localizedDescription)")
+            }
+            self.localGemmaDrafterDownloadTask = nil
+        }
+    }
+
     func cancelLocalGemmaDownload() {
         guard canCancelLocalGemmaDownload else {
             return
@@ -2167,6 +2191,10 @@ final class AppState {
         }
 
         await localGemmaMagicFormatPostProcessor.stopRuntime()
+        if let drafterDownload = localGemmaDrafterDownloadTask {
+            localLLMModelManager.cancelDownload()
+            await drafterDownload.value
+        }
 
         let modelID = localLLMModelManager.preferredModelID
         do {

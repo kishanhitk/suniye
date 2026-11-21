@@ -588,6 +588,35 @@ final class AppStateLocalModelTests: XCTestCase {
         XCTAssertFalse(appState.canStartLocalGemmaDownload)
     }
 
+    func testLocalGemmaDownloadFetchesTheDrafterAfterTheModel() async {
+        let localManager = StubLocalLLMModelManager()
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+
+        appState.startLocalGemmaDownload()
+        XCTAssertEqual(localManager.drafterDownloadCallCount, 0)
+
+        await waitUntil(timeout: 1) {
+            localManager.drafterDownloadCallCount == 1
+        }
+        XCTAssertTrue(appState.localGemmaInstallState.isInstalled)
+    }
+
+    func testAnInstalledLocalGemmaWithoutDrafterFetchesIt() async {
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+
+        appState.downloadLocalGemmaDrafterIfNeeded()
+        appState.downloadLocalGemmaDrafterIfNeeded()
+
+        await waitUntil(timeout: 1) {
+            localManager.drafterDownloadCallCount == 1
+        }
+        await appState.deleteLocalGemmaModel()
+        XCTAssertEqual(localManager.drafterDownloadCallCount, 1)
+        XCTAssertEqual(appState.localGemmaInstallState, .notInstalled)
+    }
+
     func testLocalGemmaDownloadIgnoresStaleProgressAfterInstall() async {
         let localManager = StubLocalLLMModelManager()
         let appState = makeTestAppState(localLLMModelManager: localManager)
