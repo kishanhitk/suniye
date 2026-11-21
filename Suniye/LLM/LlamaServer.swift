@@ -200,6 +200,11 @@ actor LlamaServer {
         let tokens: [Int]
     }
 
+    /// The launch of the process that runs or starts now.
+    var currentLaunch: LlamaServerLaunch? {
+        startup?.launch ?? (process?.isRunning == true ? launch : nil)
+    }
+
     func isWarm(for launch: LlamaServerLaunch) -> Bool {
         process?.isRunning == true && self.launch == launch && endpoint != nil
     }

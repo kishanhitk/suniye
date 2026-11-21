@@ -2192,7 +2192,7 @@ final class AppState {
 
         await localGemmaMagicFormatPostProcessor.stopRuntime()
         if let drafterDownload = localGemmaDrafterDownloadTask {
-            localLLMModelManager.cancelDownload()
+            drafterDownload.cancel()
             await drafterDownload.value
         }
 

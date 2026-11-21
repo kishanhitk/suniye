@@ -64,7 +64,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--json-output", type=Path)
     parser.add_argument("--keep-server", action="store_true")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.rounds < 1:
+        parser.error("--rounds must be 1 or more")
+    return args
 
 
 def free_port() -> int:

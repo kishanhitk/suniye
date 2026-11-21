@@ -440,13 +440,21 @@ final class URLSessionLocalLLMDownloader: NSObject, LocalLLMDownloading, URLSess
             }
         }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-            let task = session.downloadTask(with: url)
-            lock.withLock {
-                activeTask = task
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+                let task = session.downloadTask(with: url)
+                lock.withLock {
+                    activeTask = task
+                }
+                task.resume()
+                // A cancel that came before `activeTask` was set found nothing to stop.
+                if Task.isCancelled {
+                    task.cancel()
+                }
             }
-            task.resume()
+        } onCancel: {
+            cancel()
         }
     }
 

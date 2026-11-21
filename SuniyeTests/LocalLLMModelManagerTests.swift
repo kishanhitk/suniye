@@ -354,6 +354,31 @@ final class LocalLLMModelManagerTests: XCTestCase {
         XCTAssertNotNil(response)
     }
 
+    func testURLSessionDownloaderStopsForATaskCanceledBeforeTheRequestStarts() async throws {
+        let root = try makeTemporaryDirectory()
+        let sourceURL = root.appendingPathComponent("source.gguf")
+        try Data("downloaded model".utf8).write(to: sourceURL)
+        let downloader = URLSessionLocalLLMDownloader()
+
+        let download = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await downloader.download(
+                from: sourceURL,
+                fallbackExpectedSizeBytes: 16,
+                temporaryFileBasename: "canceled.gguf",
+                progress: { _ in }
+            )
+        }
+
+        do {
+            let (fileURL, _) = try await download.value
+            try? FileManager.default.removeItem(at: fileURL)
+            XCTFail("Expected the canceled download to throw")
+        } catch {
+            XCTAssertEqual((error as NSError).code, NSURLErrorCancelled)
+        }
+    }
+
     func testURLSessionDownloaderPropagatesFailure() async throws {
         let root = try makeTemporaryDirectory()
         let downloader = URLSessionLocalLLMDownloader()

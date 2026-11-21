@@ -7,6 +7,14 @@ struct LocalGemmaRuntime: Equatable {
     let drafterURL: URL?
 
     var launch: LlamaServerLaunch {
+        launch(drafterURL: drafterURL)
+    }
+
+    var launchWithoutDrafter: LlamaServerLaunch {
+        launch(drafterURL: nil)
+    }
+
+    private func launch(drafterURL: URL?) -> LlamaServerLaunch {
         LlamaServerLaunch(
             executableURL: serverExecutableURL,
             arguments: LocalGemmaDefaults.serverArguments(modelPath: modelURL.path, drafterPath: drafterURL?.path),
