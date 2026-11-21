@@ -46,7 +46,7 @@ llama-server \
   --log-disable
 ```
 
-The two `--spec` arguments are present only when the drafter file is installed. llama-server has no request field that turns the drafter off, so Magic Format, Edit Mode and meeting summaries all decode with it.
+The two `--spec` arguments are present only when the drafter file is installed. A server that runs when the drafter installs keeps running without it, and the next start uses it. llama-server has no request field that turns the drafter off, so Magic Format, Edit Mode and meeting summaries all decode with it.
 
 Completion requests use `Authorization: Bearer <random-key>`. The server is reused while warm and shuts down after an idle timeout. Quitting Suniye stops it; a helper left running by a crash is stopped at the next launch. The same helper also runs the Qwen3-ASR speech model ([QWEN3_ASR.md](QWEN3_ASR.md)).
 
