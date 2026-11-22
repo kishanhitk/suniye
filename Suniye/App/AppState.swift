@@ -1069,6 +1069,7 @@ final class AppState {
         historyStore: HistoryStoreProtocol = HistoryStore(),
         statsStore: DictationStatsStoring = DictationStatsStore.makeDefault(),
         keychainService: KeychainServiceProtocol = KeychainService(),
+        chatGPTCredentialStore: ChatGPTCredentialStore = KeychainChatGPTCredentialStore(),
         appUpdateController: AppUpdateControllerProtocol? = nil,
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
         diagnosticBundleService: DiagnosticBundleServiceProtocol = DiagnosticBundleService(),
@@ -1148,7 +1149,7 @@ final class AppState {
             applePostProcessor: appleMagicFormatPostProcessor,
             localGemmaPostProcessor: resolvedLocalGemmaPostProcessor
         )
-        let chatGPTConnection = ChatGPTConnection(store: KeychainChatGPTCredentialStore()) { url in
+        let chatGPTConnection = ChatGPTConnection(store: chatGPTCredentialStore) { url in
             DispatchQueue.main.async { NSWorkspace.shared.open(url) }
         }
         let chatGPTPlan = ChatGPTPlanClient(connection: chatGPTConnection)

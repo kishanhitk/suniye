@@ -666,6 +666,7 @@ func makeTestAppState(
         historyStore: historyStore,
         statsStore: statsStore,
         keychainService: keychainService,
+        chatGPTCredentialStore: KeychainChatGPTCredentialStore(item: MemorySecretItem()),
         appUpdateController: appUpdateController ?? StubAppUpdateController(),
         launchAtLoginService: launchAtLoginService,
         diagnosticBundleService: diagnosticBundleService,
