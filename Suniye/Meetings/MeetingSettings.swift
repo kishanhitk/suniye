@@ -28,6 +28,14 @@ enum MeetingAudioRetention: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// The model that writes summaries. `automatic` is an on-device model; each
+/// other choice sends the transcript and the notes to a service.
+enum MeetingSummaryModelChoice: String, Codable, CaseIterable, Sendable {
+    case automatic
+    case chatGPT
+    case apiEndpoint
+}
+
 struct MeetingSettings: Codable, Equatable, Sendable {
     var callStartAction = MeetingCallStartAction.ask
     /// Bundle IDs of the call apps that get no offer card and no automatic
@@ -39,13 +47,21 @@ struct MeetingSettings: Codable, Equatable, Sendable {
     /// model.
     var transcriptModel: ASRModelID?
     var audioRetention = MeetingAudioRetention.untilTranscript
+    var summaryModel = MeetingSummaryModelChoice.automatic
+    /// The ChatGPT model for summaries; nil is the default model.
+    var chatGPTModel: String?
+    /// The model ID for summaries through the API endpoint.
+    var apiSummaryModelID = ""
+    /// The host of the API endpoint when the user agreed to send meeting
+    /// text to it.
+    var apiSummaryAgreedHost: String?
 
     init() {}
 
     /// A missing key keeps its default, so settings that one build saved
     /// still load after a later build adds a key. A transcript model that
     /// this build does not know is the dictation model, and an unknown audio
-    /// choice is the default.
+    /// or summary model choice is the default.
     init(from decoder: Decoder) throws {
         self.init()
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -55,6 +71,11 @@ struct MeetingSettings: Codable, Equatable, Sendable {
         transcriptModel = try container.decodeIfPresent(String.self, forKey: .transcriptModel).flatMap(ASRModelID.init(rawValue:))
         audioRetention = try container.decodeIfPresent(String.self, forKey: .audioRetention)
             .flatMap(MeetingAudioRetention.init(rawValue:)) ?? audioRetention
+        summaryModel = try container.decodeIfPresent(String.self, forKey: .summaryModel)
+            .flatMap(MeetingSummaryModelChoice.init(rawValue:)) ?? summaryModel
+        chatGPTModel = try container.decodeIfPresent(String.self, forKey: .chatGPTModel)
+        apiSummaryModelID = try container.decodeIfPresent(String.self, forKey: .apiSummaryModelID) ?? apiSummaryModelID
+        apiSummaryAgreedHost = try container.decodeIfPresent(String.self, forKey: .apiSummaryAgreedHost)
     }
 }
 

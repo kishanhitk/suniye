@@ -238,7 +238,7 @@ final class MeetingCoordinator {
         engine: TranscriptionServiceProtocol,
         makeTranscriptEngine: @escaping (ASRModelID) async throws -> TranscriptionServiceProtocol,
         environment: MeetingEnvironment,
-        summaryAvailability: @escaping () -> MeetingSummaryAvailability,
+        summaryAvailability: @escaping (MeetingSummaryModelChoice) -> MeetingSummaryAvailability,
         makeSummaryModel: @escaping (MeetingSummaryEngine) -> MeetingSummaryModel?,
         analytics: Analytics
     ) {
@@ -266,6 +266,7 @@ final class MeetingCoordinator {
             }
         }
         summaries.onModelIdle = { [weak self] in self?.host?.meetingSummaryModelIsIdle() }
+        summaries.choice = { [weak self] id in self?.summaryChoice(for: id) ?? .automatic }
         detector.onEvent = { [weak self] in self?.handle($0) }
     }
 
@@ -347,6 +348,22 @@ final class MeetingCoordinator {
         change(&settings)
         settingsStore.save(settings)
         updateCallDetection()
+        summaries.availabilityChanged()
+    }
+
+    /// Before a ChatGPT disconnect: the setting goes back to Automatic, and
+    /// a summary that ChatGPT writes now stops and runs again on the Mac.
+    func stopUsingChatGPT() {
+        if settings.summaryModel == .chatGPT {
+            updateSettings { $0.summaryModel = .automatic }
+        }
+        summaries.cancelRunning(engine: .chatgpt)
+    }
+
+    /// The summary model for one meeting: the setting, or an on-device model
+    /// when the user asked for that for this meeting.
+    func summaryChoice(for id: UUID) -> MeetingSummaryModelChoice {
+        record(id)?.summaryOnThisMac == true ? .automatic : settings.summaryModel
     }
 
     func chooseCallStartAction(_ action: MeetingCallStartAction) {
@@ -774,8 +791,11 @@ final class MeetingCoordinator {
         return true
     }
 
-    func regenerate(_ id: UUID, templateID: String? = nil) async {
+    /// `onThisMac`: an on-device model writes this one summary, also when
+    /// the setting names a hosted model.
+    func regenerate(_ id: UUID, templateID: String? = nil, onThisMac: Bool = false) async {
         guard record(id)?.status.canRegenerate == true else { return }
+        await host?.meetingSummaryAskedAgain()
         await textSaves.finish(id)
         if let templateID {
             updateSettings { $0.templateID = templateID }
@@ -787,6 +807,7 @@ final class MeetingCoordinator {
             }
             $0.status = enough ? .summarizing : .noSpeech
             $0.summaryFailure = nil
+            $0.summaryOnThisMac = enough && onThisMac
         }
         if enough {
             summaries.enqueue(id)

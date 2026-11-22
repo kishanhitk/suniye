@@ -119,7 +119,7 @@ Suniye ships a curated catalog instead of a single fixed recognizer — from App
 - Transcription happens **entirely on your Mac**. Audio is processed in memory and never sent anywhere.
 - The only network calls are model downloads, update checks, optional pseudonymous usage stats (counts and timings — never your words, and opt-out in Settings), and issue reports you explicitly submit.
 - With Magic Format's on-device options, cleanup stays local too. Only the optional API provider sends text (never audio) off your Mac — and it's off by default.
-- Meetings stay on your Mac: no audio, transcript, notes or summary leaves it.
+- Meetings stay on your Mac by default. Only when you choose ChatGPT or an API endpoint as the summary model, the transcript text and your notes go to that service, never the audio.
 
 ---
 

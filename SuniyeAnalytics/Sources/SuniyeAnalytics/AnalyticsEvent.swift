@@ -94,7 +94,9 @@ public enum AnalyticsEvent: Sendable {
     case meetingTranscribed(outcome: MeetingOutcome, model: SafeLabel, segments: Int, durationMs: Int)
     /// `parts` is the number of transcript parts that got notes of their own;
     /// 1 when the transcript fit in one request, nil when no summary was written.
-    case meetingSummarized(provider: MeetingSummaryEngine, outcome: MeetingOutcome, parts: Int?, durationMs: Int)
+    /// `reason` is set for a failed summary.
+    case meetingSummarized(provider: MeetingSummaryEngine, outcome: MeetingOutcome, reason: MeetingSummaryFailure?, parts: Int?, durationMs: Int)
+    case chatGPTSignIn(outcome: ChatGPTSignInOutcome)
     /// How a call card closed. A card that the app closed itself (a recording
     /// started or stopped, or the call came back) sends nothing.
     case meetingCallCard(card: MeetingCallCardKind, action: MeetingCallCardAction)
@@ -141,6 +143,7 @@ public enum AnalyticsEvent: Sendable {
         case .meetingEnded: return "meeting_ended"
         case .meetingTranscribed: return "meeting_transcribed"
         case .meetingSummarized: return "meeting_summarized"
+        case .chatGPTSignIn: return "chatgpt_sign_in"
         case .meetingCallCard: return "meeting_call_card"
         case .meetingEdited: return "meeting_edited"
         case .meetingPlayed: return "meeting_played"
@@ -251,10 +254,13 @@ public enum AnalyticsEvent: Sendable {
             return ["duration_ms": .int(durationMs), "tracks": .label(tracks), "reason": .label(reason)]
         case let .meetingTranscribed(outcome, model, segments, durationMs):
             return ["outcome": .label(outcome), "asr_model": .label(model), "segments": .int(segments), "duration_ms": .int(durationMs)]
-        case let .meetingSummarized(provider, outcome, parts, durationMs):
+        case let .meetingSummarized(provider, outcome, reason, parts, durationMs):
             var out: [String: AnalyticsValue] = ["provider": .label(provider), "outcome": .label(outcome), "duration_ms": .int(durationMs)]
+            if let reason { out["reason"] = .label(reason) }
             if let parts { out["parts"] = .int(parts) }
             return out
+        case let .chatGPTSignIn(outcome):
+            return ["outcome": .label(outcome)]
         case let .meetingCallCard(card, action):
             return ["kind": .label(card), "action": .label(action)]
         case let .meetingEdited(part):

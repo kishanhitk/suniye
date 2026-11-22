@@ -694,7 +694,7 @@ func makeTestMeetingCoordinator(engine: TranscriptionServiceProtocol, analytics:
             makeMicrophoneUsers: { FakeMicrophoneUsers() },
             now: Date.init
         ),
-        summaryAvailability: { .unavailable },
+        summaryAvailability: { _ in .unavailable },
         makeSummaryModel: { _ in nil },
         analytics: analytics
     )

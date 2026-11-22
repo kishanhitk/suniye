@@ -939,6 +939,8 @@ final class AppState {
     private let localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor
     private let magicFormatCoordinator: MagicFormatCoordinator
     let meetings: MeetingCoordinator
+    let chatGPTSetup: ChatGPTSummarySetup
+    private let chatGPTPlan: ChatGPTPlanClient
     /// A section that code outside the main window asked to show. The window
     /// shows it and clears the request.
     var requestedSection: MainWindowSection?
@@ -1146,14 +1148,24 @@ final class AppState {
             applePostProcessor: appleMagicFormatPostProcessor,
             localGemmaPostProcessor: resolvedLocalGemmaPostProcessor
         )
-        self.meetings = meetingCoordinator ?? AppState.makeMeetingCoordinator(
+        let chatGPTConnection = ChatGPTConnection(store: KeychainChatGPTCredentialStore()) { url in
+            DispatchQueue.main.async { NSWorkspace.shared.open(url) }
+        }
+        let chatGPTPlan = ChatGPTPlanClient(connection: chatGPTConnection)
+        self.chatGPTPlan = chatGPTPlan
+        let meetings = meetingCoordinator ?? AppState.makeMeetingCoordinator(
             transcriptionService: transcriptionService,
             modelManager: modelManager,
             appleSummaryAvailability: { appleMagicFormatPostProcessor.availability },
             localSummaryAvailability: { resolvedLocalGemmaPostProcessor.availability },
             localGemmaClient: localGemmaClient,
+            chatGPTPlan: chatGPTPlan,
+            llmSettingsStore: llmSettingsStore,
+            keychainService: keychainService,
             analytics: analytics
         )
+        self.meetings = meetings
+        self.chatGPTSetup = ChatGPTSummarySetup(connection: chatGPTConnection, client: chatGPTPlan, meetings: meetings, analytics: analytics)
         self.llmSettingsStore = llmSettingsStore
         self.magicFormatPromptFileStore = magicFormatPromptFileStore
         self.generalSettingsStore = generalSettingsStore
@@ -4478,6 +4490,10 @@ extension AppState: MeetingHost {
         prewarmLocalLLMIfEligible()
     }
 
+    func meetingSummaryAskedAgain() async {
+        await chatGPTPlan.endPause()
+    }
+
     /// A recording meeting stops and saves before the app quits, and the
     /// next launch shows it with Finish Transcript. A quit from the user asks
     /// first; a logout, restart or shutdown does not, so it never blocks one.
@@ -4642,12 +4658,16 @@ extension AppState: MeetingHost {
         appleSummaryAvailability: @escaping () -> AppleFoundationModelsAvailability,
         localSummaryAvailability: @escaping () -> LocalGemmaAvailability,
         localGemmaClient: LocalGemmaClient,
+        chatGPTPlan: ChatGPTPlanClient,
+        llmSettingsStore: LLMSettingsStoreProtocol,
+        keychainService: KeychainServiceProtocol,
         analytics: Analytics
     ) -> MeetingCoordinator {
-        MeetingCoordinator(
+        let settingsStore = MeetingSettingsStore()
+        return MeetingCoordinator(
             store: MeetingStore(),
             templates: MeetingTemplateStore(),
-            settingsStore: MeetingSettingsStore(),
+            settingsStore: settingsStore,
             engine: transcriptionService,
             makeTranscriptEngine: { model in
                 guard await modelManager.isSystemManagedAssetInstalled(model) else {
@@ -4658,8 +4678,8 @@ extension AppState: MeetingHost {
                 return engine
             },
             environment: .live(),
-            summaryAvailability: {
-                MeetingSummaryAvailability(apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
+            summaryAvailability: { choice in
+                MeetingSummaryAvailability(choice: choice, apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
             },
             makeSummaryModel: { engine in
                 switch engine {
@@ -4672,6 +4692,18 @@ extension AppState: MeetingHost {
                     }
                     #endif
                     return nil
+                case .chatgpt:
+                    return ChatGPTMeetingSummaryModel(client: chatGPTPlan) {
+                        settingsStore.load().chatGPTModel ?? ChatGPTPlanClient.defaultModel
+                    }
+                case .apiEndpoint:
+                    return APIEndpointMeetingSummaryModel(client: ChatCompletionClient()) {
+                        APIEndpointSummarySetup(
+                            settings: settingsStore.load(),
+                            endpointURL: llmSettingsStore.load().validatedEndpointURL,
+                            apiKey: try? keychainService.getLLMKey()
+                        )
+                    }
                 }
             },
             analytics: analytics

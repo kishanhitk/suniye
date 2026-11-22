@@ -33,6 +33,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     private var failingLoads = 0
     private var transcriptEngineError: Error?
     private var summaryModel: GatedSummaryModel!
+    private var hostedSummaryModel: GatedSummaryModel!
     private var clock: Date!
     private var freeBytes: Int64 = 10_000_000_000
     private var microphone: FakeMicrophoneUsers!
@@ -54,6 +55,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         engine = WordEngine(words: [0.3: longSentence, 0.5: "Them speaks here."])
         transcriptEngine = WordEngine(words: [0.3: longSentence, 0.5: "Them speaks here."])
         summaryModel = GatedSummaryModel()
+        hostedSummaryModel = GatedSummaryModel()
         clock = Date(timeIntervalSince1970: 1_800_000_000)
         microphone = FakeMicrophoneUsers()
         analytics = SpyAnalytics()
@@ -102,8 +104,8 @@ final class MeetingCoordinatorTests: XCTestCase {
                 return transcriptEngine
             },
             environment: environment,
-            summaryAvailability: { [unowned self] in summaryAvailability },
-            makeSummaryModel: { [unowned self] _ in summaryModel },
+            summaryAvailability: { [unowned self] choice in choice == .automatic ? summaryAvailability : .ready(.apiEndpoint) },
+            makeSummaryModel: { [unowned self] engine in engine.isOnDevice ? summaryModel : hostedSummaryModel },
             analytics: analytics
         )
         coordinator.host = host
@@ -405,6 +407,58 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(finished)
         let kinds = await summaryModel.kinds
         XCTAssertEqual(kinds, [.part(number: 1, count: 1), .part(number: 1, count: 1), .overview], "the stopped request runs again")
+    }
+
+    func testSummarizeOnThisMacKeepsOneMeetingOnTheMacAlsoAcrossAQuit() async throws {
+        await hostedSummaryModel.fail(with: .keyRejected)
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.summaryModel = .apiEndpoint }
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+        await coordinator.stop()
+        let failed = await waitUntil { coordinator.record(id)?.status == .summaryFailed }
+
+        XCTAssertTrue(failed)
+        XCTAssertEqual(coordinator.record(id)?.summaryFailure, .keyRejected)
+        XCTAssertEqual(coordinator.record(id)?.summaryEngine, .apiEndpoint)
+        XCTAssertEqual(event("meeting_summarized")?["reason"], .label("key_rejected"))
+
+        summaryAvailability = .needsDownload
+        await coordinator.regenerate(id, onThisMac: true)
+        XCTAssertEqual(coordinator.record(id)?.status, .summarizing)
+        XCTAssertEqual(coordinator.summaryChoice(for: id), .automatic)
+
+        let relaunched = makeCoordinator()
+        await relaunched.start()
+        summaryAvailability = .ready(.localModel)
+        relaunched.summaries.availabilityChanged()
+        let done = await waitUntil { relaunched.record(id)?.status == .done }
+        let hostedRequests = await hostedSummaryModel.kinds.count
+
+        XCTAssertTrue(done)
+        XCTAssertEqual(hostedRequests, 1, "the transcript is not sent again")
+        XCTAssertEqual(relaunched.record(id)?.summaryEngine, .localModel)
+        XCTAssertEqual(relaunched.summaryChoice(for: id), .apiEndpoint, "the next summary follows the setting again")
+    }
+
+    func testAChangeOfTheSummaryModelStartsASummaryThatWaits() async throws {
+        summaryAvailability = .needsDownload
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+        await coordinator.stop()
+        let waits = await waitUntil { coordinator.record(id)?.status == .summarizing }
+
+        coordinator.updateSettings { $0.summaryModel = .apiEndpoint }
+        let done = await waitUntil { coordinator.record(id)?.status == .done }
+
+        XCTAssertTrue(waits)
+        XCTAssertTrue(done)
+        XCTAssertEqual(coordinator.record(id)?.summaryEngine, .apiEndpoint)
     }
 
     func testRegenerateWithAnotherTemplateRemembersItAndWritesTheSummaryAgain() async throws {
@@ -1404,6 +1458,8 @@ private final class FakeHost: MeetingHost {
         idleCount += 1
     }
 
+    func meetingSummaryAskedAgain() async {}
+
     func meetingCouldNotStart(_ error: Error) {}
 }
 
@@ -1466,6 +1522,11 @@ private actor GatedSummaryModel: MeetingSummaryModel {
     private(set) var inputs: [String] = []
     private(set) var waiting = false
     private var isOpen = true
+    private var failure: MeetingSummaryFailure?
+
+    func fail(with failure: MeetingSummaryFailure) {
+        self.failure = failure
+    }
 
     func close() {
         isOpen = false
@@ -1490,6 +1551,9 @@ private actor GatedSummaryModel: MeetingSummaryModel {
         defer { waiting = false }
         while !isOpen {
             try await Task.sleep(for: .milliseconds(5))
+        }
+        if let failure {
+            throw MeetingSummaryError.failed(failure)
         }
         switch request.kind {
         case .part, .userNotes:

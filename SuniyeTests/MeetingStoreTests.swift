@@ -34,6 +34,22 @@ final class MeetingStoreTests: XCTestCase {
         XCTAssertEqual(loaded.first, newer)
     }
 
+    func testARecordWithASummaryFailureThatThisBuildDoesNotKnowStillLoads() async throws {
+        var failed = makeRecord(status: .summaryFailed)
+        failed.summaryFailure = .truncated
+        try await store.create(failed)
+        let saved = await store.record(failed.id)
+        let url = store.folder(for: failed.id).appendingPathComponent("meeting.json")
+        let json = try String(contentsOf: url, encoding: .utf8)
+        try json.replacingOccurrences(of: "\"truncated\"", with: "\"The model wrote nothing.\"").write(to: url, atomically: true, encoding: .utf8)
+
+        let loaded = await store.record(failed.id)
+
+        XCTAssertEqual(saved?.summaryFailure, .truncated)
+        XCTAssertEqual(loaded?.status, .summaryFailed)
+        XCTAssertNil(loaded?.summaryFailure)
+    }
+
     func testStableAndPreviewKeepTheirMeetingsApart() {
         let stable = AppIdentity(displayName: "Suniye", isPreview: false)
         let preview = AppIdentity(displayName: "Suniye Preview", isPreview: true)

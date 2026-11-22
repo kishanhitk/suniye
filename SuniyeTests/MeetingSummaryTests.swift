@@ -243,14 +243,14 @@ final class MeetingSummaryWriterTests: XCTestCase {
             _ = try await writer.write(input(conversation(turns: 4, words: 10)))
             XCTFail("expected a failure")
         } catch {
-            XCTAssertEqual(error as? MeetingSummaryError, .failed("The model stopped before it finished."))
+            XCTAssertEqual(error as? MeetingSummaryError, .failed(.truncated))
         }
         let emptyWriter = MeetingSummaryWriter(model: FakeSummaryModel(context: 4_096) { _ in "Title: Sync\n## Decisions\n- None" })
         do {
             _ = try await emptyWriter.write(input(conversation(turns: 4, words: 10)))
             XCTFail("expected a failure")
         } catch {
-            XCTAssertEqual(error as? MeetingSummaryError, .failed("The model wrote nothing."), "a summary with nothing in it is no summary")
+            XCTAssertEqual(error as? MeetingSummaryError, .failed(.empty), "a summary with nothing in it is no summary")
         }
     }
 

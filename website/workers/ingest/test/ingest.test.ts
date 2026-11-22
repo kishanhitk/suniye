@@ -424,6 +424,18 @@ describe("buildDataPoint slot registry", () => {
     expect(summarized.blobs[14]).toBe("done");        // blob15 = outcome
     expect(summarized.doubles[14]).toBe(3);           // double15 = parts
 
+    const hostedFailure = buildDataPoint(
+      event("meeting_summarized", { provider: "chatgpt", outcome: "failed", reason: "plan_limit", duration_ms: 900 }),
+      b({ device }),
+      ""
+    );
+    expect(hostedFailure.blobs[15]).toBe("chatgpt");    // blob16 = provider
+    expect(hostedFailure.blobs[14]).toBe("failed");     // blob15 = outcome
+    expect(hostedFailure.blobs[13]).toBe("plan_limit"); // blob14 = reason (wins over device arch)
+
+    const signIn = buildDataPoint(event("chatgpt_sign_in", { outcome: "connected" }), b({ device }), "");
+    expect(signIn.blobs[14]).toBe("connected"); // blob15 = outcome
+
     const card = buildDataPoint(event("meeting_call_card", { kind: "offer", action: "not_now" }), b({ device }), "");
     expect(card.blobs[15]).toBe("offer");   // blob16 = kind
     expect(card.blobs[14]).toBe("not_now"); // blob15 = action

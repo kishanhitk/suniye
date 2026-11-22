@@ -25,8 +25,12 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         XCTAssertEqual(ended.name, "meeting_ended")
         XCTAssertEqual(ended.props, ["duration_ms": .int(2_280_000), "tracks": .label("you_them"), "reason": .label("call_ended")])
 
-        let failed = AnalyticsEvent.meetingSummarized(provider: .localModel, outcome: .failed, parts: nil, durationMs: 900)
-        XCTAssertEqual(failed.props, ["provider": .label("local_model"), "outcome": .label("failed"), "duration_ms": .int(900)])
+        let failed = AnalyticsEvent.meetingSummarized(provider: .apiEndpoint, outcome: .failed, reason: .keyRejected, parts: nil, durationMs: 900)
+        XCTAssertEqual(failed.props, ["provider": .label("api_endpoint"), "outcome": .label("failed"), "reason": .label("key_rejected"), "duration_ms": .int(900)])
+
+        let signIn = AnalyticsEvent.chatGPTSignIn(outcome: .noPlanPermission)
+        XCTAssertEqual(signIn.name, "chatgpt_sign_in")
+        XCTAssertEqual(signIn.props, ["outcome": .label("no_plan_permission")])
 
         let card = AnalyticsEvent.meetingCallCard(card: .callEnded, action: .keepRecording)
         XCTAssertEqual(card.name, "meeting_call_card")

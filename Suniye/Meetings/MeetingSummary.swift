@@ -1,14 +1,27 @@
 import Foundation
 import SuniyeAnalytics
 
-/// Which on-device model can write summaries on this Mac now. A remote
-/// provider is never a choice: a meeting stays on the Mac.
+/// Which model can write a summary now.
 enum MeetingSummaryAvailability: Equatable, Sendable {
     case ready(MeetingSummaryEngine)
     /// The local model runs on this Mac once it is downloaded.
     case needsDownload
     /// No on-device model runs on this Mac.
     case unavailable
+
+    /// A hosted model only when `choice` names it: `automatic` never gives
+    /// one. A hosted choice is always ready, and a missing key or sign-in is
+    /// a failure with its cause, not a wait.
+    init(choice: MeetingSummaryModelChoice, apple: AppleFoundationModelsAvailability, localModel: LocalGemmaAvailability) {
+        switch choice {
+        case .automatic:
+            self.init(apple: apple, localModel: localModel)
+        case .chatGPT:
+            self = .ready(.chatgpt)
+        case .apiEndpoint:
+            self = .ready(.apiEndpoint)
+        }
+    }
 
     /// The local model when it is installed, else Apple Intelligence when it
     /// is ready.
@@ -61,8 +74,24 @@ struct MeetingSummaryRequest: Hashable, Sendable {
     }
 }
 
-/// One on-device model, as the summary writer uses it.
+extension MeetingSummaryEngine {
+    /// The meeting text stays on the Mac.
+    var isOnDevice: Bool {
+        switch self {
+        case .localModel, .appleIntelligence:
+            return true
+        case .apiEndpoint, .chatgpt:
+            return false
+        }
+    }
+}
+
+/// One model, as the summary writer uses it.
 protocol MeetingSummaryModel {
+    /// The model writes the summary from the whole transcript in one request
+    /// when it fits. False for a small model, which keeps more items from
+    /// short parts.
+    var writesWholeSummary: Bool { get }
     /// Tokens that one request holds: the prompt and the answer together.
     func contextTokens() async -> Int
     /// Tokens in `text` by the model's own tokenizer, or nil when the model
@@ -71,7 +100,12 @@ protocol MeetingSummaryModel {
     /// Throws `LLMPostProcessorError.outputTruncated` when the answer did not
     /// fit. The Apple model cannot tell: it cuts an answer at the output limit
     /// with no error.
+    /// A hosted model throws `MeetingSummaryError.failed` with the kind.
     func generate(_ request: MeetingSummaryRequest) async throws -> String
+}
+
+extension MeetingSummaryModel {
+    var writesWholeSummary: Bool { false }
 }
 
 struct MeetingSummaryInput: Sendable {
@@ -100,23 +134,81 @@ struct MeetingSummary: Equatable, Sendable {
     let parts: Int
 }
 
-enum MeetingSummaryError: LocalizedError, Equatable {
+enum MeetingSummaryError: Error, Equatable {
     /// Fewer than `MeetingSummaryWriter.minimumWords` words and no notes.
     case tooLittleSpeech
-    /// The model failed; the text is the cause that the meeting page shows.
-    case failed(String)
+    case failed(MeetingSummaryFailure)
+}
 
-    var errorDescription: String? {
+extension MeetingSummaryFailure {
+    /// The cause that the meeting page shows. `hosted`: a service ran the
+    /// summary, not this Mac.
+    func cause(hosted: Bool) -> String {
         switch self {
-        case .tooLittleSpeech:
-            return MeetingStatus.noSpeechTitle
-        case let .failed(cause):
-            return cause
+        case .truncated:
+            return "The model stopped before it finished."
+        case .timeout:
+            return hosted ? "The summary service took too long." : "The model took too long."
+        case .network:
+            return "No connection to the summary service."
+        case .keyRejected:
+            return "The API key was rejected."
+        case .serviceError:
+            return "The summary service returned an error."
+        case .notSetUp:
+            return "The summary model is not set up."
+        case .signInEnded:
+            return "Connect ChatGPT again."
+        case .planLimit:
+            return "Your ChatGPT plan limit is reached."
+        case .planNotAllowed:
+            return "This ChatGPT account cannot use its plan in Suniye."
+        case .notReady:
+            return "The model is not ready."
+        case .empty:
+            return "The model wrote nothing."
+        case .modelError:
+            return "The model stopped with an error."
         }
     }
 }
 
-/// Writes a meeting's summary with one on-device model.
+/// A button under a failed summary.
+enum MeetingSummaryFailureAction: Equatable {
+    case tryAgain
+    case meetingSettings
+    case summarizeOnThisMac
+    /// Opens the usage page of ChatGPT settings.
+    case manageUsage
+}
+
+extension MeetingRecord {
+    /// A service ran the last summary, not this Mac.
+    var summaryRanOnService: Bool {
+        summaryEngine?.isOnDevice == false
+    }
+
+    /// The buttons under a failed summary, the main one first. A failure
+    /// that only a change in Settings can end gets no Try Again. After a
+    /// hosted run, an on-device model can write this one summary.
+    func summaryFailureActions(canSummarizeOnThisMac: Bool) -> [MeetingSummaryFailureAction] {
+        var actions: [MeetingSummaryFailureAction]
+        switch summaryFailure {
+        case .keyRejected, .notSetUp, .signInEnded, .planNotAllowed:
+            actions = [.meetingSettings]
+        case .planLimit:
+            actions = [.manageUsage, .tryAgain]
+        case .timeout, .truncated, .empty, .notReady, .modelError, .network, .serviceError, nil:
+            actions = [.tryAgain]
+        }
+        if summaryRanOnService, canSummarizeOnThisMac {
+            actions.append(.summarizeOnThisMac)
+        }
+        return actions
+    }
+}
+
+/// Writes a meeting's summary with one model.
 ///
 /// For a template with list sections (`MeetingSummaryLayout`), the transcript
 /// is cut into parts at segment edges, and each part, and the user's notes,
@@ -145,6 +237,9 @@ actor MeetingSummaryWriter {
     static let fillFactor = 0.9
     /// For a model that cannot count its tokens.
     static let charactersPerToken = 2
+    /// The context that a hosted model is planned with. The real one can be
+    /// larger; about 4 hours of talk fit in this one.
+    static let hostedContextTokens = 128_000
 
     private let model: MeetingSummaryModel
     private var answers: [MeetingSummaryRequest: String] = [:]
@@ -163,7 +258,8 @@ actor MeetingSummaryWriter {
         guard Self.hasEnoughSpeech(input.segments, notes: input.notes) else {
             throw MeetingSummaryError.tooLittleSpeech
         }
-        if let layout = MeetingSummaryLayout(template: input.template),
+        if !model.writesWholeSummary,
+           let layout = MeetingSummaryLayout(template: input.template),
            let summary = try await writeBySection(input, layout: layout) {
             return summary
         }
@@ -277,7 +373,7 @@ actor MeetingSummaryWriter {
         }
         let parsed = MeetingSummaryText.parse(answer)
         guard !parsed.body.isEmpty else {
-            throw MeetingSummaryError.failed(Self.cause(of: LLMPostProcessorError.emptyOutput))
+            throw MeetingSummaryError.failed(.empty)
         }
         return MeetingSummary(title: parsed.title, body: parsed.body, parts: parts)
     }
@@ -374,11 +470,14 @@ actor MeetingSummaryWriter {
             if Task.isCancelled {
                 throw CancellationError()
             }
+            if let failure = error as? MeetingSummaryError {
+                throw failure
+            }
             // Only the domain and the code: app.log goes into diagnostic
             // reports, and an error description can hold meeting text.
             let underlying = error as NSError
             AppLogger.shared.log(.error, "meeting summary request failed kind=\(request.kind) domain=\(underlying.domain) code=\(underlying.code)")
-            throw MeetingSummaryError.failed(Self.cause(of: error))
+            throw MeetingSummaryError.failed(Self.failure(of: error))
         }
     }
 
@@ -393,18 +492,18 @@ actor MeetingSummaryWriter {
         Int(Double(context - output) * Self.fillFactor)
     }
 
-    static func cause(of error: Error) -> String {
+    static func failure(of error: Error) -> MeetingSummaryFailure {
         switch error as? LLMPostProcessorError {
         case .outputTruncated:
-            return "The model stopped before it finished."
+            return .truncated
         case .timeout:
-            return "The model took too long."
+            return .timeout
         case .invalidConfiguration:
-            return "The model is not ready."
+            return .notReady
         case .emptyOutput, .malformedResponse:
-            return "The model wrote nothing."
+            return .empty
         case .provider, .network, .unauthorized, .none:
-            return "The model stopped with an error."
+            return .modelError
         }
     }
 }

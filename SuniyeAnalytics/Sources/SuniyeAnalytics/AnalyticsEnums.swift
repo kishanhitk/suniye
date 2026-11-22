@@ -244,9 +244,45 @@ public enum MeetingOutcome: String, Sendable, CaseIterable {
     case failed
 }
 
-public enum MeetingSummaryEngine: String, Sendable, CaseIterable {
+public enum MeetingSummaryEngine: String, Sendable, CaseIterable, Codable {
     case appleIntelligence = "apple_intelligence"
     case localModel = "local_model"
+    /// The user's OpenAI-compatible endpoint. The meeting text leaves the Mac.
+    case apiEndpoint = "api_endpoint"
+    /// The user's ChatGPT plan. The meeting text goes to OpenAI.
+    case chatgpt
+}
+
+/// Why a meeting's summary failed.
+public enum MeetingSummaryFailure: String, Sendable, CaseIterable, Codable {
+    case timeout
+    /// The answer stopped at a length limit.
+    case truncated
+    case empty
+    case notReady = "not_ready"
+    case modelError = "model_error"
+    case network
+    case keyRejected = "key_rejected"
+    case serviceError = "service_error"
+    /// The hosted model that the user chose has no key, no model ID or no
+    /// agreement for its endpoint.
+    case notSetUp = "not_set_up"
+    /// The user must connect ChatGPT again.
+    case signInEnded = "sign_in_ended"
+    case planLimit = "plan_limit"
+    /// OpenAI does not let the account use its plan in an app.
+    case planNotAllowed = "plan_not_allowed"
+}
+
+/// How one ChatGPT sign-in from Settings ended. `denied`: the user said no
+/// in the browser. `canceled`: the user stopped the wait in Suniye.
+public enum ChatGPTSignInOutcome: String, Sendable, CaseIterable {
+    case connected
+    case canceled
+    case denied
+    case noPlanPermission = "no_plan_permission"
+    case timedOut = "timed_out"
+    case failed
 }
 
 /// The text of a meeting that the user can change on its page.

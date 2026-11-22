@@ -1,4 +1,5 @@
 import Foundation
+import SuniyeAnalytics
 
 /// The microphone is "You"; the audio of every other app (the call) is "Them".
 enum MeetingTrack: String, Codable, CaseIterable, Comparable, Sendable {
@@ -130,7 +131,13 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     /// while it finished.
     var transcriptFailure: String?
     /// Why the last summary failed, for the meeting page.
-    var summaryFailure: String?
+    var summaryFailure: MeetingSummaryFailure?
+    /// The model of the last summary run, done or failed.
+    var summaryEngine: MeetingSummaryEngine?
+    /// The user asked for this meeting's next summary from an on-device
+    /// model, whatever the setting says. Kept until that summary ends, so a
+    /// quit does not send the meeting to a service.
+    var summaryOnThisMac = false
     /// When the user first changed a transcript line; nil until then, and
     /// again after Transcribe Again.
     var transcriptEditedAt: Date?
@@ -164,6 +171,34 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         self.templateID = templateID
         self.pauses = pauses
         self.callPlayedOnSpeakers = callPlayedOnSpeakers
+    }
+
+    /// A missing key keeps its default, and a summary failure or model that
+    /// this build does not know is none: a record that another build saved
+    /// still loads.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        titleSource = try container.decode(MeetingTitleSource.self, forKey: .titleSource)
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        tracks = try container.decode([MeetingTrack].self, forKey: .tracks)
+        endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt)
+        callAppName = try container.decodeIfPresent(String.self, forKey: .callAppName)
+        callAppBundleID = try container.decodeIfPresent(String.self, forKey: .callAppBundleID)
+        status = try container.decode(MeetingStatus.self, forKey: .status)
+        templateID = try container.decode(String.self, forKey: .templateID)
+        pauses = try container.decodeIfPresent([MeetingPause].self, forKey: .pauses) ?? []
+        callPlayedOnSpeakers = try container.decodeIfPresent(Bool.self, forKey: .callPlayedOnSpeakers) ?? false
+        transcriptEnd = try container.decodeIfPresent(Int.self, forKey: .transcriptEnd)
+        transcriptFailure = try container.decodeIfPresent(String.self, forKey: .transcriptFailure)
+        summaryFailure = try container.decodeIfPresent(String.self, forKey: .summaryFailure)
+            .flatMap(MeetingSummaryFailure.init(rawValue:))
+        summaryEngine = try container.decodeIfPresent(String.self, forKey: .summaryEngine)
+            .flatMap(MeetingSummaryEngine.init(rawValue:))
+        summaryOnThisMac = try container.decodeIfPresent(Bool.self, forKey: .summaryOnThisMac) ?? false
+        transcriptEditedAt = try container.decodeIfPresent(Date.self, forKey: .transcriptEditedAt)
+        summaryEditedAt = try container.decodeIfPresent(Date.self, forKey: .summaryEditedAt)
     }
 
     var duration: TimeInterval? {

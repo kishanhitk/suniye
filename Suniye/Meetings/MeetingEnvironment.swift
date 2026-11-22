@@ -9,6 +9,9 @@ protocol MeetingHost: AnyObject {
     /// A summary stopped using the model, so Magic Format can load its own
     /// prompt into the model's cache again.
     func meetingSummaryModelIsIdle()
+    /// The user asked for a summary again. A hosted model that stopped its
+    /// requests after a plan limit can send one again.
+    func meetingSummaryAskedAgain() async
     /// A recording that a call card or call detection asked for did not start.
     func meetingCouldNotStart(_ error: Error)
 }
