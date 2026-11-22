@@ -167,10 +167,6 @@ final class TestKeychainService: KeychainServiceProtocol {
         stored = key
     }
 
-    func hasLLMKey() -> Bool {
-        stored?.isEmpty == false
-    }
-
     func getLLMKey() throws -> String? {
         stored
     }

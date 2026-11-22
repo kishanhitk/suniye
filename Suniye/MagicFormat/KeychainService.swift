@@ -1,49 +1,21 @@
 import Foundation
 
+/// The API endpoint key. Magic Format and meeting summaries share it.
 protocol KeychainServiceProtocol {
     func setLLMKey(_ key: String) throws
-    func hasLLMKey() -> Bool
     func getLLMKey() throws -> String?
     func deleteLLMKey() throws
 }
 
-enum KeychainServiceError: LocalizedError {
+enum KeychainServiceError: Error {
     case invalidData
-    case writeFailed
-    case readFailed
-    case deleteFailed
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidData:
-            return "Invalid API key data"
-        case .writeFailed:
-            return "Failed to save API key"
-        case .readFailed:
-            return "Failed to read API key"
-        case .deleteFailed:
-            return "Failed to clear API key"
-        }
-    }
 }
 
-final class KeychainService: KeychainServiceProtocol {
-    private let fileManager: FileManager
-    private let keyFileURL: URL
-    private let legacyKeyFileURL: URL
+struct KeychainService: KeychainServiceProtocol {
+    private let item: SecretItem
 
-    init(baseDirectoryURL: URL? = nil, filename: String = "llm_api_key.txt", fileManager: FileManager = .default) {
-        self.fileManager = fileManager
-        if let baseDirectoryURL {
-            self.keyFileURL = baseDirectoryURL.appendingPathComponent(filename, isDirectory: false)
-            self.legacyKeyFileURL = baseDirectoryURL.appendingPathComponent("openrouter_api_key.txt", isDirectory: false)
-            return
-        }
-
-        let defaultBaseDirectory = AppSupportDirectory.urlOrHomeLibrary(fileManager: fileManager)
-            .appendingPathComponent("config", isDirectory: true)
-        self.keyFileURL = defaultBaseDirectory.appendingPathComponent(filename, isDirectory: false)
-        self.legacyKeyFileURL = defaultBaseDirectory.appendingPathComponent("openrouter_api_key.txt", isDirectory: false)
+    init(item: SecretItem = KeychainItem(name: "api-endpoint", account: "api-key", label: "Suniye API key")) {
+        self.item = item
     }
 
     func setLLMKey(_ key: String) throws {
@@ -51,70 +23,39 @@ final class KeychainService: KeychainServiceProtocol {
         guard !normalized.isEmpty else {
             throw KeychainServiceError.invalidData
         }
-
-        do {
-            try ensureDirectoryExists()
-            try Data(normalized.utf8).write(to: keyFileURL, options: .atomic)
-            try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: keyFileURL.path)
-        } catch {
-            throw KeychainServiceError.writeFailed
-        }
-    }
-
-    func hasLLMKey() -> Bool {
-        do {
-            guard let value = try getLLMKey() else {
-                return false
-            }
-            return !value.isEmpty
-        } catch {
-            return false
-        }
+        try item.write(Data(normalized.utf8))
     }
 
     func getLLMKey() throws -> String? {
-        let sourceURL: URL?
-        if fileManager.fileExists(atPath: keyFileURL.path) {
-            sourceURL = keyFileURL
-        } else if fileManager.fileExists(atPath: legacyKeyFileURL.path) {
-            sourceURL = legacyKeyFileURL
-        } else {
-            sourceURL = nil
-        }
-
-        guard let sourceURL else {
+        guard let data = try item.read() else {
             return nil
         }
-
-        do {
-            let data = try Data(contentsOf: sourceURL)
-            guard let key = String(data: data, encoding: .utf8) else {
-                throw KeychainServiceError.invalidData
-            }
-            let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
-            return normalized.isEmpty ? nil : normalized
-        } catch let error as KeychainServiceError {
-            throw error
-        } catch {
-            throw KeychainServiceError.readFailed
+        guard let key = String(data: data, encoding: .utf8) else {
+            throw KeychainServiceError.invalidData
         }
+        return key
     }
 
     func deleteLLMKey() throws {
-        do {
-            if fileManager.fileExists(atPath: keyFileURL.path) {
-                try fileManager.removeItem(at: keyFileURL)
-            }
-            if fileManager.fileExists(atPath: legacyKeyFileURL.path) {
-                try fileManager.removeItem(at: legacyKeyFileURL)
-            }
-        } catch {
-            throw KeychainServiceError.deleteFailed
-        }
+        try item.delete()
     }
 
-    private func ensureDirectoryExists() throws {
-        let directoryURL = keyFileURL.deletingLastPathComponent()
-        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+    /// Suniye kept the key in these files before it used the Keychain.
+    static let plainTextKeyFilenames = ["llm_api_key.txt", "openrouter_api_key.txt"]
+
+    static func removePlainTextKeyFiles(
+        from directory: URL = AppSupportDirectory.urlOrHomeLibrary().appendingPathComponent("config", isDirectory: true),
+        fileManager: FileManager = .default
+    ) {
+        for filename in plainTextKeyFilenames {
+            let url = directory.appendingPathComponent(filename, isDirectory: false)
+            guard fileManager.fileExists(atPath: url.path) else { continue }
+            do {
+                try fileManager.removeItem(at: url)
+                AppLogger.shared.log(.info, "removed plain-text api key file \(filename)")
+            } catch {
+                AppLogger.shared.log(.error, "plain-text api key file \(filename) removal failed: \(error.localizedDescription)")
+            }
+        }
     }
 }

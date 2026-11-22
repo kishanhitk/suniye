@@ -1276,6 +1276,7 @@ final class AppState {
         }
 
         if startServices {
+            KeychainService.removePlainTextKeyFiles()
             analytics.start()
             stopMeetingAtSleep()
             emitAppLaunchEvent()
@@ -1826,22 +1827,19 @@ final class AppState {
         }
     }
 
-    func refreshLLMKeyStatus() {
-        hasLLMAPIKey = keychainService.hasLLMKey()
-        refreshLLMKeyDerivedState()
-    }
-
     /// The masked hint and the fingerprint are read once per key change rather
     /// than per SwiftUI body evaluation: both derive from the keychain, and a
     /// synchronous credential read does not belong on the render path.
-    private func refreshLLMKeyDerivedState() {
+    func refreshLLMKeyStatus() {
         guard let key = try? keychainService.getLLMKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
               !key.isEmpty
         else {
+            hasLLMAPIKey = false
             llmAPIKeyHint = nil
             currentLLMAPIKeyFingerprint = nil
             return
         }
+        hasLLMAPIKey = true
         currentLLMAPIKeyFingerprint = key.hashValue
         let dots = "\u{2022}\u{2022}\u{2022}\u{2022}"
         // The hint must stay a hint: a prefix plus a tail recovers most of a
@@ -1866,7 +1864,7 @@ final class AppState {
             AppLogger.shared.log(.info, "llm api key saved")
         } catch {
             llmKeyOperationError = "Couldn't save the API key."
-            AppLogger.shared.log(.error, "llm api key save failed")
+            AppLogger.shared.log(.error, "llm api key save failed: \(error)")
         }
     }
 
@@ -1879,7 +1877,7 @@ final class AppState {
             AppLogger.shared.log(.info, "llm api key cleared")
         } catch {
             llmKeyOperationError = "Couldn't clear the API key."
-            AppLogger.shared.log(.error, "llm api key clear failed")
+            AppLogger.shared.log(.error, "llm api key clear failed: \(error)")
         }
     }
 

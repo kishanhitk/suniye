@@ -592,10 +592,6 @@ private final class FailingKeychainService: KeychainServiceProtocol {
         storedKey = key
     }
 
-    func hasLLMKey() -> Bool {
-        storedKey?.isEmpty == false
-    }
-
     func getLLMKey() throws -> String? {
         if let getError {
             throw getError
