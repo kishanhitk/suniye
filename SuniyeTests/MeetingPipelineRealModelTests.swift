@@ -465,11 +465,13 @@ final class MeetingPipelineRealModelTests: XCTestCase {
 /// the notes before the last step, and the answer to the overview request.
 private actor RecordingSummaryModel: MeetingSummaryModel {
     private let base: MeetingSummaryModel
+    nonisolated let writesWholeSummary: Bool
     private(set) var partAnswers: [String] = []
     private(set) var overviewAnswer: String?
 
     init(_ base: MeetingSummaryModel) {
         self.base = base
+        writesWholeSummary = base.writesWholeSummary
     }
 
     func contextTokens() async -> Int {
