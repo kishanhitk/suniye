@@ -171,7 +171,7 @@ struct GeneralPage: View {
     /// intended behavior, so the row only names the stand-in.
     private func inputStandInRow(_ note: String) -> some View {
         Label {
-            Text(numbers: note)
+            Text(note)
         } icon: {
             noticeIcon("mic")
         }

@@ -134,7 +134,7 @@ private struct ToastView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(numbers: message)
+            Text(message)
                 .font(.system(size: 12, weight: .medium))
             if let actionTitle, let action {
                 Button(actionTitle, action: action)

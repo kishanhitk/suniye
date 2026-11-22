@@ -603,7 +603,7 @@ struct APIEndpointSheet: View {
                         Button {
                             appState.llmSelectedModelPreset = preset
                         } label: {
-                            Text(preset == .custom ? "Custom ID" : preset.displayName)
+                            Text(numbers: preset == .custom ? "Custom ID" : preset.displayName)
                                 .font(AppTypography.body)
                                 .foregroundStyle(isActive ? Color.white : Color.primary)
                                 .frame(maxWidth: .infinity)
