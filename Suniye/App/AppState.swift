@@ -1276,7 +1276,6 @@ final class AppState {
         }
 
         if startServices {
-            KeychainService.removePlainTextKeyFiles()
             analytics.start()
             stopMeetingAtSleep()
             emitAppLaunchEvent()
