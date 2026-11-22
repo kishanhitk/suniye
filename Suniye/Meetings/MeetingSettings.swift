@@ -32,6 +32,7 @@ enum MeetingAudioRetention: String, Codable, CaseIterable, Sendable {
 /// other choice sends the transcript and the notes to a service.
 enum MeetingSummaryModelChoice: String, Codable, CaseIterable, Sendable {
     case automatic
+    case chatGPT
     case apiEndpoint
 }
 
@@ -47,6 +48,8 @@ struct MeetingSettings: Codable, Equatable, Sendable {
     var transcriptModel: ASRModelID?
     var audioRetention = MeetingAudioRetention.untilTranscript
     var summaryModel = MeetingSummaryModelChoice.automatic
+    /// The ChatGPT model for summaries; nil is the default model.
+    var chatGPTModel: String?
     /// The model ID for summaries through the API endpoint.
     var apiSummaryModelID = ""
     /// The host of the API endpoint when the user agreed to send meeting
@@ -70,6 +73,7 @@ struct MeetingSettings: Codable, Equatable, Sendable {
             .flatMap(MeetingAudioRetention.init(rawValue:)) ?? audioRetention
         summaryModel = try container.decodeIfPresent(String.self, forKey: .summaryModel)
             .flatMap(MeetingSummaryModelChoice.init(rawValue:)) ?? summaryModel
+        chatGPTModel = try container.decodeIfPresent(String.self, forKey: .chatGPTModel)
         apiSummaryModelID = try container.decodeIfPresent(String.self, forKey: .apiSummaryModelID) ?? apiSummaryModelID
         apiSummaryAgreedHost = try container.decodeIfPresent(String.self, forKey: .apiSummaryAgreedHost)
     }

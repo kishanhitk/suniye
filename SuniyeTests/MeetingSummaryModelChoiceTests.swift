@@ -80,7 +80,13 @@ final class MeetingSummaryQueueTests: XCTestCase {
         summaries = MeetingSummaries(
             store: store,
             templates: MeetingTemplateStore(fileURL: root.appendingPathComponent("templates.json")),
-            availability: { [unowned self] choice in choice == .automatic ? onDevice : .ready(.apiEndpoint) },
+            availability: { [unowned self] choice in
+                switch choice {
+                case .automatic: onDevice
+                case .chatGPT: .ready(.chatgpt)
+                case .apiEndpoint: .ready(.apiEndpoint)
+                }
+            },
             makeModel: { [unowned self] engine in engine.isOnDevice ? local : hosted },
             analytics: analytics
         )
@@ -172,6 +178,26 @@ final class MeetingSummaryQueueTests: XCTestCase {
         XCTAssertNil(finished[id]?.summaryFailure)
     }
 
+    func testAStoppedChatGPTSummaryRunsAgainWithTheModelOfItsNewChoice() async throws {
+        await hosted.close()
+        let id = try await addMeeting(.chatGPT)
+        summaries.enqueue(id)
+        _ = await eventually { await self.hosted.waiting }
+
+        choices[id] = .automatic
+        summaries.cancelRunning(engine: .apiEndpoint)
+        try await Task.sleep(for: .milliseconds(30))
+        let otherEngineLeftItAlone = await hosted.waiting
+        summaries.cancelRunning(engine: .chatgpt)
+        let done = await eventually { self.finished[id]?.status == .done }
+        let hostedRequests = await hosted.requests.count
+
+        XCTAssertTrue(otherEngineLeftItAlone)
+        XCTAssertTrue(done)
+        XCTAssertEqual(finished[id]?.summaryEngine, .localModel)
+        XCTAssertEqual(hostedRequests, 1, "no new request to ChatGPT after the disconnect")
+    }
+
     func testAHostedFailureReachesTheRecordWithItsKind() async throws {
         await hosted.fail(with: .keyRejected)
         let id = try await addMeeting(.apiEndpoint)
@@ -196,6 +222,7 @@ final class MeetingSummaryModelChoiceTests: XCTestCase {
                     XCTAssertTrue(engine.isOnDevice)
                 }
                 XCTAssertEqual(MeetingSummaryAvailability(choice: .apiEndpoint, apple: apple, localModel: local), .ready(.apiEndpoint))
+                XCTAssertEqual(MeetingSummaryAvailability(choice: .chatGPT, apple: apple, localModel: local), .ready(.chatgpt))
             }
         }
     }
@@ -254,6 +281,14 @@ final class MeetingSummaryModelChoiceTests: XCTestCase {
         XCTAssertEqual(record.summaryFailureActions(canSummarizeOnThisMac: true), [.meetingSettings, .summarizeOnThisMac])
         record.summaryFailure = .notSetUp
         XCTAssertEqual(record.summaryFailureActions(canSummarizeOnThisMac: true), [.meetingSettings, .summarizeOnThisMac])
+        record.summaryEngine = .chatgpt
+        record.summaryFailure = .planLimit
+        XCTAssertEqual(record.summaryFailureActions(canSummarizeOnThisMac: true), [.manageUsage, .tryAgain, .summarizeOnThisMac])
+        record.summaryFailure = .signInEnded
+        XCTAssertEqual(record.summaryFailureActions(canSummarizeOnThisMac: true), [.meetingSettings, .summarizeOnThisMac])
+        record.summaryFailure = .planNotAllowed
+        XCTAssertEqual(record.summaryFailureActions(canSummarizeOnThisMac: true), [.meetingSettings, .summarizeOnThisMac])
+        record.summaryEngine = .apiEndpoint
         XCTAssertEqual(MeetingSummaryFailure.timeout.cause(hosted: true), "The summary service took too long.")
 
         record.summaryEngine = .localModel

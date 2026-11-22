@@ -186,6 +186,26 @@ final class MeetingPipelineRealModelTests: XCTestCase {
         try await runSummaryEvals(engine: "local") { LocalGemmaMeetingSummaryModel(client: client) }
     }
 
+    /// The same meetings through an API endpoint. `SUNIYE_EVAL_API_KEY_FILE`
+    /// names a file that holds the key, so the key is in no command line;
+    /// `SUNIYE_EVAL_API_ENDPOINT` and `SUNIYE_EVAL_API_MODEL` replace the
+    /// OpenAI endpoint and `gpt-6.1-sol`.
+    func testAnAPIEndpointSummarizesLongMeetings() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let keyFile = environment["SUNIYE_EVAL_API_KEY_FILE"] else {
+            throw XCTSkip("Set SUNIYE_EVAL_API_KEY_FILE to run the API endpoint eval")
+        }
+        let key = try String(contentsOfFile: keyFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        let endpoint = try XCTUnwrap(LLMDefaults.endpointURL(from: environment["SUNIYE_EVAL_API_ENDPOINT"] ?? "https://api.openai.com/v1/chat/completions"))
+        var settings = MeetingSettings()
+        settings.apiSummaryModelID = environment["SUNIYE_EVAL_API_MODEL"] ?? "gpt-6.1-sol"
+        settings.apiSummaryAgreedHost = endpoint.host
+        let setup = try XCTUnwrap(APIEndpointSummarySetup(settings: settings, endpointURL: endpoint, apiKey: key))
+        try await runSummaryEvals(engine: "api:\(setup.modelID)") {
+            APIEndpointMeetingSummaryModel(client: ChatCompletionClient()) { setup }
+        }
+    }
+
     func testAppleIntelligenceSummarizesLongMeetings() async throws {
         #if canImport(FoundationModels)
         guard #available(macOS 26.0, *) else { throw XCTSkip("Apple Intelligence needs macOS 26") }

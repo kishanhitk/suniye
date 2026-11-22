@@ -96,6 +96,7 @@ public enum AnalyticsEvent: Sendable {
     /// 1 when the transcript fit in one request, nil when no summary was written.
     /// `reason` is set for a failed summary.
     case meetingSummarized(provider: MeetingSummaryEngine, outcome: MeetingOutcome, reason: MeetingSummaryFailure?, parts: Int?, durationMs: Int)
+    case chatGPTSignIn(outcome: ChatGPTSignInOutcome)
     /// How a call card closed. A card that the app closed itself (a recording
     /// started or stopped, or the call came back) sends nothing.
     case meetingCallCard(card: MeetingCallCardKind, action: MeetingCallCardAction)
@@ -142,6 +143,7 @@ public enum AnalyticsEvent: Sendable {
         case .meetingEnded: return "meeting_ended"
         case .meetingTranscribed: return "meeting_transcribed"
         case .meetingSummarized: return "meeting_summarized"
+        case .chatGPTSignIn: return "chatgpt_sign_in"
         case .meetingCallCard: return "meeting_call_card"
         case .meetingEdited: return "meeting_edited"
         case .meetingPlayed: return "meeting_played"
@@ -257,6 +259,8 @@ public enum AnalyticsEvent: Sendable {
             if let reason { out["reason"] = .label(reason) }
             if let parts { out["parts"] = .int(parts) }
             return out
+        case let .chatGPTSignIn(outcome):
+            return ["outcome": .label(outcome)]
         case let .meetingCallCard(card, action):
             return ["kind": .label(card), "action": .label(action)]
         case let .meetingEdited(part):

@@ -103,6 +103,8 @@ struct MeetingSummaryTab: View {
             return Button("Summarize on this Mac") {
                 Task { await meetings.regenerate(record.id, onThisMac: true) }
             }
+        case .manageUsage:
+            return Button("Manage Usage") { NSWorkspace.shared.open(ChatGPTPlanClient.usageURL) }
         }
     }
 

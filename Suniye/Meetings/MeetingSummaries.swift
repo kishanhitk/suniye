@@ -68,6 +68,14 @@ final class MeetingSummaries {
         }
     }
 
+    /// Stops the summary in progress when `engine` writes it. The meeting
+    /// stays in the queue and runs again with the model of its choice.
+    func cancelRunning(engine: MeetingSummaryEngine) {
+        if running?.engine == engine {
+            task?.cancel()
+        }
+    }
+
     /// Call when a model becomes ready or goes away, or when the choice of a
     /// meeting changes.
     func availabilityChanged() {

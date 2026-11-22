@@ -1458,6 +1458,8 @@ private final class FakeHost: MeetingHost {
         idleCount += 1
     }
 
+    func meetingSummaryAskedAgain() async {}
+
     func meetingCouldNotStart(_ error: Error) {}
 }
 

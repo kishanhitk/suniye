@@ -351,6 +351,15 @@ final class MeetingCoordinator {
         summaries.availabilityChanged()
     }
 
+    /// Before a ChatGPT disconnect: the setting goes back to Automatic, and
+    /// a summary that ChatGPT writes now stops and runs again on the Mac.
+    func stopUsingChatGPT() {
+        if settings.summaryModel == .chatGPT {
+            updateSettings { $0.summaryModel = .automatic }
+        }
+        summaries.cancelRunning(engine: .chatgpt)
+    }
+
     /// The summary model for one meeting: the setting, or an on-device model
     /// when the user asked for that for this meeting.
     func summaryChoice(for id: UUID) -> MeetingSummaryModelChoice {
@@ -786,6 +795,7 @@ final class MeetingCoordinator {
     /// the setting names a hosted model.
     func regenerate(_ id: UUID, templateID: String? = nil, onThisMac: Bool = false) async {
         guard record(id)?.status.canRegenerate == true else { return }
+        await host?.meetingSummaryAskedAgain()
         await textSaves.finish(id)
         if let templateID {
             updateSettings { $0.templateID = templateID }

@@ -16,6 +16,8 @@ enum MeetingSummaryAvailability: Equatable, Sendable {
         switch choice {
         case .automatic:
             self.init(apple: apple, localModel: localModel)
+        case .chatGPT:
+            self = .ready(.chatgpt)
         case .apiEndpoint:
             self = .ready(.apiEndpoint)
         }
@@ -78,7 +80,7 @@ extension MeetingSummaryEngine {
         switch self {
         case .localModel, .appleIntelligence:
             return true
-        case .apiEndpoint:
+        case .apiEndpoint, .chatgpt:
             return false
         }
     }
@@ -155,6 +157,12 @@ extension MeetingSummaryFailure {
             return "The summary service returned an error."
         case .notSetUp:
             return "The summary model is not set up."
+        case .signInEnded:
+            return "Connect ChatGPT again."
+        case .planLimit:
+            return "Your ChatGPT plan limit is reached."
+        case .planNotAllowed:
+            return "This ChatGPT account cannot use its plan in Suniye."
         case .notReady:
             return "The model is not ready."
         case .empty:
@@ -170,6 +178,8 @@ enum MeetingSummaryFailureAction: Equatable {
     case tryAgain
     case meetingSettings
     case summarizeOnThisMac
+    /// Opens the usage page of ChatGPT settings.
+    case manageUsage
 }
 
 extension MeetingRecord {
@@ -184,8 +194,10 @@ extension MeetingRecord {
     func summaryFailureActions(canSummarizeOnThisMac: Bool) -> [MeetingSummaryFailureAction] {
         var actions: [MeetingSummaryFailureAction]
         switch summaryFailure {
-        case .keyRejected, .notSetUp:
+        case .keyRejected, .notSetUp, .signInEnded, .planNotAllowed:
             actions = [.meetingSettings]
+        case .planLimit:
+            actions = [.manageUsage, .tryAgain]
         case .timeout, .truncated, .empty, .notReady, .modelError, .network, .serviceError, nil:
             actions = [.tryAgain]
         }
