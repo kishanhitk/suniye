@@ -130,8 +130,9 @@ enum AppleSpeechAssetInstaller {
 
 /// Transcription backed by Apple's on-device `SpeechAnalyzer` + `SpeechTranscriber`.
 ///
-/// Runs in *batch* mode to satisfy `TranscriptionServiceProtocol`: the full captured
-/// buffer is fed at once and only finalized results are collected (no volatile partials).
+/// Runs in *batch* mode to satisfy `TranscriptionServiceProtocol`: the full capture is
+/// fed as one finite input sequence and only finalized results are collected (no volatile
+/// partials).
 @available(macOS 26, *)
 actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
     enum ServiceError: LocalizedError {
@@ -153,6 +154,10 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
             }
         }
     }
+
+    /// `SpeechAnalyzer` drops the start of the text of one input buffer longer than
+    /// about 150 s, so the audio goes in as buffers of at most this length.
+    private static let inputBufferSeconds: Double = 60
 
     private var locale: Locale?
     private var analyzerFormat: AVAudioFormat?
@@ -205,14 +210,16 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
             throw ServiceError.bufferPreparationFailed
         }
 
-        let inputBuffer = try Self.makeInputBuffer(
+        let inputBuffers = try Self.makeInputBuffers(
             samples: samples,
             sampleRate: max(8_000, sampleRate),
             targetFormat: format
         )
 
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
-        continuation.yield(AnalyzerInput(buffer: inputBuffer))
+        for buffer in inputBuffers {
+            continuation.yield(AnalyzerInput(buffer: buffer))
+        }
         continuation.finish()
 
         // Structured child task: collects finalized segments while the analyzer runs, and
@@ -266,26 +273,33 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
         return format
     }
 
-    /// Builds an `AVAudioPCMBuffer` from mono float samples, converting to the analyzer's
-    /// preferred format when it differs from our native 16 kHz mono float.
-    private static func makeInputBuffer(
+    /// Converts mono float samples to the analyzer's preferred format in one pass, so the
+    /// resampler runs without a break, then splits the result into buffers of at most
+    /// `inputBufferSeconds`.
+    private static func makeInputBuffers(
         samples: [Float],
         sampleRate: Int,
         targetFormat: AVAudioFormat
-    ) throws -> AVAudioPCMBuffer {
+    ) throws -> [AVAudioPCMBuffer] {
         guard let sourceBuffer = AudioResampler.monoBuffer(samples, sampleRate: sampleRate) else {
             throw ServiceError.bufferPreparationFailed
         }
 
-        // No conversion needed when the analyzer accepts our native format.
+        let converted: AVAudioPCMBuffer
         if targetFormat == sourceBuffer.format {
-            return sourceBuffer
+            converted = sourceBuffer
+        } else {
+            do {
+                converted = try AudioResampler.convert(sourceBuffer, to: targetFormat)
+            } catch {
+                throw ServiceError.bufferPreparationFailed
+            }
         }
 
-        do {
-            return try AudioResampler.convert(sourceBuffer, to: targetFormat)
-        } catch {
+        let maxFrames = AVAudioFrameCount(targetFormat.sampleRate * inputBufferSeconds)
+        guard let buffers = AudioResampler.split(converted, maxFrames: maxFrames) else {
             throw ServiceError.bufferPreparationFailed
         }
+        return buffers
     }
 }

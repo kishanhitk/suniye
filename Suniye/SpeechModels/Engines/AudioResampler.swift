@@ -1,7 +1,7 @@
 import AVFoundation
 
-/// One-shot audio conversion through `AVAudioConverter` for engines whose model
-/// wants a fixed input format while capture runs at the device's native rate.
+/// Audio buffer helpers (build, convert, split) for engines whose model wants a
+/// fixed input format while capture runs at the device's native rate.
 enum AudioResampler {
     struct ResampleError: LocalizedError {
         var errorDescription: String? {
@@ -22,6 +22,29 @@ enum AudioResampler {
             }
         }
         return buffer
+    }
+
+    /// `buffer` copied into consecutive buffers of at most `maxFrames` frames each;
+    /// `nil` only if AVFoundation rejects the format.
+    static func split(_ buffer: AVAudioPCMBuffer, maxFrames: AVAudioFrameCount) -> [AVAudioPCMBuffer]? {
+        let bytesPerFrame = Int(buffer.format.streamDescription.pointee.mBytesPerFrame)
+        let source = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+        var chunks: [AVAudioPCMBuffer] = []
+        for start in stride(from: 0, to: buffer.frameLength, by: Int(maxFrames)) {
+            let count = min(maxFrames, buffer.frameLength - start)
+            guard let chunk = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: count) else {
+                return nil
+            }
+            chunk.frameLength = count
+            for (sourceData, chunkData) in zip(source, UnsafeMutableAudioBufferListPointer(chunk.mutableAudioBufferList)) {
+                guard let from = sourceData.mData, let to = chunkData.mData else {
+                    return nil
+                }
+                to.copyMemory(from: from.advanced(by: Int(start) * bytesPerFrame), byteCount: Int(count) * bytesPerFrame)
+            }
+            chunks.append(chunk)
+        }
+        return chunks
     }
 
     /// Converts a whole buffer (rate and/or layout) in a single pass.
