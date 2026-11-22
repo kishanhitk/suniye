@@ -142,8 +142,8 @@ private struct ToastView: View {
                     .font(.system(size: 12, weight: .semibold))
             }
             if let detail {
-                Text(detail)
-                    .font(.system(size: 12).monospacedDigit())
+                Text(numbers: detail)
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
         }

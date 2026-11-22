@@ -120,7 +120,7 @@ struct IssueReportView: View {
                 .disabled(form.status.isBusy)
 
             if let error = form.contactEmailValidationError {
-                Text(error)
+                Text(numbers: error)
                     .font(AppTypography.caption)
                     .foregroundStyle(.red)
             }
@@ -160,7 +160,7 @@ struct IssueReportView: View {
                 }
 
                 if let message = form.diagnosticsMessage {
-                    Text(message)
+                    Text(numbers: message)
                         .font(AppTypography.caption)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                 }
@@ -184,7 +184,11 @@ struct IssueReportView: View {
         case .sent:
             EmptyView()
         case let .failed(message):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
+            Label {
+                Text(numbers: message)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+            }
                 .font(AppTypography.subheadline)
                 .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
@@ -218,7 +222,7 @@ struct IssueReportView: View {
     }
 
     private func validationCaption(_ message: String, isEmpty: Bool) -> some View {
-        Text(message)
+        Text(numbers: message)
             .font(AppTypography.caption)
             .foregroundStyle(isEmpty ? MainWindowPalette.secondaryText : Color.red)
             .fixedSize(horizontal: false, vertical: true)

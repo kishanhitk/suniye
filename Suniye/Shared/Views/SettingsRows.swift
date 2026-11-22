@@ -20,10 +20,10 @@ struct DisclosureSettingRow: View {
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
+                    Text(numbers: title)
                         .foregroundStyle(Color.primary)
                     if let secondLine {
-                        Text(secondLine)
+                        Text(numbers: secondLine)
                             .font(AppTypography.subheadline)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -32,7 +32,7 @@ struct DisclosureSettingRow: View {
 
                 Spacer(minLength: 12)
 
-                Text(value)
+                Text(numbers: value)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .multilineTextAlignment(.trailing)
 
@@ -68,11 +68,11 @@ struct SettingsGroupHeading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(text)
+            Text(numbers: text)
                 .font(AppTypography.groupHeading)
                 .foregroundStyle(Color.primary)
             if let note {
-                Text(note)
+                Text(numbers: note)
                     .font(AppTypography.subheadline)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -129,7 +129,7 @@ struct ValueSettingRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             SettingRowLabel(title: title, info: info)
             Spacer(minLength: 12)
-            Text(value)
+            Text(numbers: value)
                 .font(valueFont)
                 .foregroundStyle(MainWindowPalette.secondaryText)
                 .multilineTextAlignment(.trailing)
@@ -166,7 +166,7 @@ struct SettingRowLabel: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Text(title)
+            Text(numbers: title)
                 .foregroundStyle(Color.primary)
             if let info {
                 Image(systemName: "info.circle")

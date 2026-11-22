@@ -188,7 +188,7 @@ struct TranscriptsPage: View {
     }
 
     private func dayHeader(for group: TranscriptDayGroup) -> some View {
-        Text(TranscriptBrowser.dayTitle(for: group.date).uppercased())
+        Text(numbers: TranscriptBrowser.dayTitle(for: group.date).uppercased())
             .font(AppTypography.caption)
             .tracking(0.8)
             .foregroundStyle(MainWindowPalette.tertiaryText)
@@ -318,7 +318,7 @@ struct TranscriptsHeaderView: View {
         HStack(alignment: .bottom, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
                 headline
-                Text(subline)
+                Text(numbers: subline)
                     .font(AppTypography.body)
                     .foregroundStyle(MainWindowPalette.secondaryText)
             }
@@ -336,10 +336,10 @@ struct TranscriptsHeaderView: View {
     /// a mistake.
     private var headline: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("\(stats.lifetimeSessions.formatted()) dictation\(stats.lifetimeSessions == 1 ? "" : "s")")
+            Text(numbers: "\(stats.lifetimeSessions.formatted()) dictation\(stats.lifetimeSessions == 1 ? "" : "s")")
 
             (
-                Text(timeSaved.compactDurationString).foregroundColor(.accentColor)
+                Text(numbers: timeSaved.compactDurationString).foregroundColor(.accentColor)
                     + Text(" saved")
             )
         }
@@ -408,7 +408,7 @@ struct TranscriptSearchBar: View {
                 .focused($isSearchFocused)
 
             if let resultCount {
-                Text(resultCount)
+                Text(numbers: resultCount)
                     .font(AppTypography.caption)
                     .foregroundStyle(MainWindowPalette.secondaryText)
             }

@@ -78,10 +78,9 @@ struct MeetingPlayerBar: View {
                 .disabled(!isOpen)
                 .accessibilityLabel("Position")
                 .accessibilityValue("\(clock(dragged ?? position)) of \(clock(duration))")
-                Text("\(clock(dragged ?? position)) / \(clock(duration))")
+                Text(numbers: "\(clock(dragged ?? position)) / \(clock(duration))")
                     .font(AppTypography.callout)
                     .foregroundStyle(MainWindowPalette.secondaryText)
-                    .monospacedDigit()
             }
         }
         .frame(height: AppMetrics.iconButtonSize)
