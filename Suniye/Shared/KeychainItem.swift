@@ -15,18 +15,18 @@ struct KeychainError: Error, Equatable {
 /// A generic-password item in the login Keychain. Every secret that the app
 /// saves goes through this type.
 struct KeychainItem: SecretItem {
+    /// The app is also the XCTest host, and a test run must not touch the
+    /// login Keychain: there every item is empty and a write fails.
+    private static let isTestRun = ProcessInfo.processInfo.isRunningUnderXCTest
+
     private let service: String
     private let account: String
     private let label: String
 
     /// The service is the bundle ID followed by `name`, so Suniye and Suniye
-    /// Preview keep separate items. The test host is the app itself, so a
-    /// test run uses another prefix and never reads the user's items.
+    /// Preview keep separate items.
     init(name: String, account: String, label: String) {
-        let prefix = ProcessInfo.processInfo.isRunningUnderXCTest
-            ? "dev.suniye.app.tests"
-            : Bundle.main.bundleIdentifier ?? "dev.suniye.app"
-        service = "\(prefix).\(name)"
+        service = "\(Bundle.main.bundleIdentifier ?? "dev.suniye.app").\(name)"
         self.account = account
         self.label = label
     }
@@ -36,6 +36,7 @@ struct KeychainItem: SecretItem {
     }
 
     func read() throws -> Data? {
+        guard !Self.isTestRun else { return nil }
         var read = query
         read[kSecReturnData] = true
         read[kSecMatchLimit] = kSecMatchLimitOne
@@ -52,6 +53,7 @@ struct KeychainItem: SecretItem {
     }
 
     func write(_ data: Data) throws {
+        guard !Self.isTestRun else { throw KeychainError(status: errSecNotAvailable) }
         var status = SecItemUpdate(query as CFDictionary, [kSecValueData: data] as CFDictionary)
         if status == errSecItemNotFound {
             var item = query
@@ -63,6 +65,7 @@ struct KeychainItem: SecretItem {
     }
 
     func delete() throws {
+        guard !Self.isTestRun else { return }
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw KeychainError(status: status) }
     }
