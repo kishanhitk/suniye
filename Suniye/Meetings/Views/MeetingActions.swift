@@ -182,8 +182,8 @@ struct MeetingTimer: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            Text(MeetingTranscript.clock(session.elapsed(at: context.date)))
-                .font(AppTypography.body.monospacedDigit())
+            Text(numbers: MeetingTranscript.clock(session.elapsed(at: context.date)))
+                .font(AppTypography.body)
         }
     }
 }

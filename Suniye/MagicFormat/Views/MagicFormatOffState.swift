@@ -62,7 +62,7 @@ struct MagicFormatOffState: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(needsDownload && !appState.canStartLocalGemmaDownload)
 
-            Text(costText)
+            Text(numbers: costText)
                 .font(AppTypography.subheadline)
                 .foregroundStyle(MainWindowPalette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

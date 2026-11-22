@@ -86,7 +86,7 @@ struct MeetingSettingsGroup: View {
             RowSeparator()
             ControlSettingRow(title: "Meeting files", info: Self.audioRule(meetings.settings.audioRetention)) {
                 HStack(spacing: 10) {
-                    Text(diskBytes.map(Self.size) ?? "")
+                    Text(numbers: diskBytes.map(Self.size) ?? "")
                         .foregroundStyle(MainWindowPalette.secondaryText)
                     Button("Show in Finder") {
                         try? FileManager.default.createDirectory(at: meetings.store.rootDirectory, withIntermediateDirectories: true)
@@ -224,10 +224,9 @@ private struct MeetingTranscriptModelRow: View {
             ProgressView(value: appState.downloadProgress)
                 .progressViewStyle(.linear)
                 .frame(width: 80)
-            Text("\(ASRModelCatalog.entry(for: model).displayName) · \(Int(appState.downloadProgress * 100))%")
+            Text(numbers: "\(ASRModelCatalog.entry(for: model).displayName) · \(Int(appState.downloadProgress * 100))%")
                 .font(AppTypography.caption)
                 .foregroundStyle(MainWindowPalette.secondaryText)
-                .monospacedDigit()
             if appState.canCancelASRModelDownload {
                 Button("Cancel") { appState.cancelASRModelDownload() }
             }

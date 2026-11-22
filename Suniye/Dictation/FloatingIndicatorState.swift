@@ -48,7 +48,7 @@ enum FloatingIndicatorMetrics {
     static let meetingPillMeterWidth: CGFloat = 18
     static let meetingPillGlyphWidth: CGFloat = 14
     static let meetingPillIconWidth: CGFloat = 11
-    static let meetingPillTimeFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    static let meetingPillTimeFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
     static let meetingPillButtonFont = NSFont.systemFont(ofSize: 12, weight: .medium)
     /// "0:00:00": the widest time of a recording, which stops at 4 hours.
     static let meetingPillTimeWidth = textWidth("0:00:00", font: meetingPillTimeFont)

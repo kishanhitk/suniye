@@ -203,7 +203,7 @@ private struct Heading: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.system(size: 13, weight: .semibold))
-            Text(detail)
+            Text(numbers: detail)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }

@@ -6,7 +6,7 @@ struct StylePageStatusPill: View {
     let isPositive: Bool
 
     var body: some View {
-        Text(text)
+        Text(numbers: text)
             .font(AppTypography.caption)
             .foregroundStyle(isPositive ? .green : MainWindowPalette.secondaryText)
             .padding(.horizontal, 8)
@@ -23,7 +23,7 @@ struct StylePageProviderStatusPill: View {
     let color: Color
 
     var body: some View {
-        Text(text)
+        Text(numbers: text)
             .font(AppTypography.caption)
             .lineLimit(1)
             .foregroundStyle(color)
@@ -40,7 +40,7 @@ struct StylePageProviderTagBadge: View {
     let title: String
 
     var body: some View {
-        Text(title)
+        Text(numbers: title)
             .font(AppTypography.caption)
             .foregroundStyle(MainWindowPalette.secondaryText)
             .lineLimit(1)

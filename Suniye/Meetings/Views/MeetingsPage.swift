@@ -128,7 +128,7 @@ struct MeetingsPage: View {
                             }
                         }
                     } header: {
-                        Text(TranscriptBrowser.dayTitle(for: group.day).uppercased())
+                        Text(numbers: TranscriptBrowser.dayTitle(for: group.day).uppercased())
                             .font(AppTypography.caption)
                             .tracking(0.8)
                             .foregroundStyle(MainWindowPalette.tertiaryText)
@@ -214,7 +214,6 @@ private struct LiveMeetingRow: View {
             Text(session.isPaused ? "Paused" : "Recording")
                 .font(AppTypography.body)
             MeetingTimer(session: session)
-                .font(AppTypography.body.monospaced())
             Text(session.record.title)
                 .font(AppTypography.bodyMedium)
                 .lineLimit(1)
@@ -243,8 +242,8 @@ private struct MeetingRow: View {
     var body: some View {
         Button(action: open) {
             HStack(alignment: .firstTextBaseline, spacing: 16) {
-                Text(record.startedAt.formatted(date: .omitted, time: .shortened))
-                    .font(AppTypography.body.monospacedDigit())
+                Text(numbers: record.startedAt.formatted(date: .omitted, time: .shortened))
+                    .font(AppTypography.body)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .frame(width: 72, alignment: .leading)
                 VStack(alignment: .leading, spacing: 2) {
@@ -270,8 +269,8 @@ private struct MeetingRow: View {
                 }
                 Spacer(minLength: 12)
                 if let duration = record.duration {
-                    Text(MeetingDurationText.text(duration))
-                        .font(AppTypography.body.monospacedDigit())
+                    Text(numbers: MeetingDurationText.text(duration))
+                        .font(AppTypography.body)
                         .foregroundStyle(MainWindowPalette.tertiaryText)
                 }
             }

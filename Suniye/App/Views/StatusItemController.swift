@@ -133,16 +133,19 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             item.isHidden = live == nil
         }
         if let live {
-            meetingStatusItem.title = "\(live.isPaused ? "Paused" : "Recording") · \(MeetingTranscript.clock(live.elapsed(at: Date())))"
+            let status = "\(live.isPaused ? "Paused" : "Recording") · \(MeetingTranscript.clock(live.elapsed(at: Date())))"
+            meetingStatusItem.title = status
+            meetingStatusItem.attributedTitle = NumberRuns.attributed(status, font: .menuFont(ofSize: 0))
             pauseMeetingItem.title = live.isPaused ? "Resume Recording" : "Pause Recording"
         }
 
         if let setupTitle = appState.setupMenuItemTitle {
             finishSetupItem.isHidden = false
             finishSetupItem.title = setupTitle
-            finishSetupItem.attributedTitle = NSAttributedString(
-                string: setupTitle,
-                attributes: [.font: NSFont.menuFont(ofSize: 0).withBoldTrait()]
+            finishSetupItem.attributedTitle = NumberRuns.attributed(
+                setupTitle,
+                font: NSFont.menuFont(ofSize: 0).withBoldTrait(),
+                weight: .bold
             )
         } else {
             finishSetupItem.isHidden = true
