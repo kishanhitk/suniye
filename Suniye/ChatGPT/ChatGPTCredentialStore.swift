@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 /// One ChatGPT account that signed in on this Mac.
 struct ChatGPTCredentials: Codable, Equatable, Sendable {
@@ -32,48 +31,25 @@ protocol ChatGPTCredentialStore: Sendable {
     func delete()
 }
 
-/// One generic-password item in the login Keychain. The service has the
-/// bundle ID, so Suniye and Suniye Preview keep separate sign-ins: a refresh
-/// token works once, and two apps with one token would end each other's
-/// sign-in.
+/// Suniye and Suniye Preview must not share this item: a refresh token works
+/// once, and two apps with one token would end each other's sign-in.
 struct KeychainChatGPTCredentialStore: ChatGPTCredentialStore {
-    struct WriteError: Error {
-        let status: OSStatus
-    }
+    private let item: SecretItem
 
-    private let service: String
-    private let account = "connection"
-
-    init(bundleID: String = Bundle.main.bundleIdentifier ?? "dev.suniye.app") {
-        service = "\(bundleID).chatgpt"
-    }
-
-    private var query: [CFString: Any] {
-        [kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: account]
+    init(item: SecretItem = KeychainItem(name: "chatgpt", account: "connection", label: "\(ChatGPTOAuth.appName) ChatGPT sign-in")) {
+        self.item = item
     }
 
     func load() -> ChatGPTCredentials? {
-        var read = query
-        read[kSecReturnData] = true
-        read[kSecMatchLimit] = kSecMatchLimitOne
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(read as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return nil }
+        guard let data = try? item.read() else { return nil }
         return try? JSONDecoder().decode(ChatGPTCredentials.self, from: data)
     }
 
     func save(_ credentials: ChatGPTCredentials) throws {
-        let data = try JSONEncoder().encode(credentials)
-        var status = SecItemUpdate(query as CFDictionary, [kSecValueData: data] as CFDictionary)
-        if status == errSecItemNotFound {
-            var item = query
-            item[kSecValueData] = data
-            item[kSecAttrLabel] = "\(ChatGPTOAuth.appName) ChatGPT sign-in"
-            status = SecItemAdd(item as CFDictionary, nil)
-        }
-        guard status == errSecSuccess else { throw WriteError(status: status) }
+        try item.write(JSONEncoder().encode(credentials))
     }
 
     func delete() {
-        SecItemDelete(query as CFDictionary)
+        try? item.delete()
     }
 }

@@ -180,6 +180,32 @@ final class TestKeychainService: KeychainServiceProtocol {
     }
 }
 
+/// A Keychain item in memory: no test reads or writes the login Keychain.
+final class MemorySecretItem: SecretItem, @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Data?
+
+    init(_ data: Data? = nil) {
+        stored = data
+    }
+
+    var data: Data? {
+        lock.withLock { stored }
+    }
+
+    func read() throws -> Data? {
+        lock.withLock { stored }
+    }
+
+    func write(_ data: Data) throws {
+        lock.withLock { stored = data }
+    }
+
+    func delete() throws {
+        lock.withLock { stored = nil }
+    }
+}
+
 @MainActor
 final class StubAppUpdateController: AppUpdateControllerProtocol {
     var canCheckForUpdates = false
