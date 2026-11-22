@@ -100,18 +100,26 @@ struct MeetingSummary: Equatable, Sendable {
     let parts: Int
 }
 
-enum MeetingSummaryError: LocalizedError, Equatable {
+enum MeetingSummaryError: Error, Equatable {
     /// Fewer than `MeetingSummaryWriter.minimumWords` words and no notes.
     case tooLittleSpeech
-    /// The model failed; the text is the cause that the meeting page shows.
-    case failed(String)
+    case failed(MeetingSummaryFailure)
+}
 
-    var errorDescription: String? {
+extension MeetingSummaryFailure {
+    /// The cause that the meeting page shows.
+    var cause: String {
         switch self {
-        case .tooLittleSpeech:
-            return MeetingStatus.noSpeechTitle
-        case let .failed(cause):
-            return cause
+        case .truncated:
+            return "The model stopped before it finished."
+        case .timeout:
+            return "The model took too long."
+        case .notReady:
+            return "The model is not ready."
+        case .empty:
+            return "The model wrote nothing."
+        case .modelError:
+            return "The model stopped with an error."
         }
     }
 }
@@ -277,7 +285,7 @@ actor MeetingSummaryWriter {
         }
         let parsed = MeetingSummaryText.parse(answer)
         guard !parsed.body.isEmpty else {
-            throw MeetingSummaryError.failed(Self.cause(of: LLMPostProcessorError.emptyOutput))
+            throw MeetingSummaryError.failed(.empty)
         }
         return MeetingSummary(title: parsed.title, body: parsed.body, parts: parts)
     }
@@ -378,7 +386,7 @@ actor MeetingSummaryWriter {
             // reports, and an error description can hold meeting text.
             let underlying = error as NSError
             AppLogger.shared.log(.error, "meeting summary request failed kind=\(request.kind) domain=\(underlying.domain) code=\(underlying.code)")
-            throw MeetingSummaryError.failed(Self.cause(of: error))
+            throw MeetingSummaryError.failed(Self.failure(of: error))
         }
     }
 
@@ -393,18 +401,18 @@ actor MeetingSummaryWriter {
         Int(Double(context - output) * Self.fillFactor)
     }
 
-    static func cause(of error: Error) -> String {
+    static func failure(of error: Error) -> MeetingSummaryFailure {
         switch error as? LLMPostProcessorError {
         case .outputTruncated:
-            return "The model stopped before it finished."
+            return .truncated
         case .timeout:
-            return "The model took too long."
+            return .timeout
         case .invalidConfiguration:
-            return "The model is not ready."
+            return .notReady
         case .emptyOutput, .malformedResponse:
-            return "The model wrote nothing."
+            return .empty
         case .provider, .network, .unauthorized, .none:
-            return "The model stopped with an error."
+            return .modelError
         }
     }
 }

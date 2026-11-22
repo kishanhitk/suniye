@@ -117,11 +117,17 @@ final class MeetingSummaries {
             change = { $0.status = .noSpeech }
             outcome = .noSpeech
         } catch {
-            AppLogger.shared.log(.error, "meeting summary failed id=\(id.uuidString) engine=\(engine.rawValue) error=\(error.localizedDescription)")
-            let cause = error.localizedDescription
+            // Only the kind: app.log goes into diagnostic reports.
+            let failure: MeetingSummaryFailure
+            if case let MeetingSummaryError.failed(kind) = error {
+                failure = kind
+            } else {
+                failure = .modelError
+            }
+            AppLogger.shared.log(.error, "meeting summary failed id=\(id.uuidString) engine=\(engine.rawValue) failure=\(failure.rawValue)")
             change = {
                 $0.status = .summaryFailed
-                $0.summaryFailure = cause
+                $0.summaryFailure = failure
             }
             outcome = .failed
         }

@@ -249,6 +249,16 @@ public enum MeetingSummaryEngine: String, Sendable, CaseIterable {
     case localModel = "local_model"
 }
 
+/// Why a meeting's summary failed.
+public enum MeetingSummaryFailure: String, Sendable, CaseIterable, Codable {
+    case timeout
+    /// The answer stopped at a length limit.
+    case truncated
+    case empty
+    case notReady = "not_ready"
+    case modelError = "model_error"
+}
+
 /// The text of a meeting that the user can change on its page.
 public enum MeetingEditedText: String, Sendable, CaseIterable {
     case title, transcript, summary

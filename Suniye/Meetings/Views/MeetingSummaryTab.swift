@@ -37,7 +37,7 @@ struct MeetingSummaryTab: View {
             EmptyStateCard(
                 icon: "exclamationmark.triangle",
                 title: MeetingStatus.summaryFailedTitle,
-                detail: [record.summaryFailure, "Your transcript and notes are saved."].compactMap { $0 }.joined(separator: " ")
+                detail: [record.summaryFailure?.cause, "Your transcript and notes are saved."].compactMap { $0 }.joined(separator: " ")
             ) {
                 Button("Try Again") {
                     Task { await meetings.regenerate(record.id) }
