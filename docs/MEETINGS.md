@@ -1,12 +1,14 @@
 # Meetings
 
-Suniye records a call or a meeting in the room. After the recording stops, it writes the transcript and then the summary. Capture, transcription and summary run on the Mac.
+Suniye records a call or a meeting in the room. After the recording stops, it writes the transcript and then the summary. Capture and transcription run on the Mac. The summary runs on the Mac unless you choose a hosted summary model.
 
 ## Privacy
 
-- No audio, transcript, notes or summary leaves the Mac.
+- No audio leaves the Mac.
+- No transcript, notes or summary leaves the Mac while **Summary model** is Automatic, the default.
+- With **Summary model** set to ChatGPT or API endpoint, the transcript text and your notes go to that service after each meeting, to write the summary. See [Summary model](#summary-model).
 - The audio stays on the Mac until the transcript is ready, or up to 30 days when you choose it (see [Meeting audio](#meeting-audio)).
-- Anonymous counts go to analytics when that setting is on: how a recording starts and stops, its length in whole minutes, the tracks, the number of transcript lines and summary parts, the times, the answers to the call cards, the part of a meeting's text that you edit (title, transcript or summary, once for each part in a visit of the page), and the first play of its audio in a visit. The [privacy page](https://suniye.app/privacy) lists them.
+- Anonymous counts go to analytics when that setting is on: how a recording starts and stops, its length in whole minutes, the tracks, the number of transcript lines and summary parts, the times, the kind of summary model (never a model name or an address), the kind of a summary failure, the result of a ChatGPT sign-in, the answers to the call cards, the part of a meeting's text that you edit (title, transcript or summary, once for each part in a visit of the page), and the first play of its audio in a visit. The [privacy page](https://suniye.app/privacy) lists them.
 
 ## Tracks
 
@@ -126,8 +128,51 @@ While the audio is on the Mac, **Transcribe Again…** in the meeting's ··· m
 | The local model (Gemma) | The Magic Format local model download, Apple Silicon |
 | Apple Intelligence | macOS 26 with Apple Intelligence on |
 
-- Suniye uses the local model when it is installed, and Apple Intelligence only when it is not.
+- Suniye uses the local model when it is installed, and Apple Intelligence only when it is not. This is **Summary model: Automatic**.
 - The summary can miss facts. The transcript has all the words.
+
+### Summary model
+
+**Settings → General → Meetings → Summary model**.
+
+| Choice | Model | Where the text goes |
+|---|---|---|
+| Automatic (default) | The local model, else Apple Intelligence | Nowhere |
+| ChatGPT | Your ChatGPT plan, default GPT-6.1 Sol | OpenAI |
+| API endpoint | The Magic Format endpoint and key, with a model ID for summaries | That service |
+
+- A hosted model (ChatGPT, API endpoint) gets the transcript text and your notes. It never gets audio.
+- Suniye uses a hosted model only after you choose it and agree in its sheet. Automatic never uses one.
+- A hosted model writes the summary from the whole transcript in one request, for a meeting up to about 4 hours of talk. A longer one goes to notes on parts first.
+- A dictation does not stop a hosted summary.
+- A meeting that waits for its summary uses the choice at the time it starts.
+
+ChatGPT:
+
+- **Continue with ChatGPT** opens the browser for Sign in with ChatGPT. Suniye registers itself with your account and keeps the sign-in in the macOS Keychain.
+- Summaries use your ChatGPT plan. A Plus plan has one five-hour limit for all apps. **Manage usage** opens ChatGPT Settings → Usage.
+- **Model** lists the models of your account.
+- **Disconnect** deletes the sign-in from the Mac, asks OpenAI to end it, and sets **Summary model** to Automatic. When OpenAI does not confirm, remove the access in ChatGPT Settings → Security and login → Sign in with ChatGPT.
+- A sign-in that you do not use for 30 days ends. Connect again.
+- Suniye and Suniye Preview have separate sign-ins.
+
+API endpoint:
+
+- The endpoint and the key are the ones of Magic Format (**Edit Endpoint…**). The model ID is for summaries only.
+- You agree for one endpoint host. After a change of the host, open the sheet and agree again.
+- A free Gemini API key lets Google use the text to train its models. Use a paid key for meetings.
+- A local server (Ollama, LM Studio) with a small context can cut a long transcript with no error. Suniye plans a hosted request for a context of 128,000 tokens.
+
+When a hosted summary fails, the meeting page shows the cause. Suniye does not switch to another model by itself. **Summarize on this Mac** writes that one summary with the Automatic rule and leaves the setting as it is.
+
+| Cause | Buttons |
+|---|---|
+| No connection, the service took too long, the service returned an error, the answer was cut short or empty | Try Again, Summarize on this Mac |
+| The API key was rejected, the summary model is not set up | Meeting Settings…, Summarize on this Mac |
+| Connect ChatGPT again, the account cannot use its plan in Suniye | Meeting Settings…, Summarize on this Mac |
+| The ChatGPT plan limit is reached | Manage Usage, Try Again, Summarize on this Mac |
+
+After a plan limit, Suniye sends no new ChatGPT request until you click Try Again, open the ChatGPT sheet, or start Suniye again.
 
 Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets, each with 6 planted facts in talk that is mostly filler, General template.
 
@@ -142,11 +187,11 @@ The local model on llama.cpp `7e960f40` with the drafter ([LOCAL_GEMMA.md](LOCAL
 - You can rename and edit a built-in template. **Reset to Default** brings back its shipped name and text.
 - When you delete the template that is the **Default template**, General is the default again.
 - A template's "## " headings are the sections of the summary. A section named Overview or Summary is a short paragraph; every other section is a list.
-- The transcript is read in parts of at most about 4,000 tokens. The model gets each part, and your notes, with a request for at most three items for each section. Suniye joins the items in meeting order, your notes first, and drops exact repeats; the model then writes only the title and the overview. No last step can drop an item.
+- On the Mac, the transcript is read in parts of at most about 4,000 tokens. The model gets each part, and your notes, with a request for at most three items for each section. Suniye joins the items in meeting order, your notes first, and drops exact repeats; the model then writes only the title and the overview. No last step can drop an item.
 - The built-in sections (Decisions, Action items, Dates and numbers, Open questions) have fixed rules for what goes in them. A template that you wrote or edited goes to each part as a guide to its sections.
 - The built-in templates have a **Dates and numbers** section for the dates and numbers that fit no other section.
 - A template with no list section is summarized by the model in one step, or from notes on the parts when the transcript is long. So is a template so long that a part would hold less than 1,000 tokens of transcript.
-- **Regenerate** (the arrow at the right of the tabs, on the Summary tab) opens the templates; the current one has a checkmark. The template that you pick writes the summary again. Another template also becomes the **Default template**. A summary that you edited is replaced only after you answer "Replace your edited summary?".
+- **Regenerate** (the arrow at the right of the tabs, on the Summary tab) opens the templates; the current one has a checkmark. The template that you pick writes the summary again, with the model of **Summary model**. Another template also becomes the **Default template**. A summary that you edited is replaced only after you answer "Replace your edited summary?".
 
 ## Edit
 

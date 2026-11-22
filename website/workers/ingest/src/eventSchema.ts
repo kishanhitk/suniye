@@ -38,7 +38,10 @@
 // MEETINGS (appended aliases, no slot moved; `source`, `reason`, `outcome`,
 // `action`, `kind`, `asr_model` and `duration_ms` use their existing slots):
 //   meeting_ended       tracks→blob15
-//   meeting_summarized  provider→blob16 (before the device chip), parts→double15
+//   meeting_summarized  provider→blob16 (before the device chip; local_model,
+//                       apple_intelligence, chatgpt, api_endpoint), parts→double15,
+//                       reason→blob14 (the failure kind of a failed summary)
+//   chatgpt_sign_in     outcome→blob15
 //   meeting_transcribed segments→double15
 
 import type { PropValue, WireBatch, WireEvent } from "./types";
