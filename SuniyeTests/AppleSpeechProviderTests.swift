@@ -95,6 +95,24 @@ final class AppleSpeechProviderTests: XCTestCase {
         XCTAssertEqual(progress.last, 1)
     }
 
+    // MARK: - Analyzer input buffers
+
+    func testSplitCopiesConsecutiveFramesWithAShortLastBuffer() throws {
+        let buffer = try XCTUnwrap(AudioResampler.monoBuffer((0 ..< 10).map(Float.init), sampleRate: 16_000))
+
+        let chunks = try XCTUnwrap(AudioResampler.split(buffer, maxFrames: 4))
+
+        XCTAssertEqual(chunks.map(\.frameLength), [4, 4, 2])
+        let values = try chunks.map { chunk in
+            let channel = try XCTUnwrap(chunk.floatChannelData?[0])
+            return Array(UnsafeBufferPointer(start: channel, count: Int(chunk.frameLength)))
+        }
+        XCTAssertEqual(values, [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9]])
+
+        let exact = try XCTUnwrap(AudioResampler.monoBuffer([Float](repeating: 0.5, count: 8), sampleRate: 16_000))
+        XCTAssertEqual(AudioResampler.split(exact, maxFrames: 4)?.map(\.frameLength), [4, 4], "no empty last buffer")
+    }
+
     // MARK: - Apple engine (macOS 26+)
 
     @available(macOS 26, *)
