@@ -172,6 +172,15 @@ enum ChatGPTOAuth {
         return object["code"] as? String
     }
 
+    /// An error code as a log line can hold it. A code is a short name such
+    /// as `invalid_grant`; any other text from a service could hold the
+    /// user's words, so it becomes "other".
+    static func loggable(_ code: String?) -> String {
+        guard let code else { return "none" }
+        let isName = !code.isEmpty && code.count <= 64 && code.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_") }
+        return isName ? code : "other"
+    }
+
     private static func formRequest(_ url: URL, _ items: [URLQueryItem]) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

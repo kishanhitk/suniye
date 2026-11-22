@@ -212,14 +212,11 @@ struct APIEndpointSummarySheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("API endpoint")
-                    .font(AppTypography.cardTitle)
-                Text("After each meeting, Suniye sends the transcript and your notes to this service to write the summary. Audio never leaves this Mac.")
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text("API endpoint")
+                .font(AppTypography.cardTitle)
+
+            Text("After each meeting, Suniye sends the transcript and your notes to this service to write the summary. Audio never leaves this Mac.")
+                .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Endpoint")
@@ -243,11 +240,6 @@ struct APIEndpointSummarySheet: View {
                 TextField("gpt-6.1-sol or provider/model-id", text: $modelID)
                     .textFieldStyle(.roundedBorder)
                     .font(AppTypography.codeBodyMedium)
-                if validModelID == nil, !modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Label("Enter a valid model name.", systemImage: "exclamationmark.triangle.fill")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.red)
-                }
             }
 
             HStack(spacing: 12) {

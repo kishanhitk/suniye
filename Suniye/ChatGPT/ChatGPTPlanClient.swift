@@ -165,9 +165,9 @@ actor ChatGPTPlanClient {
     /// Sends the request with the access token. When the service refuses
     /// the token, one refresh and one more send follow.
     private func authorized(_ request: @Sendable (String) -> URLRequest) async throws -> (URLSession.AsyncBytes, Int) {
-        var refreshed = false
+        var rejected: String?
         while true {
-            let token = try await connection.accessToken(refreshing: refreshed)
+            let token = try await connection.accessToken(rejected: rejected)
             let bytes: URLSession.AsyncBytes
             let response: URLResponse
             do {
@@ -176,8 +176,8 @@ actor ChatGPTPlanClient {
                 throw try ChatGPTError(transport: error)
             }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            if status == 401, !refreshed {
-                refreshed = true
+            if status == 401, rejected == nil {
+                rejected = token
                 continue
             }
             if status != 200 {
@@ -208,7 +208,7 @@ actor ChatGPTPlanClient {
     }
 
     private static func failure(status: Int, code: String?) -> ChatGPTError {
-        AppLogger.shared.log(.error, "chatgpt answer failed status=\(status) code=\(code ?? "none")")
+        AppLogger.shared.log(.error, "chatgpt answer failed status=\(status) code=\(ChatGPTOAuth.loggable(code))")
         switch code {
         case planLimitCode:
             return .planLimit

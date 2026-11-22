@@ -1,3 +1,4 @@
+import Network
 import Security
 import SuniyeAnalytics
 import XCTest
@@ -301,6 +302,9 @@ final class ChatGPTOAuthTests: XCTestCase {
         XCTAssertEqual(ChatGPTOAuth.errorCode(in: Data(#"{"error":"invalid_grant"}"#.utf8)), "invalid_grant")
         XCTAssertEqual(ChatGPTOAuth.errorCode(in: Data(#"{"error":{"code":"refresh_token_reused","message":"x"}}"#.utf8)), "refresh_token_reused")
         XCTAssertNil(ChatGPTOAuth.errorCode(in: Data("<html>".utf8)))
+        XCTAssertEqual(ChatGPTOAuth.loggable("invalid_grant"), "invalid_grant")
+        XCTAssertEqual(ChatGPTOAuth.loggable("We agreed to ship on Friday"), "other", "text from a service never reaches the log")
+        XCTAssertEqual(ChatGPTOAuth.loggable(nil), "none")
     }
 }
 
@@ -364,6 +368,27 @@ final class ChatGPTLoopbackListenerTests: XCTestCase {
         XCTAssertEqual(targets.values, ["/auth/callback?code=abc&state=s1", "/other"])
         XCTAssertNotEqual(first.port, 0)
         XCTAssertNotEqual(second.port, first.port)
+    }
+
+    func testARequestThatComesInTwoPiecesIsReadWhole() async throws {
+        let listener = try await ChatGPTLoopbackListener.start(preferredPort: 0) { target in
+            target == "/auth/callback?code=abc" ? .init(status: 200, text: "Whole.") : .notFound
+        }
+        defer { listener.stop() }
+        let connection = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: listener.port)!, using: .tcp)
+        defer { connection.cancel() }
+        connection.start(queue: .global())
+
+        connection.send(content: Data("GET /auth/".utf8), completion: .contentProcessed { _ in })
+        try await Task.sleep(for: .milliseconds(100))
+        connection.send(content: Data("callback?code=abc HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".utf8), completion: .contentProcessed { _ in })
+        let answer: Data = await withCheckedContinuation { continuation in
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 4_096) { data, _, _, _ in
+                continuation.resume(returning: data ?? Data())
+            }
+        }
+
+        XCTAssertTrue(String(decoding: answer, as: UTF8.self).hasPrefix("HTTP/1.1 200"))
     }
 }
 
@@ -429,8 +454,13 @@ final class ChatGPTConnectionTests: XCTestCase {
         XCTAssertEqual(store.load()?.tokens, .init(accessToken: "access-2", refreshToken: "refresh-2", scopes: ChatGPTOAuth.scopes.split(separator: " ").map(String.init), expiresAt: fixedNow.addingTimeInterval(3_600)))
 
         let later = try await connection.accessToken()
-        XCTAssertEqual(later, "access-2")
-        XCTAssertEqual(openAI.sent(to: ChatGPTOAuth.tokenURL).count, 1, "a fresh token needs no refresh")
+        let afterALateRefusal = try await connection.accessToken(rejected: "access-1")
+        XCTAssertEqual([later, afterALateRefusal], ["access-2", "access-2"])
+        XCTAssertEqual(openAI.sent(to: ChatGPTOAuth.tokenURL).count, 1, "a fresh token needs no refresh, also when an older one was refused")
+
+        openAI.answer(ChatGPTOAuth.tokenURL, (200, FakeOpenAI.tokens(access: "access-3", refresh: "refresh-3")))
+        let afterARefusal = try await connection.accessToken(rejected: "access-2")
+        XCTAssertEqual(afterARefusal, "access-3", "a refused token is replaced")
     }
 
     func testARefreshTokenThatCannotWorkAgainEndsTheSignInAndKeepsTheRegistration() async {

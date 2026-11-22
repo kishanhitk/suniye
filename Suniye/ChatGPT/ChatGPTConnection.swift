@@ -136,7 +136,7 @@ actor ChatGPTConnection {
         do {
             let (data, status) = try await send(ChatGPTOAuth.codeExchange(code: code, clientID: clientID, attempt: attempt, redirectURI: redirectURI))
             guard status == 200, let response = try? JSONDecoder().decode(ChatGPTOAuth.TokenResponse.self, from: data), let idToken = response.idToken else {
-                AppLogger.shared.log(.error, "chatgpt sign-in: code exchange status=\(status) code=\(ChatGPTOAuth.errorCode(in: data) ?? "none")")
+                AppLogger.shared.log(.error, "chatgpt sign-in: code exchange status=\(status) code=\(ChatGPTOAuth.loggable(ChatGPTOAuth.errorCode(in: data)))")
                 return .failed
             }
             let claims = try ChatGPTIDToken.validate(idToken, keys: try await signingKeys(), clientID: clientID, nonce: attempt.nonce, now: now())
@@ -147,6 +147,11 @@ actor ChatGPTConnection {
             guard response.allowsPlanUse else {
                 _ = await revoke(refreshToken: response.refreshToken, clientID: clientID)
                 return .noPlanPermission
+            }
+            // A cancel after the last request: the user stopped this sign-in.
+            guard !Task.isCancelled else {
+                _ = await revoke(refreshToken: response.refreshToken, clientID: clientID)
+                return .canceled
             }
             let signedIn = ChatGPTCredentials(
                 clientID: clientID,
@@ -181,11 +186,12 @@ actor ChatGPTConnection {
 
     // MARK: - Tokens
 
-    /// The access token for a request. `refreshing`: the service refused the
-    /// token that the last call gave.
-    func accessToken(refreshing: Bool = false) async throws -> String {
+    /// The access token for a request. `rejected`: a token that the service
+    /// refused. It causes a refresh only while it is still the saved token:
+    /// another request can have replaced it already.
+    func accessToken(rejected: String? = nil) async throws -> String {
         guard let tokens = current()?.tokens else { throw ChatGPTError.signInEnded }
-        if !refreshing, tokens.expiresAt.timeIntervalSince(now()) > Self.refreshMargin {
+        if tokens.accessToken != rejected, tokens.expiresAt.timeIntervalSince(now()) > Self.refreshMargin {
             return tokens.accessToken
         }
         if let refreshTask {
@@ -214,7 +220,7 @@ actor ChatGPTConnection {
         }
         guard generation == started else { throw ChatGPTError.signInEnded }
         let code = ChatGPTOAuth.errorCode(in: data)
-        AppLogger.shared.log(.error, "chatgpt refresh failed status=\(status) code=\(code ?? "none")")
+        AppLogger.shared.log(.error, "chatgpt refresh failed status=\(status) code=\(ChatGPTOAuth.loggable(code))")
         if let code, Self.endedSignInCodes.contains(code) {
             var ended = saved
             ended.tokens = nil

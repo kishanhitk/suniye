@@ -74,14 +74,27 @@ final class ChatGPTLoopbackListener: @unchecked Sendable {
 
     private static func serve(_ connection: NWConnection, on queue: DispatchQueue, route: @escaping @Sendable (String) -> Page) {
         connection.start(queue: queue)
-        // The request line of a callback fits in the first read.
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) { data, _, _, _ in
-            let page = data.flatMap(target(ofRequest:)).map(route) ?? .notFound
+        answer(connection, received: Data(), route: route)
+    }
+
+    /// Reads until the request line is whole, then sends the page. A
+    /// request can come in several pieces.
+    private static func answer(_ connection: NWConnection, received: Data, route: @escaping @Sendable (String) -> Page) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: maximumRequestBytes) { data, _, isComplete, error in
+            let received = received + (data ?? Data())
+            let hasRequestLine = received.range(of: Data("\r\n".utf8)) != nil
+            if !hasRequestLine, !isComplete, error == nil, received.count < maximumRequestBytes {
+                answer(connection, received: received, route: route)
+                return
+            }
+            let page = (hasRequestLine ? target(ofRequest: received) : nil).map(route) ?? .notFound
             connection.send(content: response(page), completion: .contentProcessed { _ in
                 connection.cancel()
             })
         }
     }
+
+    private static let maximumRequestBytes = 16_384
 
     /// "/path?query" of "GET /path?query HTTP/1.1".
     static func target(ofRequest data: Data) -> String? {
