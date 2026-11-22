@@ -290,6 +290,9 @@ final class AppState {
     }
     var hasLLMAPIKey = false
     var llmKeyOperationError: String?
+    /// One save or clear of the API key at a time: two that overlap could
+    /// finish in either order and undo the user's last action.
+    private(set) var isLLMKeyOperationInProgress = false
     var isMagicFormatSetupTestInProgress = false
     /// Which engine the running test belongs to. The engine chooser lets you test
     /// a row before switching to it, so "a test is running" is not enough — the
@@ -1868,6 +1871,9 @@ final class AppState {
             llmKeyOperationError = "API key can't be empty."
             return
         }
+        guard !isLLMKeyOperationInProgress else { return }
+        isLLMKeyOperationInProgress = true
+        defer { isLLMKeyOperationInProgress = false }
 
         do {
             try await keychainService.setLLMKey(normalized)
@@ -1883,6 +1889,10 @@ final class AppState {
     }
 
     func clearLLMAPIKey() async {
+        guard !isLLMKeyOperationInProgress else { return }
+        isLLMKeyOperationInProgress = true
+        defer { isLLMKeyOperationInProgress = false }
+
         do {
             try await keychainService.deleteLLMKey()
             llmKeyOperationError = nil

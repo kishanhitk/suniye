@@ -554,6 +554,7 @@ struct APIEndpointSheet: View {
                             Task { await appState.clearLLMAPIKey() }
                         }
                         .buttonStyle(.bordered)
+                        .disabled(appState.isLLMKeyOperationInProgress)
                         .foregroundStyle(MainWindowPalette.destructive)
                     }
                 } else {
@@ -571,7 +572,7 @@ struct APIEndpointSheet: View {
                             Task { await appState.saveLLMAPIKey(key) }
                         }
                         .buttonStyle(.bordered)
-                        .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || appState.isLLMKeyOperationInProgress)
 
                         if isReplacingKey {
                             Button("Cancel") {

@@ -146,22 +146,42 @@ final class AppStateMagicFormatTests: XCTestCase {
     }
 
     func testAKeyReadThatEndsAfterASaveDoesNotBringBackTheOldKey() async {
-        let keychain = HeldReadKeychainService(storedKey: "sk-old-0000000000000000000000-OLD1")
+        let keychain = HeldKeychainService(storedKey: "sk-old-0000000000000000000000-OLD1")
         let appState = makeTestAppState(keychainService: keychain)
-        // Read 1 is the one that AppState starts at init.
-        await keychain.waitForReads(1)
+        // Call 1 is the read that AppState starts at init.
+        await keychain.waitForCalls(1)
         await appState.refreshLLMKeyStatus()
         XCTAssertEqual(appState.llmAPIKeyHint?.suffix(4), "OLD1")
 
         keychain.holdsReads = true
         let refresh = Task { await appState.refreshLLMKeyStatus() }
-        await keychain.waitForReads(3)
+        await keychain.waitForCalls(3)
         await appState.saveLLMAPIKey("sk-new-0000000000000000000000-NEW1")
-        keychain.releaseRead()
+        keychain.releaseCall()
         await refresh.value
 
         XCTAssertTrue(appState.hasLLMAPIKey)
         XCTAssertEqual(appState.llmAPIKeyHint?.suffix(4), "NEW1")
+    }
+
+    func testAClearDuringASaveDoesNothing() async {
+        let keychain = HeldKeychainService(storedKey: nil)
+        let appState = makeTestAppState(keychainService: keychain)
+        await keychain.waitForCalls(1)
+
+        keychain.holdsWrites = true
+        let save = Task { await appState.saveLLMAPIKey("sk-new-key") }
+        await keychain.waitForCalls(2)
+        keychain.holdsWrites = false
+        XCTAssertTrue(appState.isLLMKeyOperationInProgress)
+        await appState.clearLLMAPIKey()
+        keychain.releaseCall()
+        await save.value
+
+        XCTAssertEqual(keychain.callCount, 2)
+        XCTAssertEqual(keychain.storedKey, "sk-new-key")
+        XCTAssertTrue(appState.hasLLMAPIKey)
+        XCTAssertFalse(appState.isLLMKeyOperationInProgress)
     }
 
     func testSaveLLMAPIKeyFailureSetsOperationError() async {
@@ -597,55 +617,62 @@ final class AppStateMagicFormatTests: XCTestCase {
     }
 }
 
-/// Keychain double whose reads can wait, so a test can end a read after a save.
+/// Keychain double whose calls can wait, so a test can end one call after another.
 @MainActor
-private final class HeldReadKeychainService: KeychainServiceProtocol {
+private final class HeldKeychainService: KeychainServiceProtocol {
     var storedKey: String?
     var holdsReads = false
-    private var readCount = 0
-    private var heldRead: CheckedContinuation<Void, Never>?
-    private var readWaiter: (count: Int, continuation: CheckedContinuation<Void, Never>)?
+    var holdsWrites = false
+    private(set) var callCount = 0
+    private var heldCall: CheckedContinuation<Void, Never>?
+    private var callWaiter: (count: Int, continuation: CheckedContinuation<Void, Never>)?
 
     init(storedKey: String?) {
         self.storedKey = storedKey
     }
 
     func setLLMKey(_ key: String) async throws {
+        await call(held: holdsWrites)
         storedKey = key
     }
 
     func getLLMKey() async throws -> String? {
         let key = storedKey
-        readCount += 1
-        if holdsReads {
-            await withCheckedContinuation { continuation in
-                heldRead = continuation
-                resumeReadWaiter()
-            }
-        } else {
-            resumeReadWaiter()
-        }
+        await call(held: holdsReads)
         return key
     }
 
     func deleteLLMKey() async throws {
+        await call(held: holdsWrites)
         storedKey = nil
     }
 
-    /// Returns when `count` reads have started.
-    func waitForReads(_ count: Int) async {
-        guard readCount < count else { return }
-        await withCheckedContinuation { readWaiter = (count, $0) }
+    /// Returns when `count` calls have started.
+    func waitForCalls(_ count: Int) async {
+        guard callCount < count else { return }
+        await withCheckedContinuation { callWaiter = (count, $0) }
     }
 
-    func releaseRead() {
-        heldRead?.resume()
-        heldRead = nil
+    func releaseCall() {
+        heldCall?.resume()
+        heldCall = nil
     }
 
-    private func resumeReadWaiter() {
-        guard let waiter = readWaiter, readCount >= waiter.count else { return }
-        readWaiter = nil
+    private func call(held: Bool) async {
+        callCount += 1
+        if held {
+            await withCheckedContinuation { continuation in
+                heldCall = continuation
+                resumeCallWaiter()
+            }
+        } else {
+            resumeCallWaiter()
+        }
+    }
+
+    private func resumeCallWaiter() {
+        guard let waiter = callWaiter, callCount >= waiter.count else { return }
+        callWaiter = nil
         waiter.continuation.resume()
     }
 }
