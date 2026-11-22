@@ -311,6 +311,9 @@ final class AppState {
         }
     }
     private var magicFormatSetupTestRequestID = 0
+    /// Changes at each read, save and clear of the API key: a read that began
+    /// before a save or a clear does not bring back the old key.
+    private var llmKeyStateVersion = 0
     var localGemmaInstallState: LocalLLMInstallState = .notInstalled {
         didSet {
             if oldValue != localGemmaInstallState {
@@ -384,7 +387,7 @@ final class AppState {
         guard apiEndpointDraftValidationError == nil, apiModelDraftValidationError == nil else {
             return false
         }
-        return effectiveMagicFormatTestAPIKey(apiKeyDraft: apiKeyDraft) != nil
+        return hasLLMAPIKey || !apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var magicFormatSetupState: MagicFormatSetupState {
@@ -1249,7 +1252,9 @@ final class AppState {
         refreshUpdateControllerState()
         microphone.refreshInputDevices()
         refreshLaunchAtLoginStatus()
-        refreshLLMKeyStatus()
+        Task { [weak self] in
+            await self?.refreshLLMKeyStatus()
+        }
         refreshLocalGemmaInstallState()
         refreshSystemGlobeKeyAction()
 
@@ -1829,11 +1834,19 @@ final class AppState {
 
     /// The masked hint and the fingerprint are read once per key change rather
     /// than per SwiftUI body evaluation: both derive from the keychain, and a
-    /// synchronous credential read does not belong on the render path.
-    func refreshLLMKeyStatus() {
-        guard let key = try? keychainService.getLLMKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !key.isEmpty
-        else {
+    /// credential read does not belong on the render path.
+    func refreshLLMKeyStatus() async {
+        llmKeyStateVersion += 1
+        let version = llmKeyStateVersion
+        let key = try? await keychainService.getLLMKey()
+        guard version == llmKeyStateVersion else {
+            return
+        }
+        applyLLMKey(key)
+    }
+
+    private func applyLLMKey(_ key: String?) {
+        guard let key = key?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty else {
             hasLLMAPIKey = false
             llmAPIKeyHint = nil
             currentLLMAPIKeyFingerprint = nil
@@ -1849,7 +1862,7 @@ final class AppState {
             : "\(dots) \(dots)"
     }
 
-    func saveLLMAPIKey(_ key: String) {
+    func saveLLMAPIKey(_ key: String) async {
         let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else {
             llmKeyOperationError = "API key can't be empty."
@@ -1857,9 +1870,10 @@ final class AppState {
         }
 
         do {
-            try keychainService.setLLMKey(normalized)
+            try await keychainService.setLLMKey(normalized)
             llmKeyOperationError = nil
-            refreshLLMKeyStatus()
+            llmKeyStateVersion += 1
+            applyLLMKey(normalized)
             clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key saved")
         } catch {
@@ -1868,11 +1882,12 @@ final class AppState {
         }
     }
 
-    func clearLLMAPIKey() {
+    func clearLLMAPIKey() async {
         do {
-            try keychainService.deleteLLMKey()
+            try await keychainService.deleteLLMKey()
             llmKeyOperationError = nil
-            refreshLLMKeyStatus()
+            llmKeyStateVersion += 1
+            applyLLMKey(nil)
             clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key cleared")
         } catch {
@@ -1890,10 +1905,12 @@ final class AppState {
 
     func testMagicFormatSetup(apiKeyDraft: String) async {
         clearMagicFormatSetupTestResult()
+        let requestID = magicFormatSetupTestRequestID
         guard llmEnabled,
               let endpointURL = llmSettings.validatedEndpointURL,
               let modelId = llmSettings.validatedModelId,
-              let apiKey = effectiveMagicFormatTestAPIKey(apiKeyDraft: apiKeyDraft) else {
+              let apiKey = await effectiveMagicFormatTestAPIKey(apiKeyDraft: apiKeyDraft),
+              requestID == magicFormatSetupTestRequestID else {
             return
         }
         // The configuration this run used, so that a success against an unsaved
@@ -2821,10 +2838,10 @@ final class AppState {
             appleAvailability: appleMagicFormatAvailability,
             localGemmaAvailability: localGemmaMagicFormatAvailability,
             readAPIKey: { [keychainService] in
-                try? keychainService.getLLMKey()
+                try? await keychainService.getLLMKey()
             },
             onAPIKeyReadFailed: { [weak self] in
-                self?.refreshLLMKeyStatus()
+                await self?.refreshLLMKeyStatus()
             },
             startSlowWarning: { [weak self] in
                 self?.startMagicFormatSlowWarningTask() ?? Task {}
@@ -4046,13 +4063,13 @@ final class AppState {
         AppLogger.shared.log(.error, "failed to open system settings")
     }
 
-    private func effectiveMagicFormatTestAPIKey(apiKeyDraft: String) -> String? {
+    private func effectiveMagicFormatTestAPIKey(apiKeyDraft: String) async -> String? {
         let normalizedDraft = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedDraft.isEmpty {
             return normalizedDraft
         }
 
-        guard let savedKey = try? keychainService.getLLMKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let savedKey = try? await keychainService.getLLMKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
               !savedKey.isEmpty else {
             return nil
         }
@@ -4699,7 +4716,7 @@ extension AppState: MeetingHost {
                         APIEndpointSummarySetup(
                             settings: settingsStore.load(),
                             endpointURL: llmSettingsStore.load().validatedEndpointURL,
-                            apiKey: try? keychainService.getLLMKey()
+                            apiKey: try? await keychainService.getLLMKey()
                         )
                     }
                 }

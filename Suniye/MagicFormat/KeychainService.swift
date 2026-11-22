@@ -2,15 +2,17 @@ import Foundation
 
 /// The API endpoint key. Magic Format and meeting summaries share it.
 protocol KeychainServiceProtocol {
-    func setLLMKey(_ key: String) throws
-    func getLLMKey() throws -> String?
-    func deleteLLMKey() throws
+    func setLLMKey(_ key: String) async throws
+    func getLLMKey() async throws -> String?
+    func deleteLLMKey() async throws
 }
 
 enum KeychainServiceError: Error {
     case invalidData
 }
 
+/// Each call runs off the main actor: a SecItem call blocks its thread, also
+/// while the user answers a Keychain prompt.
 struct KeychainService: KeychainServiceProtocol {
     private let item: SecretItem
 
@@ -18,7 +20,8 @@ struct KeychainService: KeychainServiceProtocol {
         self.item = item
     }
 
-    func setLLMKey(_ key: String) throws {
+    @concurrent
+    func setLLMKey(_ key: String) async throws {
         let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else {
             throw KeychainServiceError.invalidData
@@ -26,7 +29,8 @@ struct KeychainService: KeychainServiceProtocol {
         try item.write(Data(normalized.utf8))
     }
 
-    func getLLMKey() throws -> String? {
+    @concurrent
+    func getLLMKey() async throws -> String? {
         guard let data = try item.read() else {
             return nil
         }
@@ -36,7 +40,8 @@ struct KeychainService: KeychainServiceProtocol {
         return key
     }
 
-    func deleteLLMKey() throws {
+    @concurrent
+    func deleteLLMKey() async throws {
         try item.delete()
     }
 

@@ -5,7 +5,7 @@ import XCTest
 final class AppStateMagicFormatTests: XCTestCase {
     func testSetupTestReturnsEarlyWhenDisabled() async {
         let appState = makeTestAppState(keychainService: TestKeychainService(value: "key"))
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
         appState.llmEnabled = false
 
         await appState.testMagicFormatSetup(apiKeyDraft: "draft")
@@ -22,7 +22,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             appleMagicFormatPostProcessor: NoopAppleMagicFormatPostProcessor(availability: .available),
             keychainService: TestKeychainService(value: "key")
         )
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
         appState.llmEnabled = true
         appState.llmProvider = .appleFoundationModels
 
@@ -35,7 +35,7 @@ final class AppStateMagicFormatTests: XCTestCase {
 
     func testSetupTestReturnsEarlyForInvalidEndpoint() async {
         let appState = makeTestAppState(keychainService: TestKeychainService(value: "key"))
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
         appState.llmEnabled = true
         appState.llmEndpointURLString = "not a url"
 
@@ -46,7 +46,7 @@ final class AppStateMagicFormatTests: XCTestCase {
 
     func testSetupTestReturnsEarlyForInvalidModel() async {
         let appState = makeTestAppState(keychainService: TestKeychainService(value: "key"))
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
         appState.llmEnabled = true
         appState.llmSelectedModelPreset = .custom
         appState.llmCustomModelId = "   "
@@ -76,7 +76,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: TestKeychainService(value: "api-key")
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
         await appState.testMagicFormatSetup(apiKeyDraft: "")
         return appState
     }
@@ -117,7 +117,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: TestKeychainService(value: "api-key")
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let task = Task {
             await appState.testMagicFormatSetup(apiKeyDraft: "")
@@ -131,45 +131,64 @@ final class AppStateMagicFormatTests: XCTestCase {
         XCTAssertFalse(appState.isMagicFormatSetupTestInProgress)
     }
 
-    func testSaveLLMAPIKeySuccessAndEmptyInput() {
+    func testSaveLLMAPIKeySuccessAndEmptyInput() async {
         let keychain = FailingKeychainService()
         let appState = makeTestAppState(keychainService: keychain)
 
-        appState.saveLLMAPIKey("   ")
+        await appState.saveLLMAPIKey("   ")
         XCTAssertEqual(appState.llmKeyOperationError, "API key can't be empty.")
         XCTAssertFalse(appState.hasLLMAPIKey)
 
-        appState.saveLLMAPIKey("  secret-key  ")
+        await appState.saveLLMAPIKey("  secret-key  ")
         XCTAssertNil(appState.llmKeyOperationError)
         XCTAssertTrue(appState.hasLLMAPIKey)
         XCTAssertEqual(keychain.storedKey, "secret-key")
     }
 
-    func testSaveLLMAPIKeyFailureSetsOperationError() {
+    func testAKeyReadThatEndsAfterASaveDoesNotBringBackTheOldKey() async {
+        let keychain = HeldReadKeychainService(storedKey: "sk-old-0000000000000000000000-OLD1")
+        let appState = makeTestAppState(keychainService: keychain)
+        // Read 1 is the one that AppState starts at init.
+        await keychain.waitForReads(1)
+        await appState.refreshLLMKeyStatus()
+        XCTAssertEqual(appState.llmAPIKeyHint?.suffix(4), "OLD1")
+
+        keychain.holdsReads = true
+        let refresh = Task { await appState.refreshLLMKeyStatus() }
+        await keychain.waitForReads(3)
+        await appState.saveLLMAPIKey("sk-new-0000000000000000000000-NEW1")
+        keychain.releaseRead()
+        await refresh.value
+
+        XCTAssertTrue(appState.hasLLMAPIKey)
+        XCTAssertEqual(appState.llmAPIKeyHint?.suffix(4), "NEW1")
+    }
+
+    func testSaveLLMAPIKeyFailureSetsOperationError() async {
         let keychain = FailingKeychainService()
         keychain.setError = FakeError(message: "keychain locked")
         let appState = makeTestAppState(keychainService: keychain)
 
-        appState.saveLLMAPIKey("secret")
+        await appState.saveLLMAPIKey("secret")
 
         XCTAssertEqual(appState.llmKeyOperationError, "Couldn't save the API key.")
         XCTAssertFalse(appState.hasLLMAPIKey)
     }
 
-    func testClearLLMAPIKeySuccessAndFailure() {
+    func testClearLLMAPIKeySuccessAndFailure() async {
         let keychain = FailingKeychainService()
         keychain.storedKey = "secret"
         let appState = makeTestAppState(keychainService: keychain)
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
         XCTAssertTrue(appState.hasLLMAPIKey)
 
-        appState.clearLLMAPIKey()
+        await appState.clearLLMAPIKey()
         XCTAssertNil(appState.llmKeyOperationError)
         XCTAssertFalse(appState.hasLLMAPIKey)
         XCTAssertNil(keychain.storedKey)
 
         keychain.deleteError = FakeError(message: "keychain locked")
-        appState.clearLLMAPIKey()
+        await appState.clearLLMAPIKey()
         XCTAssertEqual(appState.llmKeyOperationError, "Couldn't clear the API key.")
     }
 
@@ -182,7 +201,7 @@ final class AppStateMagicFormatTests: XCTestCase {
         )
         appState.llmEnabled = true
         appState.llmProvider = .openAICompatible
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
         XCTAssertTrue(appState.hasLLMAPIKey)
 
         keychain.getError = FakeError(message: "read denied")
@@ -294,10 +313,10 @@ final class AppStateMagicFormatTests: XCTestCase {
         })
     }
 
-    func testMagicFormatStatusIsReadyWhenEnabledAndConfigured() {
+    func testMagicFormatStatusIsReadyWhenEnabledAndConfigured() async {
         let appState = makeTestAppState(keychainService: TestKeychainService(value: "test-key"))
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         XCTAssertEqual(appState.magicFormatSetupState, .ready)
     }
@@ -342,7 +361,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         await appState.testMagicFormatSetup(apiKeyDraft: "draft-key")
 
@@ -361,7 +380,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         await appState.testMagicFormatSetup(apiKeyDraft: "draft-key")
 
@@ -383,7 +402,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         await appState.testMagicFormatSetup(apiKeyDraft: "   ")
 
@@ -401,7 +420,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let task = Task {
             await appState.testMagicFormatSetup(apiKeyDraft: "")
@@ -433,7 +452,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let task = Task {
             await appState.testMagicFormatSetup(apiKeyDraft: "")
@@ -468,7 +487,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         await appState.testMagicFormatSetup(apiKeyDraft: "")
 
@@ -492,7 +511,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         await appState.testMagicFormatSetup(apiKeyDraft: "")
 
@@ -516,7 +535,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         await appState.testMagicFormatSetup(apiKeyDraft: "")
 
@@ -543,7 +562,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         await appState.testMagicFormatSetup(apiKeyDraft: "")
 
@@ -567,7 +586,7 @@ final class AppStateMagicFormatTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         await appState.testMagicFormatSetup(apiKeyDraft: "")
 
@@ -575,6 +594,59 @@ final class AppStateMagicFormatTests: XCTestCase {
             appState.magicFormatSetupTestResult,
             MagicFormatSetupTestResult(message: "The service responded, but not in a compatible format.", severity: .error)
         )
+    }
+}
+
+/// Keychain double whose reads can wait, so a test can end a read after a save.
+@MainActor
+private final class HeldReadKeychainService: KeychainServiceProtocol {
+    var storedKey: String?
+    var holdsReads = false
+    private var readCount = 0
+    private var heldRead: CheckedContinuation<Void, Never>?
+    private var readWaiter: (count: Int, continuation: CheckedContinuation<Void, Never>)?
+
+    init(storedKey: String?) {
+        self.storedKey = storedKey
+    }
+
+    func setLLMKey(_ key: String) async throws {
+        storedKey = key
+    }
+
+    func getLLMKey() async throws -> String? {
+        let key = storedKey
+        readCount += 1
+        if holdsReads {
+            await withCheckedContinuation { continuation in
+                heldRead = continuation
+                resumeReadWaiter()
+            }
+        } else {
+            resumeReadWaiter()
+        }
+        return key
+    }
+
+    func deleteLLMKey() async throws {
+        storedKey = nil
+    }
+
+    /// Returns when `count` reads have started.
+    func waitForReads(_ count: Int) async {
+        guard readCount < count else { return }
+        await withCheckedContinuation { readWaiter = (count, $0) }
+    }
+
+    func releaseRead() {
+        heldRead?.resume()
+        heldRead = nil
+    }
+
+    private func resumeReadWaiter() {
+        guard let waiter = readWaiter, readCount >= waiter.count else { return }
+        readWaiter = nil
+        waiter.continuation.resume()
     }
 }
 

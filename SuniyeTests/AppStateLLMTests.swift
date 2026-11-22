@@ -32,7 +32,7 @@ final class AppStateLLMTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -51,7 +51,7 @@ final class AppStateLLMTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -76,7 +76,7 @@ final class AppStateLLMTests: XCTestCase {
         )
         appState.llmEnabled = true
         appState.llmProvider = .automatic
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -102,7 +102,7 @@ final class AppStateLLMTests: XCTestCase {
         )
         appState.llmEnabled = true
         appState.llmProvider = .automatic
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -136,7 +136,7 @@ final class AppStateLLMTests: XCTestCase {
         )
         appState.llmEnabled = true
         appState.llmProvider = .automatic
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -164,7 +164,7 @@ final class AppStateLLMTests: XCTestCase {
         )
         appState.llmEnabled = true
         appState.llmProvider = .appleFoundationModels
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -193,7 +193,7 @@ final class AppStateLLMTests: XCTestCase {
         )
         appState.llmEnabled = true
         appState.llmProvider = .localGemma
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -251,7 +251,7 @@ final class AppStateLLMTests: XCTestCase {
         )
         appState.llmEnabled = true
         appState.llmProvider = .openAICompatible
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -271,7 +271,7 @@ final class AppStateLLMTests: XCTestCase {
             keychainService: keychain
         )
         appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -310,7 +310,7 @@ final class AppStateLLMTests: XCTestCase {
         )
         appState.llmEnabled = true
         appState.llmProvider = .appleFoundationModels
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -331,7 +331,7 @@ final class AppStateLLMTests: XCTestCase {
         )
         appState.llmEnabled = true
         appState.llmEndpointURLString = "not a url"
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -353,7 +353,7 @@ final class AppStateLLMTests: XCTestCase {
         appState.llmEnabled = true
         appState.llmSelectedModelPreset = .custom
         appState.llmCustomModelId = "   "
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -362,7 +362,7 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(appState.llmModelValidationError, "Enter a valid custom model name.")
     }
 
-    func testAttentionItemsIncludeInvalidModelWhenEnabled() {
+    func testAttentionItemsIncludeInvalidModelWhenEnabled() async {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
         let keychain = TestKeychainService(value: "api-key")
         let store = TestLLMSettingsStore()
@@ -375,7 +375,7 @@ final class AppStateLLMTests: XCTestCase {
         appState.llmEnabled = true
         appState.llmSelectedModelPreset = .custom
         appState.llmCustomModelId = "   "
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         XCTAssertTrue(appState.attentionItems.contains(where: { $0.id == "llm-model-invalid" }))
     }
@@ -393,7 +393,7 @@ final class AppStateLLMTests: XCTestCase {
         appState.llmEnabled = true
         appState.llmSelectedModelPreset = .gpt41Mini
         appState.llmEndpointURLString = "https://api.openai.com/v1/chat/completions"
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
@@ -593,7 +593,7 @@ final class AppStateLLMTests: XCTestCase {
         appState.hasAccessibilityPermission = true
         appState.llmEnabled = true
         appState.llmProvider = .openAICompatible
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)

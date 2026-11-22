@@ -550,8 +550,8 @@ struct APIEndpointSheet: View {
                             .buttonStyle(.bordered)
 
                         Button("Clear") {
-                            appState.clearLLMAPIKey()
                             apiKeyDraft = ""
+                            Task { await appState.clearLLMAPIKey() }
                         }
                         .buttonStyle(.bordered)
                         .foregroundStyle(MainWindowPalette.destructive)
@@ -565,9 +565,10 @@ struct APIEndpointSheet: View {
                             }
 
                         Button("Save") {
-                            appState.saveLLMAPIKey(apiKeyDraft)
+                            let key = apiKeyDraft
                             apiKeyDraft = ""
                             isReplacingKey = false
+                            Task { await appState.saveLLMAPIKey(key) }
                         }
                         .buttonStyle(.bordered)
                         .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

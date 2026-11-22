@@ -2,25 +2,31 @@ import XCTest
 @testable import Suniye
 
 final class KeychainServiceTests: XCTestCase {
-    func testTheKeyIsSavedTrimmedAndADeleteRemovesIt() throws {
+    func testTheKeyIsSavedTrimmedAndADeleteRemovesIt() async throws {
         let item = MemorySecretItem()
         let service = KeychainService(item: item)
-        XCTAssertNil(try service.getLLMKey())
+        let before = try await service.getLLMKey()
+        XCTAssertNil(before)
 
-        try service.setLLMKey("  sk-test-123 \n")
+        try await service.setLLMKey("  sk-test-123 \n")
+        let saved = try await service.getLLMKey()
         XCTAssertEqual(item.data, Data("sk-test-123".utf8))
-        XCTAssertEqual(try service.getLLMKey(), "sk-test-123")
+        XCTAssertEqual(saved, "sk-test-123")
 
-        try service.deleteLLMKey()
+        try await service.deleteLLMKey()
+        let after = try await service.getLLMKey()
         XCTAssertNil(item.data)
-        XCTAssertNil(try service.getLLMKey())
+        XCTAssertNil(after)
     }
 
-    func testAnEmptyKeyIsRejectedAndTheSavedKeyStays() {
+    func testAnEmptyKeyIsRejectedAndTheSavedKeyStays() async {
         let item = MemorySecretItem(Data("sk-saved".utf8))
         let service = KeychainService(item: item)
 
-        XCTAssertThrowsError(try service.setLLMKey("  \n")) { error in
+        do {
+            try await service.setLLMKey("  \n")
+            XCTFail("An empty key was saved")
+        } catch {
             guard case KeychainServiceError.invalidData = error else {
                 return XCTFail("Expected invalidData, got \(error)")
             }
@@ -28,10 +34,13 @@ final class KeychainServiceTests: XCTestCase {
         XCTAssertEqual(item.data, Data("sk-saved".utf8))
     }
 
-    func testAnItemThatIsNotUTF8IsInvalid() {
+    func testAnItemThatIsNotUTF8IsInvalid() async {
         let service = KeychainService(item: MemorySecretItem(Data([0xFF, 0xFE, 0xFA])))
 
-        XCTAssertThrowsError(try service.getLLMKey()) { error in
+        do {
+            _ = try await service.getLLMKey()
+            XCTFail("A non-UTF-8 item was read as a key")
+        } catch {
             guard case KeychainServiceError.invalidData = error else {
                 return XCTFail("Expected invalidData, got \(error)")
             }

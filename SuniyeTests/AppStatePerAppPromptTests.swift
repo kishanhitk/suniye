@@ -88,7 +88,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
         )
         appState.llmEnabled = true
         appState.llmProvider = .openAICompatible
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
         addSlackBinding(to: appState, prompt: "Keep it terse.")
 
         let output = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
@@ -124,7 +124,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
             magicFormatPromptFileStore: promptStore,
             keychainService: TestKeychainService(value: "api-key")
         )
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
 
         _ = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
 
@@ -163,7 +163,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
         )
         appState.llmEnabled = true
         appState.llmProvider = .openAICompatible
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
         addSlackBinding(to: appState, prompt: "Keep it terse.")
 
         _ = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: "com.apple.mail")
@@ -234,7 +234,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
         appState.hasAccessibilityPermission = true
         appState.llmEnabled = true
         appState.llmProvider = .openAICompatible
-        appState.refreshLLMKeyStatus()
+        await appState.refreshLLMKeyStatus()
         addSlackBinding(to: appState, prompt: "Keep it terse.")
 
         appState.toggleFloatingIndicatorRecording()
