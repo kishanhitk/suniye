@@ -244,9 +244,11 @@ public enum MeetingOutcome: String, Sendable, CaseIterable {
     case failed
 }
 
-public enum MeetingSummaryEngine: String, Sendable, CaseIterable {
+public enum MeetingSummaryEngine: String, Sendable, CaseIterable, Codable {
     case appleIntelligence = "apple_intelligence"
     case localModel = "local_model"
+    /// The user's OpenAI-compatible endpoint. The meeting text leaves the Mac.
+    case apiEndpoint = "api_endpoint"
 }
 
 /// Why a meeting's summary failed.
@@ -257,6 +259,12 @@ public enum MeetingSummaryFailure: String, Sendable, CaseIterable, Codable {
     case empty
     case notReady = "not_ready"
     case modelError = "model_error"
+    case network
+    case keyRejected = "key_rejected"
+    case serviceError = "service_error"
+    /// The hosted model that the user chose has no key, no model ID or no
+    /// agreement for its endpoint.
+    case notSetUp = "not_set_up"
 }
 
 /// The text of a meeting that the user can change on its page.

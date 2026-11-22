@@ -37,12 +37,10 @@ struct MeetingSummaryTab: View {
             EmptyStateCard(
                 icon: "exclamationmark.triangle",
                 title: MeetingStatus.summaryFailedTitle,
-                detail: [record.summaryFailure?.cause, "Your transcript and notes are saved."].compactMap { $0 }.joined(separator: " ")
+                detail: [record.summaryFailure?.cause(hosted: record.summaryRanOnService), "Your transcript and notes are saved."]
+                    .compactMap { $0 }.joined(separator: " ")
             ) {
-                Button("Try Again") {
-                    Task { await meetings.regenerate(record.id) }
-                }
-                .buttonStyle(.borderedProminent)
+                failureActions
             }
         case .noSpeech:
             EmptyStateCard(
@@ -75,9 +73,43 @@ struct MeetingSummaryTab: View {
         }
     }
 
+    private var onDeviceAvailability: MeetingSummaryAvailability {
+        MeetingSummaryAvailability(apple: appState.appleMagicFormatAvailability, localModel: appState.localGemmaMagicFormatAvailability)
+    }
+
+    /// The first button is the main one.
+    private var failureActions: some View {
+        let actions = record.summaryFailureActions(canSummarizeOnThisMac: onDeviceAvailability != .unavailable)
+        return HStack(spacing: 10) {
+            ForEach(Array(actions.enumerated()), id: \.offset) { index, action in
+                if index == 0 {
+                    failureButton(action).buttonStyle(.borderedProminent)
+                } else {
+                    failureButton(action)
+                }
+            }
+        }
+    }
+
+    private func failureButton(_ action: MeetingSummaryFailureAction) -> some View {
+        switch action {
+        case .tryAgain:
+            return Button("Try Again") {
+                Task { await meetings.regenerate(record.id) }
+            }
+        case .meetingSettings:
+            return Button("Meeting Settings…") { appState.openMainWindow(at: .general) }
+        case .summarizeOnThisMac:
+            return Button("Summarize on this Mac") {
+                Task { await meetings.regenerate(record.id, onThisMac: true) }
+            }
+        }
+    }
+
     @ViewBuilder
     private var summarizing: some View {
         switch MeetingSummaryAvailability(
+            choice: meetings.summaryChoice(for: record.id),
             apple: appState.appleMagicFormatAvailability,
             localModel: appState.localGemmaMagicFormatAvailability
         ) {

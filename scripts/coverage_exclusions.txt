@@ -66,5 +66,6 @@ Suniye/Meetings/Views/MeetingPlayerBar.swift          # SwiftUI render only (pla
 Suniye/Meetings/Views/MeetingTemplateEditor.swift     # SwiftUI render only (template rules in MeetingTemplates.swift, covered)
 Suniye/Meetings/Views/MeetingActions.swift            # dialog state and AppKit panels; each action calls the covered MeetingCoordinator
 Suniye/Meetings/Views/MeetingSettingsGroup.swift      # SwiftUI render only (the choices call the covered MeetingCoordinator)
+Suniye/Meetings/Views/MeetingSummaryModelRow.swift    # SwiftUI render only (the setup rule is in APIEndpointMeetingSummaryModel.swift, covered)
 Suniye/Meetings/Views/MeetingCallCardPanel.swift      # NSPanel and SwiftUI render only (each button calls the covered MeetingCoordinator)
 Suniye/MagicFormat/Views/MagicFormatProviderPresentation.swift # SwiftUI render only

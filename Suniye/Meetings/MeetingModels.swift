@@ -132,6 +132,12 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     var transcriptFailure: String?
     /// Why the last summary failed, for the meeting page.
     var summaryFailure: MeetingSummaryFailure?
+    /// The model of the last summary run, done or failed.
+    var summaryEngine: MeetingSummaryEngine?
+    /// The user asked for this meeting's next summary from an on-device
+    /// model, whatever the setting says. Kept until that summary ends, so a
+    /// quit does not send the meeting to a service.
+    var summaryOnThisMac = false
     /// When the user first changed a transcript line; nil until then, and
     /// again after Transcribe Again.
     var transcriptEditedAt: Date?
@@ -167,8 +173,8 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         self.callPlayedOnSpeakers = callPlayedOnSpeakers
     }
 
-    /// A missing key keeps its default, and a summary failure that this
-    /// build does not know is no failure: a record that another build saved
+    /// A missing key keeps its default, and a summary failure or model that
+    /// this build does not know is none: a record that another build saved
     /// still loads.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -188,6 +194,9 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         transcriptFailure = try container.decodeIfPresent(String.self, forKey: .transcriptFailure)
         summaryFailure = try container.decodeIfPresent(String.self, forKey: .summaryFailure)
             .flatMap(MeetingSummaryFailure.init(rawValue:))
+        summaryEngine = try container.decodeIfPresent(String.self, forKey: .summaryEngine)
+            .flatMap(MeetingSummaryEngine.init(rawValue:))
+        summaryOnThisMac = try container.decodeIfPresent(Bool.self, forKey: .summaryOnThisMac) ?? false
         transcriptEditedAt = try container.decodeIfPresent(Date.self, forKey: .transcriptEditedAt)
         summaryEditedAt = try container.decodeIfPresent(Date.self, forKey: .summaryEditedAt)
     }

@@ -40,6 +40,9 @@ struct MeetingSettingsGroup: View {
             MeetingTranscriptModelRow(appState: appState)
 
             RowSeparator()
+            MeetingSummaryModelRow(appState: appState)
+
+            RowSeparator()
             ControlSettingRow(title: "Default template") {
                 Picker(
                     "Default template",

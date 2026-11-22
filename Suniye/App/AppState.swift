@@ -1152,6 +1152,8 @@ final class AppState {
             appleSummaryAvailability: { appleMagicFormatPostProcessor.availability },
             localSummaryAvailability: { resolvedLocalGemmaPostProcessor.availability },
             localGemmaClient: localGemmaClient,
+            llmSettingsStore: llmSettingsStore,
+            keychainService: keychainService,
             analytics: analytics
         )
         self.llmSettingsStore = llmSettingsStore
@@ -4642,12 +4644,15 @@ extension AppState: MeetingHost {
         appleSummaryAvailability: @escaping () -> AppleFoundationModelsAvailability,
         localSummaryAvailability: @escaping () -> LocalGemmaAvailability,
         localGemmaClient: LocalGemmaClient,
+        llmSettingsStore: LLMSettingsStoreProtocol,
+        keychainService: KeychainServiceProtocol,
         analytics: Analytics
     ) -> MeetingCoordinator {
-        MeetingCoordinator(
+        let settingsStore = MeetingSettingsStore()
+        return MeetingCoordinator(
             store: MeetingStore(),
             templates: MeetingTemplateStore(),
-            settingsStore: MeetingSettingsStore(),
+            settingsStore: settingsStore,
             engine: transcriptionService,
             makeTranscriptEngine: { model in
                 guard await modelManager.isSystemManagedAssetInstalled(model) else {
@@ -4658,8 +4663,8 @@ extension AppState: MeetingHost {
                 return engine
             },
             environment: .live(),
-            summaryAvailability: {
-                MeetingSummaryAvailability(apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
+            summaryAvailability: { choice in
+                MeetingSummaryAvailability(choice: choice, apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
             },
             makeSummaryModel: { engine in
                 switch engine {
@@ -4672,6 +4677,14 @@ extension AppState: MeetingHost {
                     }
                     #endif
                     return nil
+                case .apiEndpoint:
+                    return APIEndpointMeetingSummaryModel(client: ChatCompletionClient()) {
+                        APIEndpointSummarySetup(
+                            settings: settingsStore.load(),
+                            endpointURL: llmSettingsStore.load().validatedEndpointURL,
+                            apiKey: try? keychainService.getLLMKey()
+                        )
+                    }
                 }
             },
             analytics: analytics
