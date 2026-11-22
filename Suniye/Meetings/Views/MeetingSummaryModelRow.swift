@@ -80,7 +80,7 @@ struct ChatGPTSummarySheet: View {
                 Text(isConnected ? "ChatGPT" : "Connect ChatGPT")
                     .font(AppTypography.cardTitle)
                 if isConnected {
-                    Text(email.map { "Connected as \($0)" } ?? "Connected")
+                    Text(numbers: email.map { "Connected as \($0)" } ?? "Connected")
                         .font(AppTypography.subheadline)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                 } else if case .signInEnded = setup.state {
