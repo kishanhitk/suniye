@@ -4,10 +4,11 @@ import SwiftUI
 /// Splits UI text into numbers and the text between them, so that numbers can
 /// show in the mono font.
 ///
-/// A number is a run of digits, with a `.`, `,` or `:` between two digits and a
-/// `%` directly after: "1,204", "0.0.75", "12:04", "45%". Digits that end a
-/// word are part of a name ("Qwen3", "Q4_K_M"), except after a version "v"
-/// ("v3", "v0.0.75").
+/// A number is a run of digits, with a `.` or `:` between two digits and a `%`
+/// directly after: "0.0.75", "12:04", "45%". A grouping comma stays text,
+/// because a comma as wide as a digit reads as a gap: "1,204" is two numbers.
+/// Digits that end a word are part of a name ("Qwen3", "Q4_K_M"), except
+/// after a version "v" ("v3", "v0.0.75").
 enum NumberRuns {
     struct Run: Equatable {
         let text: String
@@ -57,7 +58,7 @@ enum NumberRuns {
         return output
     }
 
-    private static let separators: Set<Character> = [".", ",", ":"]
+    private static let separators: Set<Character> = [".", ":"]
 
     private static func numberEnd(in characters: [Character], from start: Int) -> Int {
         var end = start

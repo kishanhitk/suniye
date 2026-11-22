@@ -16,7 +16,7 @@ final class NumberRunsTests: XCTestCase {
     func testTimesCountsSizesAndPercentagesAreNumbers() {
         XCTAssertEqual(numbers(in: "Today · 2:06 PM · 38 min"), ["2:06", "38"])
         XCTAssertEqual(numbers(in: "1:04:05 / 2:00:00"), ["1:04:05", "2:00:00"])
-        XCTAssertEqual(numbers(in: "1,204 dictations"), ["1,204"])
+        XCTAssertEqual(numbers(in: "1,204 dictations"), ["1", "204"])
         XCTAssertEqual(numbers(in: "45% downloaded • 1.2 GB of 3.1 GB"), ["45%", "1.2", "3.1"])
         XCTAssertEqual(numbers(in: "2h 14m saved"), ["2", "14"])
         XCTAssertEqual(numbers(in: "Latency 0.8 s"), ["0.8"])
