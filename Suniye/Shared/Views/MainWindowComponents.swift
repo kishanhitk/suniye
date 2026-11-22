@@ -418,7 +418,7 @@ struct InfoRow: View {
                 Image(systemName: trailingIcon)
                     .foregroundStyle(trailingIconColor)
             }
-            Text(value)
+            Text(numbers: value)
                 .font(AppTypography.body)
                 .foregroundStyle(valueColor)
         }
@@ -483,7 +483,7 @@ struct StatusPill: View {
     let tint: Color
 
     var body: some View {
-        Text(title)
+        Text(numbers: title)
             .font(AppTypography.caption)
             .foregroundStyle(tint)
             .padding(.horizontal, 8)
@@ -499,7 +499,7 @@ struct ModelTagBadge: View {
     let title: String
 
     var body: some View {
-        Text(title)
+        Text(numbers: title)
             .font(AppTypography.caption)
             .foregroundStyle(MainWindowPalette.secondaryText)
             .padding(.horizontal, 8)
@@ -562,7 +562,7 @@ struct InlineStatusBanner: View {
 
                 // Only the icon carries the colour: a coloured headline on a
                 // tinted ground is louder than the message needs to be.
-                Text(title)
+                Text(numbers: title)
                     .font(AppTypography.bodyMedium)
                     .foregroundStyle(Color.primary)
 
@@ -586,7 +586,7 @@ struct InlineStatusBanner: View {
                 }
             }
 
-            Text(detail)
+            Text(numbers: detail)
                 .font(AppTypography.body)
                 .foregroundStyle(MainWindowPalette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -643,9 +643,9 @@ struct EmptyStateCard<Action: View>: View {
             Image(systemName: icon)
                 .font(AppTypography.emptyIcon)
                 .foregroundStyle(Color.secondary.opacity(0.72))
-            Text(title)
+            Text(numbers: title)
                 .font(AppTypography.pageTitle)
-            Text(detail)
+            Text(numbers: detail)
                 .font(AppTypography.body)
                 .foregroundStyle(MainWindowPalette.secondaryText)
                 .multilineTextAlignment(.center)
@@ -683,7 +683,7 @@ struct SettingsToggleRow: View {
             if let detail {
                 CardDivider()
                     .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
-                Text(detail)
+                Text(numbers: detail)
                     .font(AppTypography.subheadline)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -712,7 +712,7 @@ struct PermissionActionRow: View {
                             .foregroundStyle(isGranted ? .green : .orange)
                     }
 
-                    Text(detail)
+                    Text(numbers: detail)
                         .font(AppTypography.subheadline)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)

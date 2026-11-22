@@ -41,7 +41,7 @@ struct FloatingIndicatorView: View {
         glassGrouped {
             VStack(spacing: topAccessorySpacing) {
                 if let helperText {
-                    Text(helperText)
+                    Text(numbers: helperText)
                         .font(AppTypography.bodyMedium)
                         .foregroundStyle(.white)
                         .padding(.horizontal, 18)
@@ -218,7 +218,7 @@ struct FloatingIndicatorView: View {
         case let .processing(message):
             processingContent(message: message)
         case let .error(message):
-            Text(message)
+            Text(numbers: message)
                 .font(AppTypography.subheadlineSemibold)
                 .foregroundStyle(.white)
                 .lineLimit(2)
@@ -240,7 +240,7 @@ struct FloatingIndicatorView: View {
     private func processingContent(message: String?) -> some View {
         HStack(spacing: 10) {
             if let message {
-                Text(message)
+                Text(numbers: message)
                     .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(.white)
                     .lineLimit(1)

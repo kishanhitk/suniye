@@ -131,13 +131,17 @@ struct MeetingSummaryTab: View {
                                 .progressViewStyle(.linear)
                                 .frame(width: 260)
                         }
-                        Text(appState.localGemmaInstallStatusText)
+                        Text(numbers: appState.localGemmaInstallStatusText)
                             .font(AppTypography.caption)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                         Button("Cancel") { appState.cancelLocalGemmaDownload() }
                     }
                 case .notInstalled, .failed, .installed, .unavailable:
-                    Button("Download · \(LocalGemmaDefaults.expectedSizeText)") { appState.startLocalGemmaDownload() }
+                    Button {
+                        appState.startLocalGemmaDownload()
+                    } label: {
+                        Text(numbers: "Download · \(LocalGemmaDefaults.expectedSizeText)")
+                    }
                         .buttonStyle(.borderedProminent)
                         .disabled(!appState.canStartLocalGemmaDownload)
                 }
@@ -155,7 +159,7 @@ struct MeetingSummaryTab: View {
         HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
-            Text(text)
+            Text(numbers: text)
                 .font(AppTypography.body)
                 .foregroundStyle(MainWindowPalette.secondaryText)
         }

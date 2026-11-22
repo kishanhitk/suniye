@@ -33,10 +33,9 @@ struct MeetingTranscriptProgressView: View {
                     .frame(width: 280)
             }
             if !isWaiting, let progress {
-                Text(progress.minutesText)
+                Text(numbers: progress.minutesText)
                     .font(AppTypography.caption)
                     .foregroundStyle(MainWindowPalette.secondaryText)
-                    .monospacedDigit()
             }
         }
         .accessibilityElement(children: .combine)
@@ -272,7 +271,7 @@ struct MeetingTranscriptView: NSViewRepresentable {
             let output = NSMutableAttributedString()
             for line in lines {
                 output.append(NSAttributedString(string: line.time + "\t", attributes: [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: bodyFont.pointSize, weight: .regular),
+                    .font: NSFont.monospacedSystemFont(ofSize: bodyFont.pointSize, weight: .regular),
                     .foregroundColor: NSColor.secondaryLabelColor,
                     .paragraphStyle: paragraph,
                     lineID: line.id,

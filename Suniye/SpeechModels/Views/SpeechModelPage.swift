@@ -77,7 +77,7 @@ struct SpeechModelPage: View {
                 RowSeparator()
                 ControlSettingRow(title: "Status") {
                     HStack(spacing: 12) {
-                        Text(appState.modelStatusValue)
+                        Text(numbers: appState.modelStatusValue)
                             .font(AppTypography.rowTitle)
                             .foregroundStyle(appState.modelStatusColor)
 
@@ -229,16 +229,16 @@ struct SpeechModelSheet: View {
                 .padding(.top, 3)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(entry.displayName)
+                Text(numbers: entry.displayName)
                     .font(AppTypography.rowTitle)
                     .foregroundStyle(Color.primary)
 
-                Text(entry.description)
+                Text(numbers: entry.description)
                     .font(AppTypography.subheadline)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(metaLine(for: entry))
+                Text(numbers: metaLine(for: entry))
                     .font(AppTypography.caption)
                     .foregroundStyle(MainWindowPalette.tertiaryText)
 
@@ -252,7 +252,7 @@ struct SpeechModelSheet: View {
                                 .controlSize(.small)
                         }
 
-                        Text(progressLabel)
+                        Text(numbers: progressLabel)
                             .font(AppTypography.caption)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)

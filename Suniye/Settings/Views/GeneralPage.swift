@@ -188,7 +188,7 @@ struct GeneralPage: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             // Orange text on a light page is below 3:1; the icon carries the color.
             Label {
-                Text(warning).foregroundStyle(.primary)
+                Text(numbers: warning).foregroundStyle(.primary)
             } icon: {
                 noticeIcon("exclamationmark.triangle.fill").foregroundStyle(.orange)
             }
@@ -266,7 +266,11 @@ struct GeneralPage: View {
             }
 
             if let message = appState.hotkeyValidationMessage {
-                Label(message, systemImage: "exclamationmark.triangle.fill")
+                Label {
+                    Text(numbers: message)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                }
                     .font(AppTypography.subheadline)
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
@@ -345,7 +349,11 @@ struct GeneralPage: View {
             )
 
             if let notice = appState.launchAtLoginError ?? appState.launchAtLoginWarningText {
-                Label(notice, systemImage: "exclamationmark.triangle.fill")
+                Label {
+                    Text(numbers: notice)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                }
                     .font(AppTypography.subheadline)
                     .foregroundStyle(appState.launchAtLoginError == nil ? Color.orange : Color.red)
                     .fixedSize(horizontal: false, vertical: true)

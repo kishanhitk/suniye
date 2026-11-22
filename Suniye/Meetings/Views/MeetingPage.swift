@@ -50,7 +50,7 @@ struct MeetingPage: View {
                     MeetingLiveMeta(session: live)
                     MeetingLiveBanner(session: live, meetings: meetings)
                 } else {
-                    Text(metaLine(record))
+                    Text(numbers: metaLine(record))
                         .font(AppTypography.body)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                 }

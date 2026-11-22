@@ -46,7 +46,7 @@ struct EngineSheet: View {
                         Circle()
                             .fill(result.severity.color)
                             .frame(width: 7, height: 7)
-                        Text(result.latencyText ?? result.message)
+                        Text(numbers: result.latencyText ?? result.message)
                             .font(AppTypography.subheadline)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                             .lineLimit(2)
@@ -85,10 +85,10 @@ struct EngineSheet: View {
                 .padding(.top, 3)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(name(for: provider))
+                Text(numbers: name(for: provider))
                     .font(AppTypography.rowTitle)
                     .foregroundStyle(Color.primary)
-                Text(facts(for: provider))
+                Text(numbers: facts(for: provider))
                     .font(AppTypography.subheadline)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -227,7 +227,7 @@ struct InstructionsSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Base instructions")
                     .font(AppTypography.cardTitle)
-                Text(detail)
+                Text(numbers: detail)
                     .font(AppTypography.subheadline)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -504,7 +504,11 @@ struct APIEndpointSheet: View {
                     .textFieldStyle(.roundedBorder)
                     .font(AppTypography.codeBodyMedium)
                 if let error = appState.apiEndpointDraftValidationError {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                    Label {
+                        Text(numbers: error)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
                         .font(AppTypography.caption)
                         .foregroundStyle(.red)
                 }
@@ -579,7 +583,11 @@ struct APIEndpointSheet: View {
                 }
 
                 if let error = appState.llmKeyOperationError {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                    Label {
+                        Text(numbers: error)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
                         .font(AppTypography.caption)
                         .foregroundStyle(.red)
                 }
@@ -595,7 +603,7 @@ struct APIEndpointSheet: View {
                         Button {
                             appState.llmSelectedModelPreset = preset
                         } label: {
-                            Text(preset == .custom ? "Custom ID" : preset.displayName)
+                            Text(numbers: preset == .custom ? "Custom ID" : preset.displayName)
                                 .font(AppTypography.body)
                                 .foregroundStyle(isActive ? Color.white : Color.primary)
                                 .frame(maxWidth: .infinity)
@@ -619,7 +627,11 @@ struct APIEndpointSheet: View {
                         .textFieldStyle(.roundedBorder)
                         .font(AppTypography.codeBodyMedium)
                     if let error = appState.apiModelDraftValidationError {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                        Label {
+                            Text(numbers: error)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                        }
                             .font(AppTypography.caption)
                             .foregroundStyle(.red)
                     }
@@ -649,7 +661,7 @@ struct APIEndpointSheet: View {
                         Circle()
                             .fill(result.severity.color)
                             .frame(width: 7, height: 7)
-                        Text(result.latencyText ?? result.message)
+                        Text(numbers: result.latencyText ?? result.message)
                             .font(AppTypography.subheadline)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                             .lineLimit(2)

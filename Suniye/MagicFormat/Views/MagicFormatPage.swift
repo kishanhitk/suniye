@@ -60,7 +60,7 @@ struct StylePage: View {
             VStack(alignment: .leading, spacing: 4) {
                 DetailPageTitle(title: "Magic Format")
                 if let statusLine {
-                    Text(statusLine.text)
+                    Text(numbers: statusLine.text)
                         .font(AppTypography.body)
                         .foregroundStyle(statusLine.tint)
                         .fixedSize(horizontal: false, vertical: true)

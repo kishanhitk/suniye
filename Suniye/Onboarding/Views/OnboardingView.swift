@@ -144,7 +144,7 @@ struct OnboardingView: View {
                 .padding(.top, 16)
 
             if let result = appState.onboardingPracticeResult, result.severity == .error, !isDictationInFlight {
-                Text(result.message)
+                Text(numbers: result.message)
                     .font(.system(size: 12))
                     .foregroundStyle(.red)
                     .padding(.top, 6)
@@ -195,8 +195,7 @@ struct OnboardingView: View {
                 HStack {
                     Text("Downloading speech model")
                     Spacer()
-                    Text(verbatim: "\(Int(appState.downloadProgress * 100))%")
-                        .monospacedDigit()
+                    Text(numbers: "\(Int(appState.downloadProgress * 100))%")
                 }
                 ProgressView(value: appState.downloadProgress)
                     .progressViewStyle(.linear)
@@ -208,7 +207,7 @@ struct OnboardingView: View {
                 }
                 .frame(maxWidth: .infinity)
             default:
-                Text(appState.onboardingDiskSpaceMessage ?? "The speech model is not ready.")
+                Text(numbers: appState.onboardingDiskSpaceMessage ?? "The speech model is not ready.")
                     .frame(maxWidth: .infinity)
             }
         }
@@ -387,7 +386,7 @@ struct OnboardingView: View {
         switch step {
         case .welcome:
             if let message = appState.onboardingDiskSpaceMessage {
-                Text(message)
+                Text(numbers: message)
                     .font(.system(size: 12))
                     .foregroundStyle(.red)
             } else {
@@ -490,7 +489,7 @@ private struct MoreRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
-                Text(detail)
+                Text(numbers: detail)
                     .font(.system(size: 13))
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
