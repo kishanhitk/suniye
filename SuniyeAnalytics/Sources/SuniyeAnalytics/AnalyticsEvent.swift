@@ -17,7 +17,7 @@ public enum AnalyticsEvent: Sendable {
     case dictationCompleted(DictationMetrics)
     case dictationBlocked(reason: DictationBlockedReason)
     case dictationCancelled(stage: DictationCancelStage)
-    case dictationEmpty
+    case dictationEmpty(reason: DictationEmptyReason)
     /// Emitted when an inserted dictation's edit-learning session finalizes. The
     /// bucket is a coarse % of the dictation the user corrected (0..100, content-
     /// free) — an ASR/cleanup accuracy proxy that arrives after `dictation_completed`.
@@ -25,7 +25,8 @@ public enum AnalyticsEvent: Sendable {
 
     case audioCaptureFailed(outcome: AudioOutcome)
     case audioCaptureInterrupted(reason: AudioInterruptionReason)
-    case audioBackendUsed(backend: SafeLabel, fallbackOccurred: Bool, rung: Int)
+    /// `inputStandIn`: why the capture used a microphone other than the chosen one.
+    case audioBackendUsed(backend: SafeLabel, fallbackOccurred: Bool, rung: Int, inputStandIn: InputStandInReason?)
 
     case permissionTransition(kind: PermissionKind, granted: Bool)
     /// A permission was explicitly asked for (system prompt shown, Permiso overlay
@@ -34,14 +35,36 @@ public enum AnalyticsEvent: Sendable {
     /// gives grant-rate-at-ask-time per surface.
     case permissionRequest(kind: PermissionKind, surface: PermissionAskSurface, outcome: PermissionAskOutcome)
     /// `resumed` is true when the step was re-shown by launch resume rather than
-    /// reached by a user action in this session.
-    case onboardingStep(step: OnboardingStepName, granted: Bool?, resumed: Bool?)
+    /// reached by a user action in this session. `elapsedMs` is time since this
+    /// onboarding session started; `advancedBy` says what moved the user here.
+    case onboardingStep(
+        step: OnboardingStepName,
+        granted: Bool?,
+        resumed: Bool?,
+        elapsedMs: Int? = nil,
+        advancedBy: OnboardingAdvance? = nil
+    )
     /// One practice dictation attempt on the Speak screen. `attempt` is 1-based
     /// and capped by the caller; outcome is a closed enum — never content.
     case onboardingPracticeResult(outcome: PracticeOutcome, attempt: Int)
     /// Fired exactly once from finishOnboarding(): the state the user exited
     /// onboarding in, plus wall-clock duration of the final onboarding session.
-    case onboardingOutcome(durationMs: Int?, practiced: Bool, micGranted: Bool, axGranted: Bool, modelReady: Bool)
+    /// `practiceEdited`: the user changed the practice text by hand (no content).
+    case onboardingOutcome(
+        durationMs: Int?,
+        practiced: Bool,
+        micGranted: Bool,
+        axGranted: Bool,
+        modelReady: Bool,
+        endedBy: OnboardingEnd? = nil,
+        practiceEdited: Bool? = nil
+    )
+    /// The onboarding window was closed before onboarding finished (the step
+    /// the user walked away from).
+    case onboardingWindowClosed(step: OnboardingStepName, elapsedMs: Int?)
+    /// Once per fresh install: whether the built-in speech model became the
+    /// default, why not, and how long the check took.
+    case systemDefaultModel(outcome: SystemDefaultModelOutcome, reason: SystemDefaultModelReason?, model: SafeLabel?, durationMs: Int)
     /// Post-onboarding Magic Format nudge card lifecycle (impressions are the
     /// denominator for nudge-conversion analysis).
     case mfNudge(action: MFNudgeAction)
@@ -58,8 +81,30 @@ public enum AnalyticsEvent: Sendable {
 
     case vocabLearnedFromEdit(count: Int)
     case featureToggled(feature: TrackableFeature, enabled: Bool)
+    /// The history popover that shows the text from before Magic Format.
+    case rawTranscript(action: RawTranscriptAction)
     case updateAction(kind: UpdateActionKind, fromVersion: SafeLabel?, toVersion: SafeLabel?)
     case error(type: AnalyticsErrorType, code: AnalyticsErrorCode)
+
+    case meetingStarted(source: MeetingSource)
+    /// `durationMs` is the recorded time, without pauses, in whole minutes.
+    case meetingEnded(durationMs: Int, tracks: MeetingTracks, reason: MeetingStopReason)
+    /// `durationMs` runs from the stop, or from the launch that finishes a
+    /// recording that a quit or a crash left, to the final transcript.
+    case meetingTranscribed(outcome: MeetingOutcome, model: SafeLabel, segments: Int, durationMs: Int)
+    /// `parts` is the number of transcript parts that got notes of their own;
+    /// 1 when the transcript fit in one request, nil when no summary was written.
+    /// `reason` is set for a failed summary.
+    case meetingSummarized(provider: MeetingSummaryEngine, outcome: MeetingOutcome, reason: MeetingSummaryFailure?, parts: Int?, durationMs: Int)
+    case chatGPTSignIn(outcome: ChatGPTSignInOutcome)
+    /// How a call card closed. A card that the app closed itself (a recording
+    /// started or stopped, or the call came back) sends nothing.
+    case meetingCallCard(card: MeetingCallCardKind, action: MeetingCallCardAction)
+    /// The first change to one part of a meeting's text in one visit of its
+    /// page. No text.
+    case meetingEdited(part: MeetingEditedText)
+    /// The first start of a meeting's audio in one visit of its page.
+    case meetingPlayed
 
     /// Self-observability of the analytics pipeline itself.
     case analyticsHealth(queueDepth: Int, uploadFailures: Int, evictedByTTL: Int, evictedBySize: Int)
@@ -82,6 +127,8 @@ public enum AnalyticsEvent: Sendable {
         case .onboardingStep: return "onboarding_step"
         case .onboardingPracticeResult: return "onboarding_practice_result"
         case .onboardingOutcome: return "onboarding_outcome"
+        case .onboardingWindowClosed: return "onboarding_window_closed"
+        case .systemDefaultModel: return "system_default_model"
         case .mfNudge: return "mf_nudge"
         case .modelChanged: return "model_changed"
         case .modelDownload: return "model_download"
@@ -89,8 +136,17 @@ public enum AnalyticsEvent: Sendable {
         case .llmGeneration: return "llm_generation"
         case .vocabLearnedFromEdit: return "vocab_learned_from_edit"
         case .featureToggled: return "feature_toggled"
+        case .rawTranscript: return "raw_transcript"
         case .updateAction: return "update_action"
         case .error: return "error"
+        case .meetingStarted: return "meeting_started"
+        case .meetingEnded: return "meeting_ended"
+        case .meetingTranscribed: return "meeting_transcribed"
+        case .meetingSummarized: return "meeting_summarized"
+        case .chatGPTSignIn: return "chatgpt_sign_in"
+        case .meetingCallCard: return "meeting_call_card"
+        case .meetingEdited: return "meeting_edited"
+        case .meetingPlayed: return "meeting_played"
         case .analyticsHealth: return "analytics_health"
         }
     }
@@ -112,30 +168,34 @@ public enum AnalyticsEvent: Sendable {
             return ["reason": .label(reason)]
         case let .dictationCancelled(stage):
             return ["stage": .label(stage)]
-        case .dictationEmpty:
-            return [:]
+        case let .dictationEmpty(reason):
+            return ["empty_reason": .label(reason)]
         case let .dictationEdited(editRateBucket):
             return ["edit_rate_bucket": .int(editRateBucket)]
         case let .audioCaptureFailed(outcome):
             return ["outcome": .label(outcome)]
         case let .audioCaptureInterrupted(reason):
             return ["reason": .label(reason)]
-        case let .audioBackendUsed(backend, fallbackOccurred, rung):
-            return ["backend": .label(backend), "fallback_occurred": .bool(fallbackOccurred), "rung": .int(rung)]
+        case let .audioBackendUsed(backend, fallbackOccurred, rung, inputStandIn):
+            var out: [String: AnalyticsValue] = ["backend": .label(backend), "fallback_occurred": .bool(fallbackOccurred), "rung": .int(rung)]
+            if let inputStandIn { out["input_stand_in"] = .label(inputStandIn) }
+            return out
         case let .permissionTransition(kind, granted):
             return ["kind": .label(kind), "granted": .bool(granted)]
         case let .permissionRequest(kind, surface, outcome):
             // `kind` and `outcome` land in typed AE slots; `surface` rides the
             // blob20 props-JSON backstop until it earns a slot.
             return ["kind": .label(kind), "surface": .label(surface), "outcome": .label(outcome)]
-        case let .onboardingStep(step, granted, resumed):
+        case let .onboardingStep(step, granted, resumed, elapsedMs, advancedBy):
             var out: [String: AnalyticsValue] = ["step": .label(step)]
             if let granted { out["granted"] = .bool(granted) }
             if let resumed { out["resumed"] = .bool(resumed) }
+            if let elapsedMs { out["elapsed_ms"] = .int(elapsedMs) }
+            if let advancedBy { out["advanced_by"] = .label(advancedBy) }
             return out
         case let .onboardingPracticeResult(outcome, attempt):
             return ["outcome": .label(outcome), "attempt": .int(attempt)]
-        case let .onboardingOutcome(durationMs, practiced, micGranted, axGranted, modelReady):
+        case let .onboardingOutcome(durationMs, practiced, micGranted, axGranted, modelReady, endedBy, practiceEdited):
             var out: [String: AnalyticsValue] = [
                 "practiced": .bool(practiced),
                 "mic_granted": .bool(micGranted),
@@ -143,6 +203,17 @@ public enum AnalyticsEvent: Sendable {
                 "model_ready": .bool(modelReady),
             ]
             if let durationMs { out["duration_ms"] = .int(durationMs) }
+            if let endedBy { out["ended_by"] = .label(endedBy) }
+            if let practiceEdited { out["practice_edited"] = .bool(practiceEdited) }
+            return out
+        case let .onboardingWindowClosed(step, elapsedMs):
+            var out: [String: AnalyticsValue] = ["step": .label(step)]
+            if let elapsedMs { out["elapsed_ms"] = .int(elapsedMs) }
+            return out
+        case let .systemDefaultModel(outcome, reason, model, durationMs):
+            var out: [String: AnalyticsValue] = ["outcome": .label(outcome), "duration_ms": .int(durationMs)]
+            if let reason { out["reason"] = .label(reason) }
+            if let model { out["model"] = .label(model) }
             return out
         case let .mfNudge(action):
             return ["action": .label(action)]
@@ -168,6 +239,8 @@ public enum AnalyticsEvent: Sendable {
             return ["count": .int(count)]
         case let .featureToggled(feature, enabled):
             return ["feature": .label(feature), "enabled": .bool(enabled)]
+        case let .rawTranscript(action):
+            return ["action": .label(action)]
         case let .updateAction(kind, fromVersion, toVersion):
             var out: [String: AnalyticsValue] = ["kind": .label(kind)]
             if let fromVersion { out["from_version"] = .label(fromVersion) }
@@ -175,6 +248,25 @@ public enum AnalyticsEvent: Sendable {
             return out
         case let .error(type, code):
             return ["type": .label(type), "code": .label(code)]
+        case let .meetingStarted(source):
+            return ["source": .label(source)]
+        case let .meetingEnded(durationMs, tracks, reason):
+            return ["duration_ms": .int(durationMs), "tracks": .label(tracks), "reason": .label(reason)]
+        case let .meetingTranscribed(outcome, model, segments, durationMs):
+            return ["outcome": .label(outcome), "asr_model": .label(model), "segments": .int(segments), "duration_ms": .int(durationMs)]
+        case let .meetingSummarized(provider, outcome, reason, parts, durationMs):
+            var out: [String: AnalyticsValue] = ["provider": .label(provider), "outcome": .label(outcome), "duration_ms": .int(durationMs)]
+            if let reason { out["reason"] = .label(reason) }
+            if let parts { out["parts"] = .int(parts) }
+            return out
+        case let .chatGPTSignIn(outcome):
+            return ["outcome": .label(outcome)]
+        case let .meetingCallCard(card, action):
+            return ["kind": .label(card), "action": .label(action)]
+        case let .meetingEdited(part):
+            return ["kind": .label(part)]
+        case .meetingPlayed:
+            return [:]
         case let .analyticsHealth(queueDepth, uploadFailures, evictedByTTL, evictedBySize):
             return [
                 "queue_depth": .int(queueDepth),

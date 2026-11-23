@@ -7,6 +7,9 @@ packages:
     exactVersion: 2.9.2
   SuniyeAnalytics:
     path: SuniyeAnalytics
+  MarkdownEngine:
+    url: https://github.com/kishanhitk/swift-markdown-engine
+    revision: c80c69c58c313a39d1a9273878032c0cbf43ad0c
 schemes:
   Suniye:
     build:
@@ -16,6 +19,7 @@ schemes:
       gatherCoverageData: false
       targets:
         - name: SuniyeTests
+        - package: SuniyeAnalytics/SuniyeAnalyticsTests
 settings:
   configs:
     Release:
@@ -51,7 +55,8 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDisplayName: $(SUNIYE_DISPLAY_NAME)
         LSUIElement: true
-        NSMicrophoneUsageDescription: Suniye needs microphone access to capture dictation.
+        NSMicrophoneUsageDescription: Suniye needs microphone access to capture dictation and meetings.
+        NSAudioCaptureUsageDescription: Suniye records the sound of your calls for meeting notes.
         NSSpeechRecognitionUsageDescription: Suniye uses on-device speech recognition to transcribe your dictation.
         SuniyeIssueReportEndpointURL: https://suniye.app/api/issue-reports
         SuniyeAnalyticsEndpointURL: https://ingest.suniye.kishans.in/api/v1/events
@@ -86,6 +91,8 @@ targets:
       - package: Sparkle
       - package: SuniyeAnalytics
         product: SuniyeAnalytics
+      - package: MarkdownEngine
+        product: MarkdownEngine
       - framework: Suniye/Frameworks/libsherpa-onnx-c-api.dylib
       - framework: Suniye/Frameworks/libonnxruntime.dylib
     postBuildScripts:

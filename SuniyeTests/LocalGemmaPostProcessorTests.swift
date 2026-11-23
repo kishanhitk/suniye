@@ -139,36 +139,49 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
     }
 
     func testServerArgumentsDisableReasoning() {
-        let arguments = LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf", port: 51_234, apiKey: "local-key")
+        let arguments = LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf")
 
-        XCTAssertEqual(arguments.first, "--model")
-        XCTAssertTrue(arguments.contains("/tmp/model.gguf"))
-        XCTAssertTrue(arguments.contains("51234"))
-        XCTAssertTrue(arguments.contains("--reasoning"))
-        XCTAssertTrue(arguments.contains("off"))
-        XCTAssertTrue(arguments.contains("--api-key"))
-        XCTAssertTrue(arguments.contains("local-key"))
-        XCTAssertTrue(arguments.contains("--no-webui"))
+        XCTAssertEqual(arguments, [
+            "--model", "/tmp/model.gguf",
+            "--ctx-size", "16384",
+            "--parallel", "1",
+            "--reasoning", "off",
+        ])
     }
 
-    func testCompletionRequestsIncludeBearerAuth() throws {
-        let endpoint = LocalGemmaServerEndpoint(
-            baseURL: URL(string: "http://127.0.0.1:51234")!,
-            apiKey: "secret-local-key"
+    func testAStartWithTheDrafterPassesItAfterTheGemmaArguments() {
+        let runtime = LocalGemmaRuntime(
+            serverExecutableURL: URL(fileURLWithPath: "/tmp/llama-server"),
+            model: LocalGemmaDefaults.modelEntry,
+            modelURL: URL(fileURLWithPath: "/tmp/model.gguf"),
+            drafterURL: URL(fileURLWithPath: "/tmp/drafter.gguf")
         )
 
-        let request = try LocalGemmaCompletionRequestFactory.makeRequest(
-            endpoint: endpoint,
-            instructions: "Clean text.",
-            prompt: "<transcript>raw</transcript>",
-            maxTokens: 64,
-            modelName: "Gemma",
-            timeoutSeconds: 3
+        let arguments = LlamaServer.arguments(for: runtime.launch, port: 4242, apiKey: "key")
+
+        XCTAssertEqual(arguments.prefix(12), [
+            "--model", "/tmp/model.gguf",
+            "--ctx-size", "16384",
+            "--parallel", "1",
+            "--reasoning", "off",
+            "--spec-type", "draft-mtp",
+            "--spec-draft-model", "/tmp/drafter.gguf",
+        ])
+    }
+
+    func testRuntimeLaunchRunsTheHelperWithGemmaArguments() {
+        let runtime = LocalGemmaRuntime(
+            serverExecutableURL: URL(fileURLWithPath: "/tmp/llama-server"),
+            model: LocalGemmaDefaults.modelEntry,
+            modelURL: URL(fileURLWithPath: "/tmp/model.gguf"),
+            drafterURL: nil
         )
 
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer secret-local-key")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
-        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:51234/v1/chat/completions")
+        XCTAssertEqual(runtime.launch, LlamaServerLaunch(
+            executableURL: URL(fileURLWithPath: "/tmp/llama-server"),
+            arguments: LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf"),
+            modelName: LocalGemmaDefaults.modelDisplayName
+        ))
     }
 
     func testPolishPassesConfiguredIdleTimeoutToClient() async throws {
@@ -296,6 +309,7 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         instructions: String,
         prompt: String,
         maxTokens: Int?,
+        sampling: LocalGemmaSampling,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double

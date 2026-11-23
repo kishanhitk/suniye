@@ -167,10 +167,6 @@ final class TestKeychainService: KeychainServiceProtocol {
         stored = key
     }
 
-    func hasLLMKey() -> Bool {
-        stored?.isEmpty == false
-    }
-
     func getLLMKey() throws -> String? {
         stored
     }
@@ -180,15 +176,43 @@ final class TestKeychainService: KeychainServiceProtocol {
     }
 }
 
+/// A Keychain item in memory: no test reads or writes the login Keychain.
+final class MemorySecretItem: SecretItem, @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Data?
+
+    init(_ data: Data? = nil) {
+        stored = data
+    }
+
+    var data: Data? {
+        lock.withLock { stored }
+    }
+
+    func read() throws -> Data? {
+        lock.withLock { stored }
+    }
+
+    func write(_ data: Data) throws {
+        lock.withLock { stored = data }
+    }
+
+    func delete() throws {
+        lock.withLock { stored = nil }
+    }
+}
+
 @MainActor
 final class StubAppUpdateController: AppUpdateControllerProtocol {
     var canCheckForUpdates = false
+    var isUpdateReadyToInstall = false
     var automaticallyChecksForUpdates = false
     var updateChannel: UpdateChannel = .stable
     var onStateChange: (() -> Void)?
 
     private(set) var startCallCount = 0
     private(set) var checkForUpdatesCallCount = 0
+    private(set) var installUpdateAndRelaunchCallCount = 0
 
     func start() {
         startCallCount += 1
@@ -200,240 +224,12 @@ final class StubAppUpdateController: AppUpdateControllerProtocol {
         checkForUpdatesCallCount += 1
     }
 
+    func installUpdateAndRelaunch() {
+        installUpdateAndRelaunchCallCount += 1
+    }
+
     func notifyStateChanged() {
         onStateChange?()
-    }
-}
-
-final class StubModelManager: ModelManagerProtocol {
-    var catalog: [ASRModelCatalogEntry] = ASRModelCatalog.entries
-    var fallbackOrder: [ASRModelID] = ASRModelCatalog.fallbackOrder
-    var installedModelIDs: Set<ASRModelID> = [.parakeetV3]
-    var installedByteCounts: [ASRModelID: Int64] = [
-        .parakeetV3: 631_000_000,
-        .parakeetV2English: 482_468_385,
-        .moonshineBase: 285_000_000,
-        .senseVoice: 240_000_000,
-        .whisperTinyEnglish: 118_071_777,
-        .whisperBaseEnglish: 208_576_005,
-        .whisperSmallEnglish: 635_693_775,
-        .whisperLargeV3Turbo: 563_790_207,
-        .whisperDistilLargeV3: 529_350_808,
-        .whisperLargeV3: 1_700_000_000
-    ]
-    var deleteCallCount = 0
-    var lastDeletedModelID: ASRModelID?
-    var lastDownloadedModelID: ASRModelID?
-    var downloadResult: Result<Void, Error> = .success(())
-    var installsModelAfterDownload = true
-    var recognizerConfigs: [ASRModelID: RecognizerConfig] = [
-        .parakeetV3: RecognizerConfig(
-            modelID: .parakeetV3,
-            family: .nemoTransducer,
-            tokensPath: "/tmp/parakeet/tokens.txt",
-            numThreads: 4,
-            encoderPath: "/tmp/parakeet/encoder.int8.onnx",
-            decoderPath: "/tmp/parakeet/decoder.int8.onnx",
-            joinerPath: "/tmp/parakeet/joiner.int8.onnx",
-            modelType: "nemo_transducer"
-        ),
-        .parakeetV2English: RecognizerConfig(
-            modelID: .parakeetV2English,
-            family: .nemoTransducer,
-            tokensPath: "/tmp/parakeet-v2/tokens.txt",
-            numThreads: 4,
-            encoderPath: "/tmp/parakeet-v2/encoder.int8.onnx",
-            decoderPath: "/tmp/parakeet-v2/decoder.int8.onnx",
-            joinerPath: "/tmp/parakeet-v2/joiner.int8.onnx",
-            modelType: "nemo_transducer"
-        ),
-        .moonshineBase: RecognizerConfig(
-            modelID: .moonshineBase,
-            family: .moonshine,
-            tokensPath: "/tmp/moonshine/tokens.txt",
-            numThreads: 4,
-            encoderPath: "/tmp/moonshine/encode.int8.onnx",
-            preprocessorPath: "/tmp/moonshine/preprocess.onnx",
-            uncachedDecoderPath: "/tmp/moonshine/uncached_decode.int8.onnx",
-            cachedDecoderPath: "/tmp/moonshine/cached_decode.int8.onnx"
-        ),
-        .senseVoice: RecognizerConfig(
-            modelID: .senseVoice,
-            family: .senseVoice,
-            tokensPath: "/tmp/sensevoice/tokens.txt",
-            numThreads: 4,
-            modelPath: "/tmp/sensevoice/model.int8.onnx",
-            language: "auto",
-            useInverseTextNormalization: true
-        ),
-        .whisperLargeV3: RecognizerConfig(
-            modelID: .whisperLargeV3,
-            family: .whisper,
-            tokensPath: "/tmp/whisper/large-v3-tokens.txt",
-            numThreads: 4,
-            encoderPath: "/tmp/whisper/large-v3-encoder.int8.onnx",
-            decoderPath: "/tmp/whisper/large-v3-decoder.int8.onnx"
-        ),
-        .whisperTinyEnglish: RecognizerConfig(
-            modelID: .whisperTinyEnglish,
-            family: .whisper,
-            tokensPath: "/tmp/whisper-tiny/tiny.en-tokens.txt",
-            numThreads: 4,
-            encoderPath: "/tmp/whisper-tiny/tiny.en-encoder.int8.onnx",
-            decoderPath: "/tmp/whisper-tiny/tiny.en-decoder.int8.onnx"
-        ),
-        .whisperBaseEnglish: RecognizerConfig(
-            modelID: .whisperBaseEnglish,
-            family: .whisper,
-            tokensPath: "/tmp/whisper-base/base.en-tokens.txt",
-            numThreads: 4,
-            encoderPath: "/tmp/whisper-base/base.en-encoder.int8.onnx",
-            decoderPath: "/tmp/whisper-base/base.en-decoder.int8.onnx"
-        ),
-        .whisperSmallEnglish: RecognizerConfig(
-            modelID: .whisperSmallEnglish,
-            family: .whisper,
-            tokensPath: "/tmp/whisper-small/small.en-tokens.txt",
-            numThreads: 4,
-            encoderPath: "/tmp/whisper-small/small.en-encoder.int8.onnx",
-            decoderPath: "/tmp/whisper-small/small.en-decoder.int8.onnx"
-        ),
-        .whisperLargeV3Turbo: RecognizerConfig(
-            modelID: .whisperLargeV3Turbo,
-            family: .whisper,
-            tokensPath: "/tmp/whisper-turbo/turbo-tokens.txt",
-            numThreads: 4,
-            encoderPath: "/tmp/whisper-turbo/turbo-encoder.int8.onnx",
-            decoderPath: "/tmp/whisper-turbo/turbo-decoder.int8.onnx"
-        ),
-        .whisperDistilLargeV3: RecognizerConfig(
-            modelID: .whisperDistilLargeV3,
-            family: .whisper,
-            tokensPath: "/tmp/whisper-distil-large-v3/distil-large-v3-tokens.txt",
-            numThreads: 4,
-            encoderPath: "/tmp/whisper-distil-large-v3/distil-large-v3-encoder.int8.onnx",
-            decoderPath: "/tmp/whisper-distil-large-v3/distil-large-v3-decoder.int8.onnx"
-        )
-    ]
-
-    func modelsRootDirectoryURL() throws -> URL {
-        URL(fileURLWithPath: "/tmp/suniye-models", isDirectory: true)
-    }
-
-    func modelDirectoryURL(for modelID: ASRModelID) throws -> URL {
-        URL(fileURLWithPath: "/tmp/suniye-models/\(modelID.rawValue)", isDirectory: true)
-    }
-
-    func isInstalled(_ modelID: ASRModelID) -> Bool {
-        installedModelIDs.contains(modelID)
-    }
-
-    func installedModels() -> [ASRModelID] {
-        catalog.map(\.id).filter { installedModelIDs.contains($0) }
-    }
-
-    func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig {
-        recognizerConfigs[modelID] ?? recognizerConfigs[.parakeetV3]!
-    }
-
-    func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {
-        progress(1)
-        try downloadResult.get()
-        if installsModelAfterDownload {
-            installedModelIDs.insert(modelID)
-        }
-        lastDownloadedModelID = modelID
-    }
-
-    func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64 {
-        ASRModelCatalog.entry(for: modelID).estimatedSizeBytes
-    }
-
-    func installedByteCount(for modelID: ASRModelID) -> Int64 {
-        installedByteCounts[modelID] ?? 0
-    }
-
-    func deleteModel(_ modelID: ASRModelID) throws {
-        deleteCallCount += 1
-        lastDeletedModelID = modelID
-        installedModelIDs.remove(modelID)
-    }
-}
-
-final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
-    var catalog: [LocalLLMModelCatalogEntry] = LocalLLMModelCatalog.entries
-    var preferredModelID: LocalLLMModelID = LocalLLMModelCatalog.preferredModelID
-    var isHardwareSupported = true
-    var installedModelIDs: Set<LocalLLMModelID> = []
-    var installedByteCounts: [LocalLLMModelID: Int64] = [
-        LocalLLMModelCatalog.preferredModelID: LocalLLMModelCatalog.entry(for: LocalLLMModelCatalog.preferredModelID).expectedSizeBytes
-    ]
-    var downloadResult: Result<Void, Error> = .success(())
-    var deleteCallCount = 0
-    var downloadCallCount = 0
-    var cancelCallCount = 0
-    var lastDeletedModelID: LocalLLMModelID?
-    var lastDownloadedModelID: LocalLLMModelID?
-    var lastProgressHandler: (@Sendable (LocalLLMDownloadProgress) -> Void)?
-    var progressValues: [LocalLLMDownloadProgress] = []
-    var rootDirectory = URL(fileURLWithPath: "/tmp/suniye-llm", isDirectory: true)
-    var onDownloadFinished: (() -> Void)?
-
-    func modelsRootDirectoryURL() throws -> URL {
-        rootDirectory
-    }
-
-    func modelFileURL(for modelID: LocalLLMModelID) throws -> URL {
-        rootDirectory.appendingPathComponent(catalogEntry(for: modelID).filename)
-    }
-
-    func isInstalled(_ modelID: LocalLLMModelID) -> Bool {
-        isHardwareSupported && installedModelIDs.contains(modelID)
-    }
-
-    func installedByteCount(for modelID: LocalLLMModelID) -> Int64 {
-        isInstalled(modelID) ? (installedByteCounts[modelID] ?? 0) : 0
-    }
-
-    func installState(for modelID: LocalLLMModelID) -> LocalLLMInstallState {
-        guard isHardwareSupported else {
-            return .unavailable("Requires Apple Silicon.")
-        }
-        guard isInstalled(modelID) else {
-            return .notInstalled
-        }
-        return .installed(installedByteCount(for: modelID))
-    }
-
-    func downloadModel(_ modelID: LocalLLMModelID, progress: @escaping @Sendable (LocalLLMDownloadProgress) -> Void) async throws {
-        downloadCallCount += 1
-        lastDownloadedModelID = modelID
-        lastProgressHandler = progress
-        let entry = catalogEntry(for: modelID)
-        let progressValue = LocalLLMDownloadProgress(
-            fractionCompleted: 1,
-            downloadedBytes: entry.expectedSizeBytes,
-            expectedBytes: entry.expectedSizeBytes
-        )
-        progressValues.append(progressValue)
-        progress(progressValue)
-        try downloadResult.get()
-        installedModelIDs.insert(modelID)
-        onDownloadFinished?()
-    }
-
-    func cancelDownload() {
-        cancelCallCount += 1
-    }
-
-    func deleteModel(_ modelID: LocalLLMModelID) throws {
-        deleteCallCount += 1
-        lastDeletedModelID = modelID
-        installedModelIDs.remove(modelID)
-    }
-
-    private func catalogEntry(for modelID: LocalLLMModelID) -> LocalLLMModelCatalogEntry {
-        catalog.first { $0.id == modelID } ?? LocalLLMModelCatalog.entry(for: modelID)
     }
 }
 
@@ -451,6 +247,7 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     var loadCallCount = 0
     var transcribeCallCount = 0
     var transcribePurposes: [TranscriptionPurpose] = []
+    var lastTranscribeInput: (samples: [Float], sampleRate: Int)?
     var loadedConfigs: [RecognizerConfig] = []
     var onTranscribe: (() -> Void)?
     /// Awaited after the scripted result is claimed; receives the 1-based call number.
@@ -478,6 +275,7 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     ) async throws -> String {
         transcribeCallCount += 1
         transcribePurposes.append(purpose)
+        lastTranscribeInput = (samples, sampleRate)
         let callNumber = transcribeCallCount
         progressToReport.forEach(onProgress)
         onTranscribe?()
@@ -533,7 +331,8 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
         requestedEchoCancellation: false,
         effectiveEchoCancellation: false,
         backend: .inputOnlyHAL,
-        fallbackReason: nil
+        fallbackReason: nil,
+        standIn: nil
     )
 
     func startCapture(
@@ -622,13 +421,16 @@ func makeValidCapturedAudio(sampleRate: Int = 16_000) -> CapturedAudio {
 final class StubHotkeyService: HotkeyServiceProtocol {
     var onHotkeyDown: (() -> Void)?
     var onHotkeyUp: (() -> Void)?
+    var onHotkeyChord: (() -> Void)?
     var onEditModeHotkeyDown: (() -> Void)?
     var onEditModeHotkeyUp: (() -> Void)?
     var onPasteLastTranscript: (() -> Void)?
+    var onCancel: (() -> Void)?
     private(set) var startMonitoringCallCount = 0
     private(set) var lastConfiguration: HotkeyConfiguration?
     private(set) var lastEditModeConfiguration: HotkeyConfiguration?
     private(set) var lastPasteLastTranscriptConfiguration: HotkeyConfiguration?
+    private(set) var isCancelShortcutEnabled = false
 
     func startMonitoring(
         configuration: HotkeyConfiguration,
@@ -642,6 +444,10 @@ final class StubHotkeyService: HotkeyServiceProtocol {
     }
 
     func stopMonitoring() {}
+
+    func setCancelShortcutEnabled(_ enabled: Bool) {
+        isCancelShortcutEnabled = enabled
+    }
 }
 
 @MainActor
@@ -673,35 +479,6 @@ final class StubLaunchAtLoginService: LaunchAtLoginServiceProtocol {
         }
         status = enabled ? .enabled : .disabled
         return status
-    }
-}
-
-/// One-shot gate for holding an async stub call open until the test releases it.
-final class AsyncGate: @unchecked Sendable {
-    private let lock = NSLock()
-    private var isOpen = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    func wait() async {
-        await withCheckedContinuation { continuation in
-            lock.lock()
-            if isOpen {
-                lock.unlock()
-                continuation.resume()
-                return
-            }
-            waiters.append(continuation)
-            lock.unlock()
-        }
-    }
-
-    func open() {
-        lock.lock()
-        let pending = waiters
-        waiters = []
-        isOpen = true
-        lock.unlock()
-        pending.forEach { $0.resume() }
     }
 }
 
@@ -743,6 +520,12 @@ final class SpyLearningToastPresenter: LearningToastPresenting {
     func showLearnedTerms(_ terms: [String], onUndo: @escaping () -> Void) {
         shownTermBatches.append(terms)
         lastUndo = onUndo
+    }
+
+    private(set) var shownMessages: [String] = []
+
+    func show(message: String, detail: String?, actionTitle: String?, action: (() -> Void)?) {
+        shownMessages.append(message)
     }
 }
 
@@ -798,6 +581,26 @@ final class SpyAccessibilityOnboarding: AccessibilityOnboardingPresenting {
     }
 }
 
+/// A test app that can record right away: phase ready, microphone and Accessibility granted.
+@MainActor
+func makeReadyTestAppState(
+    transcriptionService: TranscriptionServiceProtocol = StubTranscriptionService(),
+    audioCaptureService: AudioCaptureServiceProtocol = StubAudioCaptureService(),
+    textInsertionService: TextInsertionServiceProtocol = SpyTextInsertionService(),
+    analytics: Analytics = SpyAnalytics()
+) -> AppState {
+    let appState = makeTestAppState(
+        transcriptionService: transcriptionService,
+        audioCaptureService: audioCaptureService,
+        textInsertionService: textInsertionService,
+        analytics: analytics
+    )
+    appState.phase = .ready
+    appState.hasMicPermission = true
+    appState.hasAccessibilityPermission = true
+    return appState
+}
+
 @MainActor
 func makeTestAppState(
     modelManager: ModelManagerProtocol = StubModelManager(),
@@ -835,6 +638,8 @@ func makeTestAppState(
     micAuthorizationStatusProvider: (() -> AVAuthorizationStatus)? = nil,
     micAccessRequester: (() async -> Bool)? = nil,
     accessibilityTrustProvider: (() -> Bool)? = nil,
+    accessibilityTrustPrompter: (() -> Bool)? = nil,
+    systemGlobeKeyActionProvider: @escaping () -> SystemGlobeKeyAction = { .doNothing },
     availableDiskCapacityProvider: (() async -> Int64?)? = nil,
     issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
@@ -861,6 +666,7 @@ func makeTestAppState(
         historyStore: historyStore,
         statsStore: statsStore,
         keychainService: keychainService,
+        chatGPTCredentialStore: KeychainChatGPTCredentialStore(item: MemorySecretItem()),
         appUpdateController: appUpdateController ?? StubAppUpdateController(),
         launchAtLoginService: launchAtLoginService,
         diagnosticBundleService: diagnosticBundleService,
@@ -878,12 +684,42 @@ func makeTestAppState(
         micAuthorizationStatusProvider: micAuthorizationStatusProvider ?? { .notDetermined },
         micAccessRequester: micAccessRequester ?? { false },
         accessibilityTrustProvider: accessibilityTrustProvider ?? { true },
+        // Never the live API: a real call would raise the system dialog.
+        accessibilityTrustPrompter: accessibilityTrustPrompter ?? accessibilityTrustProvider ?? { true },
+        // Never the live setting: the test Mac's Keyboard settings must not change results.
+        systemGlobeKeyActionProvider: systemGlobeKeyActionProvider,
         availableDiskCapacityProvider: availableDiskCapacityProvider ?? { nil },
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
         magicFormatSlowWarningDelaySeconds: magicFormatSlowWarningDelaySeconds,
+        meetingCoordinator: makeTestMeetingCoordinator(engine: transcriptionService, analytics: analytics),
         startServices: startServices,
         llmE2EMode: llmE2EMode
+    )
+}
+
+/// Meetings on a temporary folder, with no audio source and no call app, so
+/// a test app never reads, recovers or records the real meetings.
+@MainActor
+func makeTestMeetingCoordinator(engine: TranscriptionServiceProtocol, analytics: Analytics) -> MeetingCoordinator {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("suniye-meeting-tests-\(UUID().uuidString)", isDirectory: true)
+    return MeetingCoordinator(
+        store: MeetingStore(rootDirectory: root.appendingPathComponent("meetings", isDirectory: true)),
+        templates: MeetingTemplateStore(fileURL: root.appendingPathComponent("templates.json")),
+        settingsStore: MeetingSettingsStore(userDefaults: UserDefaults(suiteName: "suniye-meeting-tests-\(UUID().uuidString)")!),
+        engine: engine,
+        makeTranscriptEngine: { _ in engine },
+        environment: MeetingEnvironment(
+            canRecordCallAudio: false,
+            makeSources: { _ in [:] },
+            freeDiskBytes: { nil },
+            callPlaysOnSpeakers: { false },
+            makeMicrophoneUsers: { FakeMicrophoneUsers() },
+            now: Date.init
+        ),
+        summaryAvailability: { _ in .unavailable },
+        makeSummaryModel: { _ in nil },
+        analytics: analytics
     )
 }
 
@@ -969,5 +805,76 @@ final class StubIssueReportUploadService: IssueReportUploadServiceProtocol {
     func submit(payload: IssueReportPayload, diagnosticsURL: URL?) async throws -> IssueReportSubmissionResponse {
         submissions.append((payload, diagnosticsURL))
         return try result.get()
+    }
+}
+
+/// Collects values from callbacks that may fire on any thread.
+final class LockedRecorder<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [Value] = []
+
+    var values: [Value] {
+        lock.withLock { storage }
+    }
+
+    func record(_ value: Value) {
+        lock.withLock { storage.append(value) }
+    }
+}
+
+/// Answers each `containsSpeech` call from `answers` in turn, repeating the last
+/// one, and records the length of every clip it is asked about.
+final class StubSpeechDetector: SpeechDetecting {
+    private var answers: [Bool]
+    private(set) var clipLengths: [Int] = []
+
+    init(answers: [Bool]) {
+        self.answers = answers
+    }
+
+    convenience init(result: Bool) {
+        self.init(answers: [result])
+    }
+
+    func containsSpeech(_ samples: [Float]) -> Bool {
+        clipLengths.append(samples.count)
+        return answers.count > 1 ? answers.removeFirst() : answers[0]
+    }
+}
+
+/// A meeting audio player whose time moves only when a test moves it.
+@MainActor
+final class FakeMeetingAudioPlayer: MeetingAudioPlayer {
+    let duration: TimeInterval
+    var currentTime: TimeInterval = 0
+    var isPlaying = false
+    var onEnd: () -> Void = {}
+    /// The time of each start.
+    private(set) var starts: [TimeInterval] = []
+    /// Runs at each pause, before the player pauses.
+    var pausing: () -> Void = {}
+
+    init(duration: TimeInterval) {
+        self.duration = duration
+    }
+
+    func play(from time: TimeInterval) -> Bool {
+        starts.append(time)
+        currentTime = time
+        isPlaying = true
+        return true
+    }
+
+    func pause() {
+        pausing()
+        isPlaying = false
+    }
+
+    /// The audio plays to its end, and the player goes back to the start, as
+    /// AVAudioPlayer does.
+    func playToEnd() {
+        isPlaying = false
+        currentTime = 0
+        onEnd()
     }
 }

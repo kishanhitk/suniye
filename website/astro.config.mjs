@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig, memoryCache } from "astro/config";
+import { defineConfig } from "astro/config";
 import cloudflare from "@astrojs/cloudflare";
 import tailwindcss from "@tailwindcss/vite";
 import sharp from "sharp";
@@ -34,11 +34,6 @@ export default defineConfig({
   adapter: cloudflare({
     imageService: "compile"
   }),
-  experimental: {
-    cache: {
-      provider: memoryCache()
-    }
-  },
   vite: {
     plugins: [tailwindcss()],
     define: {

@@ -7,13 +7,12 @@ import Foundation
 
 enum Scoring {
     /// Mirrors python normalize(): strip, curly apostrophe -> ', en dash -> -,
-    /// collapse runs of spaces/tabs to one space, collapse 2+ newlines to one.
+    /// collapse runs of spaces/tabs to one space. Blank lines stay: they are paragraph breaks.
     static func normalize(_ text: String) -> String {
         var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         value = value.replacingOccurrences(of: "\u{2019}", with: "'")
         value = value.replacingOccurrences(of: "\u{2013}", with: "-")
         value = value.replacingOccurrences(of: "[ \t]+", with: " ", options: .regularExpression)
-        value = value.replacingOccurrences(of: "\n{2,}", with: "\n", options: .regularExpression)
         return value
     }
 

@@ -61,6 +61,67 @@ export interface BlockedPanels {
   modelLoad?: FilterDim;
   /** D1 install registry (installs tile, new-installs, fleet breakdowns). */
   installs?: FilterDim;
+  onboardingFunnel?: FilterDim;
+  systemModel?: FilterDim;
+  practice?: FilterDim;
+  /** onboarding_outcome: duration and how onboarding ended. */
+  onboardingOutcome?: FilterDim;
+  windowClosed?: FilterDim;
+  permissions?: FilterDim;
+  blockedReasons?: FilterDim;
+  escCancels?: FilterDim;
+  emptyDictations?: FilterDim;
+  updateActions?: FilterDim;
+  rawTranscript?: FilterDim;
+  /** app_launch settings snapshot (double-tap availability). */
+  launchSettings?: FilterDim;
+}
+
+/** One onboarding step: installs that reached it, and that as a share of Welcome. */
+export interface OnboardingFunnelStep {
+  step: string;
+  installs: number;
+  /** null when no install reached Welcome in the window (render "—"). */
+  pctOfWelcome: number | null;
+}
+
+export interface OnboardingStats {
+  /** welcome → speak → type_anywhere → more → completed, in that order. */
+  funnel: OnboardingFunnelStep[];
+  /** system_default_model outcomes: adopted / unavailable / failed. */
+  systemModelOutcomes: Breakdown[];
+  /** Share of fresh installs that started on the built-in model; null when none. */
+  systemModelAdoptionPct: number | null;
+  /** Why the built-in model was not adopted (non-adopted rows only). */
+  systemModelReasons: Breakdown[];
+  /** How long the built-in model check took (p50/p95). */
+  systemModelCheckMs: LatencySummary;
+  practiceOutcomes: Breakdown[];
+  /** Wall-clock onboarding duration (p50/p95) from onboarding_outcome. */
+  durationMs: LatencySummary;
+  /** finish_button vs window_closed (v1 onward). */
+  endedBy: Breakdown[];
+  /** The step people closed the window on before finishing. */
+  windowClosedAt: Breakdown[];
+  /** "kind · outcome" across every permission-ask surface. */
+  permissionAsks: Breakdown[];
+}
+
+/** Use of the dictation features that shipped after onboarding v1. */
+export interface FeatureUseStats {
+  /** dictation_completed by source: hotkey (hold), hotkey_lock (double tap), manual. */
+  dictationSources: Breakdown[];
+  /** Recordings the user canceled with Esc. */
+  escCancels: number;
+  /** Why a capture used another microphone than the chosen one. */
+  micStandIns: Breakdown[];
+  /** no_speech vs empty_transcript; rows from older app versions carry no reason. */
+  emptyDictationReasons: Breakdown[];
+  updateActions: Breakdown[];
+  /** The "Original" popover in history: opened, copied. */
+  rawTranscriptActions: Breakdown[];
+  /** Installs by whether a double tap can lock a recording, or the Globe conflict. */
+  doubleTapAvailability: Breakdown[];
 }
 
 export interface StatsResponse {
@@ -106,6 +167,10 @@ export interface StatsResponse {
   keepAliveEvictions: number;
   /** dictation_completed count in the window under the active filters. */
   segmentEventCount: number;
+  onboarding: OnboardingStats;
+  featureUse: FeatureUseStats;
+  /** Why dictation starts were refused (wrong_phase, mic_denied, released_during_prompt, …). */
+  dictationBlockedReasons: Breakdown[];
   /**
    * Selectable values per dimension, each with a contextual facet count
    * (dictations under the other active filters). Ordered by count, so the most

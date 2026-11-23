@@ -205,8 +205,8 @@ final class ChatCompletionClientMoreTests: XCTestCase {
                 timeoutSeconds: 3
             )
             XCTFail("Expected malformed response")
-        } catch let error as LLMPostProcessorError {
-            XCTAssertEqual(error.logValue, LLMPostProcessorError.malformedResponse.logValue)
+        } catch let error as ChatCompletionError {
+            XCTAssertEqual(error, .malformedResponse)
         } catch {
             XCTFail("Unexpected error: \(error)")
         }

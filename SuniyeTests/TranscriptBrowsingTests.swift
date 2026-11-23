@@ -101,8 +101,9 @@ final class TranscriptBrowsingTests: XCTestCase {
 }
 
 final class RecentResultSourceAppTests: XCTestCase {
-    /// History written before the source app was recorded must still decode.
-    func testLegacyTranscriptWithoutAppBundleIDDecodes() throws {
+    /// History written before the source app or the original transcript was
+    /// recorded must still decode.
+    func testLegacyTranscriptWithoutOptionalFieldsDecodes() throws {
         let legacy = """
         [{"id":"\(UUID().uuidString)","text":"hello","createdAt":1723800000000,"durationSeconds":1.5,"wasLLMPolished":false}]
         """
@@ -113,6 +114,7 @@ final class RecentResultSourceAppTests: XCTestCase {
 
         XCTAssertEqual(decoded.count, 1)
         XCTAssertNil(decoded[0].appBundleID)
+        XCTAssertNil(decoded[0].rawText)
         XCTAssertEqual(decoded[0].text, "hello")
     }
 

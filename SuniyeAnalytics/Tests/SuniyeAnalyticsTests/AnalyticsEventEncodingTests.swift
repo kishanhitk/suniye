@@ -20,6 +20,29 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         XCTAssertNil(props["lat_asr_to_llm"])
     }
 
+    func testMeetingEventsUseTheIngestKeys() {
+        let ended = AnalyticsEvent.meetingEnded(durationMs: 2_280_000, tracks: .youThem, reason: .callEnded)
+        XCTAssertEqual(ended.name, "meeting_ended")
+        XCTAssertEqual(ended.props, ["duration_ms": .int(2_280_000), "tracks": .label("you_them"), "reason": .label("call_ended")])
+
+        let failed = AnalyticsEvent.meetingSummarized(provider: .apiEndpoint, outcome: .failed, reason: .keyRejected, parts: nil, durationMs: 900)
+        XCTAssertEqual(failed.props, ["provider": .label("api_endpoint"), "outcome": .label("failed"), "reason": .label("key_rejected"), "duration_ms": .int(900)])
+
+        let signIn = AnalyticsEvent.chatGPTSignIn(outcome: .noPlanPermission)
+        XCTAssertEqual(signIn.name, "chatgpt_sign_in")
+        XCTAssertEqual(signIn.props, ["outcome": .label("no_plan_permission")])
+
+        let card = AnalyticsEvent.meetingCallCard(card: .callEnded, action: .keepRecording)
+        XCTAssertEqual(card.name, "meeting_call_card")
+        XCTAssertEqual(card.props, ["kind": .label("call_ended"), "action": .label("keep_recording")])
+
+        let edited = AnalyticsEvent.meetingEdited(part: .transcript)
+        XCTAssertEqual(edited.name, "meeting_edited")
+        XCTAssertEqual(edited.props, ["kind": .label("transcript")])
+        XCTAssertEqual(AnalyticsEvent.meetingPlayed.name, "meeting_played")
+        XCTAssertEqual(AnalyticsEvent.meetingPlayed.props, [:])
+    }
+
     func testModelLoadEvent() {
         let load = AnalyticsEvent.modelLoad(model: SafeLabel("gemma-3-4b"), loadMs: 1200, evictedByKeepAlive: false)
         XCTAssertEqual(load.name, "model_load")
@@ -54,6 +77,62 @@ final class AnalyticsEventEncodingTests: XCTestCase {
             model: SafeLabel("gemma-4-e2b"), promptTokens: 2473, cachedTokens: 3, predictedTokens: 31, prefillMs: 1690, decodeMs: 500
         )
         XCTAssertEqual(templateOnly.props["cache_hit"], .bool(false))
+    }
+
+    func testSystemDefaultModelEvent() {
+        let adopted = AnalyticsEvent.systemDefaultModel(outcome: .adopted, reason: nil, model: SafeLabel("appleSpeech"), durationMs: 840)
+        XCTAssertEqual(adopted.name, "system_default_model")
+        XCTAssertEqual(adopted.props["outcome"], .label("adopted"))
+        XCTAssertEqual(adopted.props["model"], .label("applespeech"))
+        XCTAssertEqual(adopted.props["duration_ms"], .int(840))
+        XCTAssertNil(adopted.props["reason"])
+
+        let unavailable = AnalyticsEvent.systemDefaultModel(outcome: .unavailable, reason: .unsupportedLanguage, model: nil, durationMs: 12)
+        XCTAssertEqual(unavailable.props["outcome"], .label("unavailable"))
+        XCTAssertEqual(unavailable.props["reason"], .label("unsupported_language"))
+        XCTAssertNil(unavailable.props["model"])
+    }
+
+    func testOnboardingStepOptionalFields() {
+        let bare = AnalyticsEvent.onboardingStep(step: .welcome, granted: nil, resumed: nil)
+        XCTAssertEqual(bare.props, ["step": .label("welcome")])
+
+        let full = AnalyticsEvent.onboardingStep(step: .more, granted: nil, resumed: true, elapsedMs: 41_000, advancedBy: .insertion)
+        XCTAssertEqual(full.name, "onboarding_step")
+        XCTAssertEqual(full.props["step"], .label("more"))
+        XCTAssertEqual(full.props["resumed"], .bool(true))
+        XCTAssertEqual(full.props["elapsed_ms"], .int(41_000))
+        XCTAssertEqual(full.props["advanced_by"], .label("insertion"))
+    }
+
+    func testOnboardingOutcomeOptionalFields() {
+        let legacyShape = AnalyticsEvent.onboardingOutcome(durationMs: nil, practiced: false, micGranted: true, axGranted: false, modelReady: true)
+        XCTAssertNil(legacyShape.props["ended_by"])
+        XCTAssertNil(legacyShape.props["practice_edited"])
+        XCTAssertNil(legacyShape.props["duration_ms"])
+
+        let event = AnalyticsEvent.onboardingOutcome(
+            durationMs: 95_000, practiced: true, micGranted: true, axGranted: true, modelReady: true,
+            endedBy: .windowClosed, practiceEdited: true
+        )
+        XCTAssertEqual(event.name, "onboarding_outcome")
+        XCTAssertEqual(event.props["ended_by"], .label("window_closed"))
+        XCTAssertEqual(event.props["practice_edited"], .bool(true))
+        XCTAssertEqual(event.props["duration_ms"], .int(95_000))
+    }
+
+    func testOnboardingWindowClosedEvent() {
+        let event = AnalyticsEvent.onboardingWindowClosed(step: .speak, elapsedMs: 9_000)
+        XCTAssertEqual(event.name, "onboarding_window_closed")
+        XCTAssertEqual(event.props["step"], .label("speak"))
+        XCTAssertEqual(event.props["elapsed_ms"], .int(9_000))
+        XCTAssertNil(AnalyticsEvent.onboardingWindowClosed(step: .welcome, elapsedMs: nil).props["elapsed_ms"])
+    }
+
+    func testReleasedDuringPromptBlockedReason() {
+        let event = AnalyticsEvent.dictationBlocked(reason: .releasedDuringPrompt)
+        XCTAssertEqual(event.name, "dictation_blocked")
+        XCTAssertEqual(event.props["reason"], .label("released_during_prompt"))
     }
 
     func testDictationEditedEvent() {
@@ -100,7 +179,7 @@ final class AnalyticsEventEncodingTests: XCTestCase {
     }
 
     func testBatchEnvelopeKeys() throws {
-        let event = EncodedEvent(event: .dictationEmpty, eventID: "e", eventTS: 1, sessionID: "s")
+        let event = EncodedEvent(event: .dictationEmpty(reason: .emptyTranscript), eventID: "e", eventTS: 1, sessionID: "s")
         let batch = AnalyticsBatch(
             schemaVersion: analyticsSchemaVersion, installID: "i", appVersion: "0.0.8",
             build: "8", channel: "stable", isDebug: false, sentAt: 123, device: nil, events: [event]
@@ -114,7 +193,7 @@ final class AnalyticsEventEncodingTests: XCTestCase {
     }
 
     func testBatchEncodesDeviceWhenPresent() throws {
-        let event = EncodedEvent(event: .dictationEmpty, eventID: "e", eventTS: 1, sessionID: "s")
+        let event = EncodedEvent(event: .dictationEmpty(reason: .emptyTranscript), eventID: "e", eventTS: 1, sessionID: "s")
         let batch = AnalyticsBatch(
             schemaVersion: analyticsSchemaVersion, installID: "i", appVersion: "0.0.8",
             build: "8", channel: "stable", isDebug: false, sentAt: 123,
@@ -126,6 +205,14 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         XCTAssertTrue(json.contains("apple-m3-pro"))
         // Device language excluded (would collide with dictation's blob7 language).
         XCTAssertFalse(json.contains("\"language\""))
+    }
+
+    func testFeatureUseEvents() {
+        XCTAssertEqual(AnalyticsEvent.dictationEmpty(reason: .noSpeech).props, ["empty_reason": .label("no_speech")])
+
+        let opened = AnalyticsEvent.rawTranscript(action: .opened)
+        XCTAssertEqual(opened.name, "raw_transcript")
+        XCTAssertEqual(opened.props, ["action": .label("opened")])
     }
 
     func testFreeTextCannotLeakThroughSafeLabel() {

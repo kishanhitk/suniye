@@ -3,7 +3,6 @@
 .build/
 dist/
 .derivedData-release/
-.dmg-staging/
 third_party/
 .e2e/
 website/node_modules/

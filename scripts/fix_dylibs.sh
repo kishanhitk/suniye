@@ -11,11 +11,23 @@ if [[ ! -f libsherpa-onnx-c-api.dylib || ! -f libonnxruntime.dylib ]]; then
   exit 1
 fi
 
-# Keep a compatibility symlink for the install-name expected by sherpa dylib.
-ln -sf libonnxruntime.dylib libonnxruntime.1.23.2.dylib
+# Some ONNX Runtime builds use a versioned install name
+# (@rpath/libonnxruntime.<version>.dylib). Suniye embeds one unversioned copy,
+# so sherpa-onnx must load it by the unversioned name.
+ORT_DEPENDENCY="$(otool -L libsherpa-onnx-c-api.dylib | awk '$1 ~ /^@rpath\/libonnxruntime/ { print $1; exit }')"
+if [[ -z "${ORT_DEPENDENCY}" ]]; then
+  echo "libsherpa-onnx-c-api.dylib does not load ONNX Runtime through @rpath." >&2
+  exit 1
+fi
 
 install_name_tool -id @rpath/libonnxruntime.dylib libonnxruntime.dylib
 install_name_tool -id @rpath/libsherpa-onnx-c-api.dylib libsherpa-onnx-c-api.dylib
-install_name_tool -change @rpath/libonnxruntime.1.23.2.dylib @rpath/libonnxruntime.dylib libsherpa-onnx-c-api.dylib
+if [[ "${ORT_DEPENDENCY}" != "@rpath/libonnxruntime.dylib" ]]; then
+  install_name_tool -change "${ORT_DEPENDENCY}" @rpath/libonnxruntime.dylib libsherpa-onnx-c-api.dylib
+fi
+
+# install_name_tool invalidates the signatures. Xcode re-signs the embedded
+# copies, but anything that loads these files directly needs a valid one.
+codesign --force --sign - libonnxruntime.dylib libsherpa-onnx-c-api.dylib
 
 echo "Dylib install names updated successfully."

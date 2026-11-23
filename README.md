@@ -21,7 +21,7 @@
   <img src="https://img.shields.io/badge/macOS-14%2B-1a1a1a" alt="macOS 14+" />
 </p>
 
-<img src="docs/assets/dashboard.png" width="760" alt="Suniye's dashboard: sessions, words dictated, total time, and recent transcriptions — all stored locally on your Mac" />
+<img src="docs/assets/dashboard.png" width="760" alt="Suniye's Transcripts view: dictation count, time saved, words per day, and a searchable history of every dictation — all stored locally on your Mac" />
 
 </div>
 
@@ -44,7 +44,8 @@ Hold your hotkey, say what you mean, release. Your words land at the cursor in M
 1. A small icon lives in your **menu bar** — that's Suniye, listening for its hotkey.
 2. **Hold your hotkey** (default: Fn/Globe) and speak naturally.
 3. **Release** — your speech is transcribed on-device and pasted at the cursor.
-4. If focus moved before insertion, focus a text field and press **Control + Command + V** to paste the last transcript. The recovery shortcut is customizable.
+4. For long dictation, **double-tap** the hotkey to record hands-free, then press it once to finish. **Esc** cancels a recording.
+5. If focus moved before insertion, focus a text field and press **Control + Command + V** to paste the last transcript. The recovery shortcut is customizable.
 
 ## Install
 
@@ -69,7 +70,9 @@ Suniye is signed with an Apple Developer ID and notarized by Apple, so macOS ope
 
 ### First launch
 
-Suniye asks for two permissions — **Microphone** (to hear you) and **Accessibility** (to type into other apps) — then walks you through a short setup and a practice dictation. It installs a recommended speech model (**Parakeet TDT 0.6B v3**) in the background while you try it out.
+A short onboarding takes you from Welcome to your first dictation. Suniye asks for **Microphone** when you start your first try, and for **Accessibility** (to type into other apps) once you have seen it work.
+
+On macOS 26 Suniye starts on Apple's built-in on-device speech engine, so there is nothing to download. If that engine can't run on your Mac (older macOS, an unsupported language, or a setting from your organization), Suniye downloads its recommended model, **Parakeet TDT 0.6B v3**, instead. You can switch models any time in **Speech Model**.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed steps.
 
@@ -78,6 +81,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed st
 | | |
 |---|---|
 | **Transcripts** | Sessions, words dictated, time saved and where you dictate most, above a searchable log of every past transcription — copy or delete any entry |
+| **Meetings** | Record a call or a meeting in the room: after the stop, a transcript of your microphone and the call audio, then a summary from a template and your notes ([how it works](docs/MEETINGS.md)) |
 | **Magic Format** | Optional AI cleanup for punctuation, capitalization, and formatting |
 | **Per-app prompts** | Give each app its own Magic Format style — terse in chat, prose in notes |
 | **Edit Mode** | Select text anywhere, hold a second shortcut, and speak an instruction (“make this formal”) to rewrite it in place |
@@ -92,11 +96,11 @@ Turn a raw transcript into polished text on your terms. It's off until you turn 
 
 1. **Apple Intelligence** — on supported Macs, nothing leaves the machine.
 2. **A local model** — a small on-device formatter (Gemma) that works fully offline.
-3. **Your own provider** — bring an OpenAI-compatible key; only text (never audio) is sent, and only if you choose this.
+3. **Your own provider** — bring an OpenAI-compatible key, which Suniye keeps in the macOS Keychain; only text (never audio) is sent, and only if you choose this.
 
 ## Choose your speech model
 
-Suniye ships a curated catalog instead of a single fixed recognizer — from Apple's built-in engine to on-device Parakeet, Whisper, and Cohere Transcribe models. Pick the trade-off you want between speed, accuracy, size, and languages; everything runs offline, and you can switch instantly from the **Model** page.
+Suniye ships a curated catalog instead of a single fixed recognizer — from Apple's built-in engine to on-device Parakeet, Whisper, Cohere Transcribe, and Qwen3-ASR models. Pick the trade-off you want between speed, accuracy, size, and languages; everything runs offline, and you can switch instantly from the **Model** page.
 
 | Model | Best for |
 |---|---|
@@ -108,12 +112,14 @@ Suniye ships a curated catalog instead of a single fixed recognizer — from App
 | **Whisper Large v3 Turbo · Distil · v3** | Broad multilingual coverage |
 | **Whisper Tiny · Base · Small (English)** | Small, fast English downloads |
 | **Cohere Transcribe** | Highest accuracy, 14 languages — 2B parameters, ~2.9 GB download, ~4× slower than Parakeet |
+| **Qwen3-ASR 1.7B** | Cohere-class accuracy in 30 languages and 22 Chinese dialects, detected automatically, and the best Hindi here — ~2.5 GB download, Apple Silicon only |
 
 ## Privacy
 
 - Transcription happens **entirely on your Mac**. Audio is processed in memory and never sent anywhere.
 - The only network calls are model downloads, update checks, optional pseudonymous usage stats (counts and timings — never your words, and opt-out in Settings), and issue reports you explicitly submit.
 - With Magic Format's on-device options, cleanup stays local too. Only the optional API provider sends text (never audio) off your Mac — and it's off by default.
+- Meetings stay on your Mac by default. Only when you choose ChatGPT or an API endpoint as the summary model, the transcript text and your notes go to that service, never the audio.
 
 ---
 
@@ -125,7 +131,7 @@ Suniye is a native macOS app. The technical bits, for the curious and for contri
 |---|---|
 | **Platform** | macOS 14+ (Apple Silicon and Intel) |
 | **UI** | SwiftUI |
-| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with a curated local model catalog (Parakeet, Moonshine, SenseVoice, and Whisper variants) |
+| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with a curated local model catalog (Parakeet, Moonshine, SenseVoice, and Whisper variants), ONNX Runtime for Cohere Transcribe, and a bundled [llama.cpp](https://github.com/ggml-org/llama.cpp) helper for Qwen3-ASR |
 | **Text insertion** | macOS Accessibility APIs |
 | **Updates** | [Sparkle](https://sparkle-project.org) — Stable and Tip channels |
 | **License** | [MIT](LICENSE) |

@@ -114,6 +114,8 @@ trap '/usr/bin/hdiutil detach "${MOUNT_POINT}" -quiet >/dev/null 2>&1 || true; r
 
 [[ -d "${MOUNT_POINT}/Suniye.app" ]] || { echo "DMG missing Suniye.app" >&2; exit 1; }
 [[ -L "${MOUNT_POINT}/Applications" ]] || { echo "DMG missing Applications symlink" >&2; exit 1; }
+[[ -f "${MOUNT_POINT}/.DS_Store" ]] || { echo "DMG missing its Finder window layout (.DS_Store)" >&2; exit 1; }
+[[ -f "${MOUNT_POINT}/.background.tiff" ]] || { echo "DMG missing its window background" >&2; exit 1; }
 
 verify_app_build_channel() {
   local app_path="$1"

@@ -17,13 +17,13 @@ we want to be able to audit and patch ourselves when macOS shifts.
 ## Local modifications
 
 None. Files are copied unchanged. Keep it that way — if a fix is needed, prefer a wrapper
-in `Suniye/Services/AccessibilityOnboarding.swift` over editing vendored code, so re-syncing
+in `Suniye/Onboarding/AccessibilityOnboarding.swift` over editing vendored code, so re-syncing
 upstream stays a clean copy.
 
 ## How it's used
 
 Only `PermisoPanel.accessibility` is used, behind the
-`AccessibilityOnboardingPresenting` seam (`Suniye/Services/AccessibilityOnboarding.swift`).
+`AccessibilityOnboardingPresenting` seam (`Suniye/Onboarding/AccessibilityOnboarding.swift`).
 Permiso is presentation-only; grant detection / auto-dismiss lives in that wrapper.
 
 ## Re-syncing

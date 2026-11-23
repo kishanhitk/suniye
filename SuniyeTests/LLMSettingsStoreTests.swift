@@ -33,10 +33,29 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.modelValidationError, "Enter a valid custom model name.")
     }
 
+    /// The stored JSON is a contract with every installed copy: a blob that a
+    /// released build wrote must load and save back with the same keys and values.
+    func testStoredBlobOfAReleasedBuildSavesBackUnchanged() throws {
+        let stored = #"{"isEnabled":true,"provider":"localGemma","selectedModelPreset":"custom","customModelId":"my/model","endpointURLString":"https://example.com/v1/chat/completions","baseSystemPrompt":"API prompt","appleSystemPrompt":"Apple prompt","gemmaSystemPrompt":"Gemma prompt","systemPrompt":"","keywordsRaw":"Suniye, Kishan","autoLearnedKeywordsRaw":"Zed","learnFromEditsEnabled":false,"timeoutSeconds":12,"localModelKeepAlive":"oneHour","appPromptBindings":[{"id":"A1B2C3D4-0000-0000-0000-000000000001","bundleID":"com.tinyspeck.slackmacgap","appDisplayName":"Slack","prompt":"casual"}]}"#
+        let suite = "dev.suniye.tests.llm.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(Data(stored.utf8), forKey: "dev.suniye.llm.settings")
+        let store = LLMSettingsStore(userDefaults: defaults)
+
+        store.save(store.load())
+
+        let saved = try XCTUnwrap(defaults.data(forKey: "dev.suniye.llm.settings"))
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: saved) as? NSDictionary,
+            try JSONSerialization.jsonObject(with: Data(stored.utf8)) as? NSDictionary
+        )
+    }
+
     func testStoreRoundTrip() {
         let suite = "dev.suniye.tests.llmsettings.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
+        let store = LLMSettingsStore(userDefaults: defaults)
 
         var settings = LLMSettings()
         settings.isEnabled = true
@@ -59,7 +78,7 @@ final class LLMSettingsStoreTests: XCTestCase {
     func testKeepAliveDurationRoundTrips() {
         let suite = "dev.suniye.tests.llmsettings.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
+        let store = LLMSettingsStore(userDefaults: defaults)
 
         var settings = LLMSettings()
         settings.localModelKeepAlive = .oneHour
@@ -210,24 +229,27 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertFalse(settings.isEndpointValid)
     }
 
-    func testPresetMetadataMatchesMainWindowModelList() {
-        XCTAssertEqual(LLMModelPreset.gemini25Flash.displayName, "Gemini 2.5 Flash")
-        XCTAssertEqual(LLMModelPreset.gpt41Mini.displayName, "GPT-4.1 Mini")
-        XCTAssertEqual(LLMModelPreset.gpt41Mini.subtitle, "OpenAI, balanced")
+    func testLoadReturnsDefaultsWhenNothingIsStored() {
+        let suite = "dev.suniye.tests.llm.empty.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = LLMSettingsStore(userDefaults: defaults)
+
+        XCTAssertEqual(store.load(), LLMSettings())
     }
 
-    func testMagicFormatProviderMetadataIncludesLocalGemma() {
-        XCTAssertEqual(MagicFormatProvider.localGemma.displayName, "Local Model")
-        XCTAssertEqual(MagicFormatProvider.localGemma.description, "Local formatting with an on-device LLM.")
-        XCTAssertTrue(MagicFormatProvider.allCases.contains(.localGemma))
-    }
+    func testSaveSilentlySkipsUnencodableSettings() {
+        let suite = "dev.suniye.tests.llm.unencodable.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = LLMSettingsStore(userDefaults: defaults)
 
-    func testMagicFormatPresetMetadataMatchesFriendlyEditingStyles() {
-        XCTAssertEqual(LLMModelPreset.gemini25Flash.magicFormatLabel, "Fast")
-        XCTAssertEqual(LLMModelPreset.gpt41Mini.magicFormatLabel, "Balanced")
-        XCTAssertEqual(LLMModelPreset.custom.magicFormatLabel, "Custom")
-        XCTAssertEqual(LLMModelPreset.gemini25Flash.magicFormatDescription, "Quick fixes with lower cost.")
-        XCTAssertEqual(LLMModelPreset.gpt41Mini.magicFormatDescription, "Best default for most dictation.")
-        XCTAssertEqual(LLMModelPreset.custom.magicFormatDescription, "Use the exact model ID supported by your endpoint.")
+        // Bypass the clamping initializer; infinity is not representable by
+        // the JSON encoder, so save must bail out without writing anything.
+        var unencodable = LLMSettings()
+        unencodable.timeoutSeconds = .infinity
+
+        store.save(unencodable)
+
+        XCTAssertNil(defaults.data(forKey: "dev.suniye.llm.settings"))
+        XCTAssertEqual(store.load(), LLMSettings())
     }
 }

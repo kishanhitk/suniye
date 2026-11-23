@@ -15,26 +15,41 @@ Suniye releases are signed with an Apple Developer ID and notarized, so macOS op
 - If you use the Tip channel, also check network access to `https://suniye.kishans.in/appcast-tip.xml`.
 - If the appcast is unavailable, check that the latest GitHub release includes `appcast.xml`.
 
-## Downloaded the wrong model during onboarding
-- Open the app settings and go to `ASR Model`.
-- Install the model you want, then click `Use Model`.
-- The onboarding flow downloads whichever ASR model is currently selected. Fresh installs default to `Parakeet TDT 0.6B v3`.
+## Onboarding downloaded a speech model on macOS 26
+- Suniye uses Apple's built-in speech engine only when it works on your Mac. If it does not (unsupported language, a setting from your organization, or the system speech files cannot be installed), Suniye downloads `Parakeet TDT 0.6B v3` instead.
+- `~/Library/Application Support/Suniye/logs/app.log` names the reason on the line `system default model unavailable`.
+- To use a different model, open `Speech Model`, install it, then click `Use Model`.
 
-## Local Model download failed during onboarding
-- You can finish onboarding and keep dictating without Magic Format.
+## Holding the dictation key did nothing after the microphone prompt
+- If you let go of the key while macOS asks for Microphone access, Suniye does not start recording. The floating indicator shows `Hold again to dictate`. Hold the key again.
+
+## Double-tap does not lock the recording with the Globe shortcut
+- With Globe as the shortcut, double-tap works only when Keyboard settings say "Press 🌐 key to: Do Nothing". Any other choice also runs on each Globe tap: Show Emoji & Symbols (the macOS default), Change Input Source, or Start Dictation, which records at the same time as Suniye. Settings > General shows a notice.
+- Open System Settings > Keyboard and set "Press 🌐 key to" to Do Nothing. Or choose a key-combo shortcut in Suniye.
+
+## Esc did not cancel the recording
+- Esc cancels a recording only until you type or click in another app. After that, Esc goes to that app, so an Esc for a dialog cannot discard your dictation. Press the shortcut to finish the recording.
+- Esc with another key held (for example while you hold Control + Option + D) goes to the app.
+
+## Nothing was pasted and Suniye played the error sound
+- Suniye heard no speech. It checks each recording for speech before it transcribes it, so room noise, key clicks or a silent pause do not become invented text.
+- Speak closer to the microphone, or check the input in **General > Microphone**.
+- `~/Library/Application Support/Suniye/logs/app.log` has the line `transcribe skipped: no speech` for each such recording.
+
+## Local Model download failed
+- Dictation keeps working without Magic Format.
 - Open `Magic Format`, select `Local Model`, and retry the download.
 - The Local Model is optional and separate from the speech model used for transcription.
 
 ## Model is installed but won’t load
-- Open `ASR Model` and try switching to another installed model.
+- Open `Speech Model` and try switching to another installed model.
 - If the current model still fails, delete it from the model library and download it again.
 - Check `~/Library/Application Support/Suniye/logs/app.log` for the failing model name and validation error.
 
 ## Missing dylibs
-Rebuild and copy runtime libs:
+Rebuild the pinned sherpa-onnx release and copy the runtime libs:
 ```bash
 ./scripts/setup_sherpa.sh
-./scripts/fix_dylibs.sh
 ```
 
 ## Permission errors while dictating
@@ -46,13 +61,20 @@ If this happened right after the update to the first Developer ID release, grant
 
 ## Bluetooth audio drops to call quality while dictating
 - Bluetooth headphones switch to their call-quality profile whenever their microphone is used. This is a Bluetooth limitation, not an audio-quality setting Suniye can override.
-- To keep high-quality headphone playback, choose the built-in Mac microphone or a USB microphone while continuing to use the Bluetooth headphones for output. Suniye shows the current route and offers a recommended local microphone when one is available.
+- With **System Default**, Suniye does not record from a Bluetooth default input. It uses the built-in microphone, else another wired microphone, and uses Bluetooth only when nothing else can record. **General > Microphone** names the microphone in use.
+- To dictate into the headset on purpose, choose it in **General > Microphone**. Suniye then shows the call-quality warning and offers a local microphone.
 - Echo Cancellation uses Apple's Voice Processing only when both the input and output route support it. Suniye bypasses it for Bluetooth routes.
 
-## Selected microphone is unavailable
-- Suniye preserves an explicitly selected microphone when it is disconnected instead of silently recording from a different device.
-- Reconnect the microphone or choose another input device in **General > Microphone**. The unavailable device remains visible in the picker until you make a different choice.
+## Saved microphone is not connected
+- Suniye keeps the saved microphone and records from the **System Default** choice until it is connected again. **General > Microphone** names the microphone that stands in.
+- The disconnected microphone stays in the picker as unavailable until you make a different choice.
+
+## Dictation with the lid closed
+- A MacBook switches its built-in microphone off in hardware while the lid is closed. Suniye then records from another microphone and names it in **General > Microphone**.
+- With no other microphone, dictation shows `The built-in microphone is off while the lid is closed.`
+- Closing the lid during a dictation is not detected; the rest of that recording is silent.
 
 ## Dictation stops after an audio-device change
-- Suniye stops the current dictation if the active microphone changes, becomes unavailable, changes format, is muted, or Core Audio restarts.
+- A dictation keeps its microphone when the default input changes or another microphone connects. The next dictation picks again.
+- Suniye stops the current dictation if its microphone disconnects, changes format, is muted, or Core Audio restarts. With Echo Cancellation on, a change of the default output also stops it.
 - Check the current route in **General > Microphone**, then start the dictation again.

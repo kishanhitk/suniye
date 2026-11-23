@@ -1,5 +1,4 @@
-import type { FaqItem } from "../seo";
-import { BREW_INSTALL, DOWNLOAD_URL, GITHUB_URL, GITHUB_RELEASES_URL, SITE_URL } from "../site";
+import { BREW_INSTALL, DOWNLOAD_URL, GITHUB_URL, SITE_URL } from "../site";
 
 // The homepage's copy, shared by index.astro and the page's Markdown variant
 // so an agent reading text/markdown sees exactly what a browser sees.
@@ -10,171 +9,116 @@ export const HERO = {
   requirements: "Apple Silicon · macOS 14+ · Open source",
 } as const;
 
-// The whole argument in two paths. Deliberately structural rather than
-// benchmarked: "no round trip" is true by construction, a millisecond figure
-// would need a measurement this page can't show.
-export const CLOUD_PATH = [
-  "You speak",
-  "Your audio is uploaded",
-  "A server transcribes it",
-  "The text travels back",
-] as const;
-export const LOCAL_PATH = ["You speak", "Your Mac transcribes it", "The text is at your cursor"] as const;
-
-export const ARGUMENT = {
-  headline: "Every other dictation app sends your voice away.",
-  lead: "They are built on someone else's API, so your audio has to travel there and back before a single word appears. That round trip is the wait — and the privacy question.",
-  cloudNote: "Needs a connection. Your voice sits, however briefly, on a disk you don't own.",
-  localNote: "Works on a plane. Nothing to upload, so there is nothing to keep.",
-  latency: "177ms",
-  latencyNote: "Median speech–to–text with Apple's built-in engine. A network round trip alone often costs more than that.",
+export const PRICES = {
+  headline: "Voice typing that costs nothing. Not even your voice.",
+  lead: "Popular dictation apps charge $8 to $15 a month and send every word you say to their servers. Suniye is free, and it runs entirely on your Mac.",
+  chartTitle: "What unlimited dictation costs",
+  source:
+    "Pro plans for one person, billed annually: Wispr Flow $12 a month, Willow $12, Aqua Voice $8. From each app's pricing page, October 2026.",
 } as const;
 
-export const INTERFACE = {
-  headline: "Hold a key. Talk. Let go.",
-  lead: "Default is Fn/Globe; make it any shortcut you like. There is nothing else to learn.",
-} as const;
-
-export interface SpeechModel {
-  name: string;
-  langs: string;
-  size: string;
-  tag: string | null;
-}
-
-// Mirrors the in-app catalog (ASRModelCatalog.swift). Kept behind a disclosure:
-// the fact that you get a choice is the point, the twelve rows are reference.
-export const MODELS: readonly SpeechModel[] = [
-  { name: "Apple Speech", langs: "Follows your system language", size: "Built in", tag: "macOS 26+" },
-  { name: "Parakeet TDT 0.6B v3", langs: "25 European languages", size: "~680 MB", tag: "Recommended" },
-  { name: "Parakeet TDT 0.6B v2", langs: "English", size: "~482 MB", tag: null },
-  { name: "SenseVoice", langs: "Chinese · English · Japanese · Korean · Cantonese", size: "~240 MB", tag: null },
-  { name: "Moonshine Base", langs: "English", size: "~285 MB", tag: null },
-  { name: "Whisper Large v3 Turbo", langs: "Multilingual", size: "~564 MB", tag: null },
-  { name: "Whisper Distil Large v3", langs: "Multilingual", size: "~529 MB", tag: null },
-  { name: "Whisper Large v3", langs: "Multilingual", size: "~1.7 GB", tag: null },
-  { name: "Whisper Small (English)", langs: "English", size: "~636 MB", tag: null },
-  { name: "Whisper Base (English)", langs: "English", size: "~209 MB", tag: null },
-  { name: "Whisper Tiny (English)", langs: "English", size: "~118 MB", tag: null },
-  { name: "Cohere Transcribe", langs: "14 languages", size: "~2.9 GB", tag: "Highest accuracy" },
-];
-
-export const MODELS_SECTION = {
-  headline: "Twelve ways to listen.",
-  lead: "From a 118 MB model that keeps up on any Mac to a 1.7 GB one that catches everything — plus Apple's built-in engine, which downloads nothing at all. Switch whenever you like; they all run locally.",
-} as const;
-
-export interface CleanupExample {
-  label: string;
-  said: string;
-  wrote: string;
-}
-
-// Straight from the Magic Format eval suite (evals/magic_format_cases.json and
-// magic_format_advanced_cases.json) — the cases the shipped prompt is scored
-// against, so the page can't claim behaviour the model doesn't have.
-export const CLEANUPS: readonly CleanupExample[] = [
-  {
-    label: "It follows the correction, not the words",
-    said: "get flowers on monday buy roses no no wait actually get lilies",
-    wrote: "Get lilies on Monday.",
-  },
-  {
-    label: "Spoken numbers become written ones",
-    said: "the workshop is from eight forty five to eleven thirty and the budget is fifteen thousand dollars",
-    wrote: "The workshop is from 8:45 to 11:30 and the budget is $15,000.",
-  },
-  {
-    label: "Say it as a list and it arrives as one",
-    said: "do these in order first check the logs second restart the app third send me the result",
-    wrote: "Do these in order:\n1. Check the logs\n2. Restart the app\n3. Send me the result",
-  },
-];
-
-export const MAGIC_FORMAT = {
-  headline: "Speak like a person. Paste like an editor.",
-  lead: "Magic Format cleans the transcript before it lands — on your Mac, using Apple Intelligence or a local model. Optional, and off until you turn it on.",
-} as const;
-
-export interface ToneExample {
+export interface PlanPrice {
   app: string;
-  prompt: string;
-  out: string;
+  /** Dollars a month on the annual Pro plan. */
+  monthly: number;
 }
 
-// The point of per-app prompts: one sentence, three destinations, three registers.
-// These are illustrative of a prompt you would write, not measured output.
-export const TONES: readonly ToneExample[] = [
-  { app: "Slack", prompt: "Terse. No greeting, no sign-off.", out: "Deploy is blocked on the cert renewal — ETA tomorrow." },
-  { app: "Mail", prompt: "Full sentences, polite, sign off.", out: "Hi,\n\nThe deploy is blocked on the certificate renewal. I expect it to clear tomorrow.\n\nThanks!" },
-  { app: "Notes", prompt: "Keep it raw. Just fix punctuation.", out: "deploy blocked — cert renewal, should clear tomorrow" },
+// From each app's pricing page in October 2026. Re-check them before changing
+// the copy around them: these are the page's only claims about other apps.
+export const PLAN_PRICES: readonly PlanPrice[] = [
+  { app: "Wispr Flow", monthly: 12 },
+  { app: "Willow", monthly: 12 },
+  { app: "Aqua Voice", monthly: 8 },
 ];
 
-export const SURFACES = ["Mail", "Slack", "Notes", "Messages", "Xcode", "VS Code", "Safari", "Chrome", "Notion", "Obsidian", "Terminal", "Figma"] as const;
+/** The periods the price chart switches between, in years. */
+export const PRICE_YEARS = [1, 3, 5] as const;
 
-export const WHERE_IT_WORKS = {
-  headline: "One key, every text field.",
-  lead: "No plugin, no per-app setup. The text lands at your cursor and your clipboard is left exactly as you had it.",
-  tonesHeadline: "The same thought, in the right register.",
-  tonesLead: "Give an app its own Magic Format prompt and Suniye uses it whenever you dictate there. Terse in chat, composed in mail, untouched in notes.",
+export function planCost(plan: PlanPrice, years: number): number {
+  return plan.monthly * 12 * years;
+}
+
+export function formatDollars(amount: number): string {
+  return `$${amount.toLocaleString("en-US")}`;
+}
+
+export function costPeriod(years: number): string {
+  return years === 1 ? "in a year" : `over ${years} years`;
+}
+
+export function yearsLabel(years: number): string {
+  return years === 1 ? "1 year" : `${years} years`;
+}
+
+export interface Claim {
+  label: string;
+  figure: string;
+  caption: string;
+  detail: string;
+  /** "fast" sets the figure in the green a latency readout uses for a fast request. */
+  tone: "accent" | "fast";
+}
+
+export const CLAIMS: readonly Claim[] = [
+  {
+    label: "Private",
+    figure: "0 bytes",
+    caption: "of your audio uploaded, ever.",
+    detail:
+      "Security badges describe how a company guards your recordings once it has them. Suniye never has them: the speech model runs on your own Mac. The code is public, so you can check.",
+    tone: "accent",
+  },
+  {
+    label: "Fast",
+    figure: "177 ms",
+    caption: "median speech-to-text.",
+    detail:
+      "Measured with Apple's built-in engine. There is no upload and no queue, so hotel Wi-Fi and a train tunnel make no difference.",
+    tone: "fast",
+  },
+  {
+    label: "Free",
+    figure: "$0",
+    caption: "a month, with no word limit.",
+    detail: "No subscription, no trial, no account. Suniye is open source under the MIT license.",
+    tone: "accent",
+  },
+];
+
+export const SWITCHING = {
+  headline: "Switching costs you nothing you use.",
+  lead: "Everything you lean on in a dictation app, done on your Mac.",
 } as const;
 
-export const PROOF_POINTS = ["MIT licensed", "62 releases since February", "No account", "Apple Silicon & Intel", "Free, forever"] as const;
+export interface Habit {
+  habit: string;
+  feature: string;
+  detail: string;
+}
 
-export const INSTALL = {
-  headline: "Two ways in.",
-  brewNote: "Homebrew will ask you to trust the tap first — that is Homebrew 6 asking about any third-party tap, not something specific to Suniye.",
-  requirements: "macOS 14 (Sonoma) or later. Dictation works on Intel and Apple Silicon; the on-device cleanup model needs Apple Silicon.",
-  status: "Alpha — expect rough edges",
-} as const;
-
-export const FAQS: readonly FaqItem[] = [
-  {
-    q: "Is my dictation really private?",
-    a: "Your voice is captured and turned into text entirely on your Mac — the audio never touches the internet. Suniye does send a small amount of pseudonymous usage data (counts and timings, never your words), which you can switch off in Settings → Privacy; the privacy page lists exactly what is collected. Otherwise it goes online only to check for updates and to download a model the first time.",
-  },
-  {
-    q: "Does the optional AI cleanup see my audio?",
-    a: "Never. Cleanup only ever works on the text. By default it runs on your Mac, using Apple Intelligence or a local model. Only if you deliberately turn on the online option does your text reach a provider you chose — and it is off by default.",
-  },
-  {
-    q: "Does it work offline?",
-    a: "Yes. Once a model is downloaded, dictation needs no connection at all — including on a plane. The only things that use the network are update checks, the opt-out usage stats, and the online cleanup provider if you enable it.",
-  },
-  {
-    q: "What languages can it understand?",
-    a: "It depends on the model you pick. Some cover 25 European languages, others handle Chinese, Japanese, Korean, English and Cantonese, and the largest understand a broad mix. Several English-only models are smaller and faster.",
-  },
-  {
-    q: "How fast is it, really?",
-    a: "Median speech to text is 177 ms with Apple's built-in engine — fast enough that the text is usually there before you have finished letting go of the key. Downloaded models trade a little speed for accuracy, and the first dictation after launch waits for the model to load. Turning on Magic Format adds about a second, since a second model then rewrites the transcript.",
-  },
-  {
-    q: "Is it free?",
-    a: "Completely. Free and open source under the MIT license. No subscription, no account, no third-party tracking.",
-  },
+export const HABITS: readonly Habit[] = [
+  { habit: "Turn a ramble into tidy text", feature: "Magic Format", detail: "Follows corrections, writes numbers, makes lists" },
+  { habit: "Get names and jargon right", feature: "Vocabulary", detail: "Add a word once, spelled your way" },
+  { habit: "Sound right in each app", feature: "Per-app styles", detail: "Terse in chat, composed in mail" },
+  { habit: "Fix a sentence by saying so", feature: "Edit Mode", detail: "Select text, say what to change" },
+  { habit: "Find what you said last week", feature: "Transcripts", detail: "Searchable, and kept only on your Mac" },
 ];
 
 export const CLOSING = "Your voice, your machine.";
 
-function numbered(steps: readonly string[]): string {
-  return steps.map((step, i) => `${i + 1}. ${step}`).join("\n");
-}
-
-function quoteBlock(text: string): string {
-  return text
-    .split("\n")
-    .map((line) => `> ${line}`)
-    .join("\n");
+function priceTable(): string {
+  const header = `| App | ${PRICE_YEARS.map(yearsLabel).join(" | ")} |`;
+  const divider = `| --- | ${PRICE_YEARS.map(() => "---").join(" | ")} |`;
+  const rows = PLAN_PRICES.map(
+    (plan) => `| ${plan.app} | ${PRICE_YEARS.map((years) => formatDollars(planCost(plan, years))).join(" | ")} |`,
+  );
+  const suniye = `| Suniye | ${PRICE_YEARS.map(() => formatDollars(0)).join(" | ")} |`;
+  return [header, divider, ...rows, suniye].join("\n");
 }
 
 export function homeMarkdown(): string {
-  const modelRows = MODELS.map((m) => `| ${m.name} | ${m.langs} | ${m.size} | ${m.tag ?? ""} |`).join("\n");
-  const cleanupBlocks = CLEANUPS.map(
-    (c) => `**${c.label}**\n\nSaid: "${c.said}"\n\nWrote:\n\n${quoteBlock(c.wrote)}`,
-  ).join("\n\n");
-  const toneBlocks = TONES.map((t) => `**${t.app}** — prompt: "${t.prompt}"\n\n${quoteBlock(t.out)}`).join("\n\n");
-  const faqBlocks = FAQS.map((f) => `### ${f.q}\n\n${f.a}`).join("\n\n");
+  const claims = CLAIMS.map((c) => `- **${c.figure}** ${c.caption} ${c.detail}`).join("\n");
+  const habits = HABITS.map((h) => `| ${h.habit} | ${h.feature} — ${h.detail} |`).join("\n");
 
   return `# Suniye — Private Dictation for macOS
 
@@ -186,77 +130,27 @@ ${HERO.requirements}
 - Homebrew: \`${BREW_INSTALL}\`
 - Source code: ${GITHUB_URL}
 
-## ${ARGUMENT.headline}
+## ${PRICES.headline}
 
-${ARGUMENT.lead}
+${PRICES.lead}
 
-**Cloud dictation**
+### ${PRICES.chartTitle}
 
-${numbered(CLOUD_PATH)}
+${priceTable()}
 
-${ARGUMENT.cloudNote}
+${PRICES.source}
 
-**Suniye**
+## Private, fast, free
 
-${numbered(LOCAL_PATH)}
+${claims}
 
-${ARGUMENT.localNote}
+## ${SWITCHING.headline}
 
-**${ARGUMENT.latency}** — ${ARGUMENT.latencyNote}
+${SWITCHING.lead}
 
-## ${INTERFACE.headline}
-
-${INTERFACE.lead}
-
-## ${MAGIC_FORMAT.headline}
-
-${MAGIC_FORMAT.lead}
-
-${cleanupBlocks}
-
-## ${WHERE_IT_WORKS.headline}
-
-${WHERE_IT_WORKS.lead}
-
-Works in ${SURFACES.join(", ")} … and anywhere else you type.
-
-### ${WHERE_IT_WORKS.tonesHeadline}
-
-${WHERE_IT_WORKS.tonesLead}
-
-${toneBlocks}
-
-## ${MODELS_SECTION.headline}
-
-${MODELS_SECTION.lead}
-
-| Model | Languages | Size | Note |
-| --- | --- | --- | --- |
-${modelRows}
-
-${PROOF_POINTS.join(" · ")} — releases: ${GITHUB_RELEASES_URL}
-
-## ${INSTALL.headline}
-
-**Homebrew (recommended)**
-
-\`\`\`sh
-${BREW_INSTALL}
-\`\`\`
-
-${INSTALL.brewNote}
-
-**Direct download:** ${DOWNLOAD_URL}
-
-**Build from source:** ${GITHUB_URL}#build-from-source
-
-${INSTALL.requirements}
-
-${INSTALL.status}
-
-## FAQ
-
-${faqBlocks}
+| What you do | In Suniye |
+| --- | --- |
+${habits}
 
 ## ${CLOSING}
 

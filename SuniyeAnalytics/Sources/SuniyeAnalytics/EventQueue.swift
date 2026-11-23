@@ -47,7 +47,6 @@ public final class EventQueue: @unchecked Sendable {
         cachedCount = readAllLocked().count
     }
 
-    /// Persists one event durably (single fsynced line append, O(1)).
     public func append(_ event: EncodedEvent, now: Date = Date()) {
         lock.lock()
         defer { lock.unlock() }
@@ -91,7 +90,6 @@ public final class EventQueue: @unchecked Sendable {
         return cachedCount
     }
 
-    /// Returns and resets the eviction counters, split by cause.
     public func takeEvictedCounts() -> (ttl: Int, size: Int) {
         lock.lock()
         defer { lock.unlock() }
@@ -112,7 +110,6 @@ public final class EventQueue: @unchecked Sendable {
             try? handle.write(contentsOf: blob)
             try? handle.synchronize() // fsync: durable before returning
         } else {
-            // First write — the file doesn't exist yet.
             try? blob.write(to: fileURL, options: [.atomic])
         }
     }

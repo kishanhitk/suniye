@@ -69,7 +69,7 @@ final class CohereProviderTests: XCTestCase {
         let sherpa = StubTranscriptionService()
         let cohere = StubTranscriptionService()
         cohere.transcribeResult = .success("cohere-text")
-        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil, cohereService: cohere)
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil, cohereService: cohere, makeSpeechDetector: { StubSpeechDetector(result: true) })
 
         try await router.loadModel(config: RecognizerConfig(modelID: .cohereTranscribe, family: .cohereTranscribe, tokensPath: "", numThreads: 1))
         let text = try await router.transcribe(samples: [0.1], sampleRate: 16_000)
@@ -86,10 +86,10 @@ final class CohereProviderTests: XCTestCase {
         let cohere = StubTranscriptionService()
         cohere.transcribeResult = .success("done")
         cohere.progressToReport = [TranscriptionProgress(chunk: 1, totalChunks: 2), TranscriptionProgress(chunk: 2, totalChunks: 2)]
-        let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: nil, cohereService: cohere)
+        let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: nil, cohereService: cohere, makeSpeechDetector: { StubSpeechDetector(result: true) })
         try await router.loadModel(config: RecognizerConfig(modelID: .cohereTranscribe, family: .cohereTranscribe, tokensPath: "", numThreads: 1))
 
-        let recorder = TranscriptionProgressRecorder<TranscriptionProgress>()
+        let recorder = LockedRecorder<TranscriptionProgress>()
         let text = try await router.transcribe(samples: [0.1], sampleRate: 16_000) { recorder.record($0) }
 
         XCTAssertEqual(text, "done")
@@ -97,7 +97,7 @@ final class CohereProviderTests: XCTestCase {
     }
 
     func testRouterProgressTranscribeBeforeLoadThrows() async {
-        let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: nil, cohereService: StubTranscriptionService())
+        let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: nil, cohereService: StubTranscriptionService(), makeSpeechDetector: { StubSpeechDetector(result: true) })
         do {
             _ = try await router.transcribe(samples: [0.1], sampleRate: 16_000) { _ in }
             XCTFail("Expected recognizerNotLoaded")
@@ -219,7 +219,7 @@ final class CohereProviderTests: XCTestCase {
         try Data("abc".utf8).write(to: url)
 
         XCTAssertEqual(
-            try ModelManager.sha256Hex(of: url),
+            try ModelDownloadSupport.sha256Hex(of: url),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         )
         XCTAssertEqual(ModelManager.ModelError.checksumMismatch("f").errorDescription, "Downloaded model file failed verification: f")
@@ -246,20 +246,19 @@ final class CohereProviderTests: XCTestCase {
                   Date() < deadline {
                 await Task.yield()
             }
-            let (indicator, status) = await MainActor.run { (appState.floatingIndicatorState, appState.statusText) }
+            let indicator = await MainActor.run { appState.floatingIndicatorState }
             XCTAssertEqual(indicator, .processing(message: "Transcribing 2 of 3..."))
-            XCTAssertEqual(status, "Transcribing 2 of 3...")
             observed.fulfill()
         }
 
         let started = expectation(description: "capture started")
         audioCapture.onStartCapture = { _ in started.fulfill() }
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         for _ in 0 ..< 8 {
             await Task.yield()
         }
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [observed], timeout: 2)
 
         let deadline = Date().addingTimeInterval(2)
@@ -280,7 +279,7 @@ final class CohereProviderTests: XCTestCase {
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
 
-        let seen = TranscriptionProgressRecorder<FloatingIndicatorState>()
+        let seen = LockedRecorder<FloatingIndicatorState>()
         transcription.onTranscribeAwait = { _ in
             for _ in 0 ..< 8 {
                 await Task.yield()
@@ -290,12 +289,12 @@ final class CohereProviderTests: XCTestCase {
 
         let started = expectation(description: "capture started")
         audioCapture.onStartCapture = { _ in started.fulfill() }
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         for _ in 0 ..< 8 {
             await Task.yield()
         }
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
 
         let deadline = Date().addingTimeInterval(2)
         while appState.phase != .ready, Date() < deadline {
@@ -322,17 +321,4 @@ private actor PlainTranscriptionService: TranscriptionServiceProtocol {
     }
 
     func unloadModel() async {}
-}
-
-private final class TranscriptionProgressRecorder<Value>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: [Value] = []
-
-    var values: [Value] {
-        lock.withLock { storage }
-    }
-
-    func record(_ value: Value) {
-        lock.withLock { storage.append(value) }
-    }
 }

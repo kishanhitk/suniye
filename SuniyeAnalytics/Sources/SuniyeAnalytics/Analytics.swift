@@ -19,7 +19,6 @@ public protocol Analytics: Sendable {
     /// Start the periodic flush/health timer. Call once after construction.
     func start()
 
-    /// Stop the timer.
     func stop()
 
     /// Synchronously enqueue a `session_end` event (durably persisted) WITHOUT

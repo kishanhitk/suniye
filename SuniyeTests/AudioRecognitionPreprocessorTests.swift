@@ -44,6 +44,12 @@ final class AudioRecognitionPreprocessorTests: XCTestCase {
         XCTAssertEqual(prepared.samples, samples)
     }
 
+    func testStatsOfEmptyInputIsZero() {
+        let stats = AudioRecognitionPreprocessor.stats(of: [])
+        XCTAssertEqual(stats.rms, 0)
+        XCTAssertEqual(stats.peak, 0)
+    }
+
     private func sineWave(amplitude: Float, seconds: Double, sampleRate: Int = 16_000) -> [Float] {
         let count = Int(Double(sampleRate) * seconds)
         return (0 ..< count).map { index in

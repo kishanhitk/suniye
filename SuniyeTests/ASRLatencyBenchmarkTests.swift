@@ -3,8 +3,8 @@ import XCTest
 @testable import Suniye
 
 /// Opt-in latency benchmark comparing the Parakeet (sherpa-onnx, CPU), Apple Speech
-/// (SpeechAnalyzer, Neural Engine), and Cohere Transcribe (ONNX Runtime, CPU) providers
-/// on the *same* audio.
+/// (SpeechAnalyzer, Neural Engine), Cohere Transcribe (ONNX Runtime, CPU), and
+/// Qwen3-ASR (llama.cpp, Metal) providers on the *same* audio.
 ///
 /// Both engines run in batch mode (whole clip after recording stops), which is exactly how
 /// the app dictates — so the numbers are the real per-utterance transcription latency, minus
@@ -17,6 +17,7 @@ import XCTest
 /// when they carry a `TEST_RUNNER_` prefix, which it strips before the process sees them:
 ///   TEST_RUNNER_SUNIYE_RUN_ASR_BENCH=1 \
 ///   [TEST_RUNNER_SUNIYE_BENCH_WAV=/path/to/voice.wav] \
+///   [TEST_RUNNER_SUNIYE_QWEN3_ASR_MODEL_DIR=/path/to/gguf-dir] \
 ///   xcodebuild test \
 ///     -project Suniye.xcodeproj -scheme Suniye \
 ///     -destination 'platform=macOS,arch=arm64' -derivedDataPath .derivedData \
@@ -69,10 +70,18 @@ final class ASRLatencyBenchmarkTests: XCTestCase {
             lines.append("Cohere Transcribe (ORT/CPU) — SKIPPED: model not installed")
         }
 
+        if let qwen3 = try await Self.loadQwen3() {
+            let r = await Self.benchmark(qwen3, samples: samples, sampleRate: sampleRate)
+            lines.append(Self.row("Qwen3-ASR 1.7B (llama/GPU)", r, audioSeconds))
+            await qwen3.unloadModel()
+        } else {
+            lines.append("Qwen3-ASR 1.7B (llama/GPU) — SKIPPED: model or llama-server helper missing")
+        }
+
         print("\n===== ASR latency benchmark =====")
         lines.forEach { print($0) }
         print("RTF = processing_time / audio_length  (lower is faster; <1 = faster than real-time)")
-        print("Note: Parakeet and Cohere run on CPU, Apple on the Neural Engine — this is the real-world contrast.\n")
+        print("Note: Parakeet and Cohere run on CPU, Apple on the Neural Engine, Qwen3-ASR on the GPU — this is the real-world contrast.\n")
     }
 
     // MARK: - Timing
@@ -128,6 +137,15 @@ final class ASRLatencyBenchmarkTests: XCTestCase {
         let config = try modelManager.makeRecognizerConfig(for: .cohereTranscribe)
         let service = CohereTranscriptionService()
         try await service.loadModel(config: config)
+        return service
+    }
+
+    private static func loadQwen3() async throws -> TranscriptionServiceProtocol? {
+        let installed = ModelManager().isInstalled(.qwen3ASR17B)
+        let directory = ProcessInfo.processInfo.environment["SUNIYE_QWEN3_ASR_MODEL_DIR"]
+        guard installed || directory != nil, LlamaServer.locateExecutable() != nil else { return nil }
+        let service = Qwen3ASRTranscriptionService()
+        try await service.loadModel(config: try Qwen3ASRTranscriptionServiceRealModelTests.config())
         return service
     }
 

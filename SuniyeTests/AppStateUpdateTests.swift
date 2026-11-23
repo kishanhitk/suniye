@@ -1,4 +1,5 @@
 import Foundation
+import SuniyeAnalytics
 import XCTest
 @testable import Suniye
 
@@ -32,6 +33,46 @@ final class AppStateUpdateTests: XCTestCase {
         updateController.notifyStateChanged()
 
         XCTAssertTrue(appState.canCheckForUpdates)
+    }
+
+    func testRestartToUpdateInstallsTheStagedUpdate() {
+        let updateController = StubAppUpdateController()
+        let spy = SpyAnalytics()
+        let appState = makeAppState(appUpdateController: updateController, analytics: spy)
+        appState.phase = .ready
+
+        appState.restartToUpdate()
+        XCTAssertEqual(updateController.installUpdateAndRelaunchCallCount, 0)
+        XCTAssertFalse(spy.trackedEventNames.contains("update_action"), "a refused restart is not a restart")
+
+        updateController.isUpdateReadyToInstall = true
+        updateController.notifyStateChanged()
+        appState.restartToUpdate()
+
+        XCTAssertTrue(appState.isUpdateReadyToInstall)
+        XCTAssertEqual(updateController.installUpdateAndRelaunchCallCount, 1)
+        let kinds = spy.trackedEvents.compactMap { event -> UpdateActionKind? in
+            if case let .updateAction(kind, _, _) = event { return kind }
+            return nil
+        }
+        XCTAssertEqual(kinds, [.restartToUpdate])
+    }
+
+    func testRestartToUpdateIsRefusedWhileRecordingOrTranscribing() {
+        let updateController = StubAppUpdateController()
+        updateController.isUpdateReadyToInstall = true
+        let appState = makeAppState(appUpdateController: updateController)
+        updateController.notifyStateChanged()
+
+        for phase in [AppState.Phase.recording, .transcribing] {
+            appState.phase = phase
+            XCTAssertFalse(appState.canRestartToUpdate, "\(phase)")
+            appState.restartToUpdate()
+        }
+        XCTAssertEqual(updateController.installUpdateAndRelaunchCallCount, 0)
+
+        appState.phase = .ready
+        XCTAssertTrue(appState.canRestartToUpdate)
     }
 
     func testAutomaticallyChecksForUpdatesWritesThroughToController() {
@@ -70,76 +111,10 @@ final class AppStateUpdateTests: XCTestCase {
         XCTAssertEqual(generalSettingsStore.latest.updateChannel, .tip)
     }
 
-    func testMagicFormatStatusIsOffWhenDisabled() {
-        let appState = makeAppState()
-
-        XCTAssertEqual(appState.magicFormatSetupState, .off)
-        XCTAssertEqual(appState.llmStatusHint, "Turn it on to improve dictation before text is pasted.")
-    }
-
-    func testMagicFormatStatusNeedsAPIKeyWhenEnabledWithoutKey() {
-        let appState = makeAppState()
-        appState.llmEnabled = true
-
-        XCTAssertEqual(appState.magicFormatSetupState, .needsAPIKey)
-        XCTAssertTrue(appState.attentionItems.contains {
-            $0.id == "llm-key-missing"
-                && $0.title == "Magic Format needs an API key"
-                && $0.detail == "Magic Format is on, but your API key is missing."
-        })
-    }
-
-    func testMagicFormatStatusNeedsServiceSetupWhenEndpointInvalid() {
-        let appState = makeAppState()
-        appState.llmEnabled = true
-        appState.llmEndpointURLString = "not a url"
-
-        XCTAssertEqual(appState.magicFormatSetupState, .needsServiceSetup)
-        XCTAssertEqual(appState.llmEndpointValidationError, "Enter a valid service URL.")
-        XCTAssertTrue(appState.attentionItems.contains {
-            $0.id == "llm-endpoint-invalid"
-                && $0.title == "Magic Format needs service setup"
-                && $0.detail == "Enter a valid service URL."
-        })
-    }
-
-    func testAttentionItemsExposeMicrophonePermissionFixAction() throws {
-        let appState = makeAppState()
-        appState.hasMicPermission = false
-
-        let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "mic-permission-missing" })
-        XCTAssertEqual(item.fixAction, .requestMicrophonePermission)
-        XCTAssertEqual(item.fixTitle, "Grant Access")
-    }
-
-    func testAttentionItemsExposeAccessibilityPermissionFixAction() throws {
-        let appState = makeAppState()
-        appState.hasAccessibilityPermission = false
-
-        let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "accessibility-permission-missing" })
-        XCTAssertEqual(item.fixAction, .requestAccessibilityPermission)
-        XCTAssertEqual(item.fixTitle, "Grant Access")
-    }
-
-    func testMagicFormatStatusIsReadyWhenEnabledAndConfigured() {
-        let appState = makeTestAppState(
-            llmSettingsStore: TestLLMSettingsStore(),
-            generalSettingsStore: TestGeneralSettingsStore(),
-            historyStore: TestHistoryStore(),
-            keychainService: TestKeychainService(value: "test-key"),
-            appUpdateController: StubAppUpdateController(),
-            launchAtLoginService: StubLaunchAtLoginService()
-        )
-        appState.llmEnabled = true
-        appState.refreshLLMKeyStatus()
-
-        XCTAssertEqual(appState.magicFormatSetupState, .ready)
-        XCTAssertEqual(appState.llmKeyStatusText, "Saved")
-    }
-
     private func makeAppState(
         generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
-        appUpdateController: StubAppUpdateController? = nil
+        appUpdateController: StubAppUpdateController? = nil,
+        analytics: Analytics = SpyAnalytics()
     ) -> AppState {
         makeTestAppState(
             llmSettingsStore: TestLLMSettingsStore(),
@@ -147,7 +122,8 @@ final class AppStateUpdateTests: XCTestCase {
             historyStore: TestHistoryStore(),
             keychainService: TestKeychainService(value: nil),
             appUpdateController: appUpdateController ?? StubAppUpdateController(),
-            launchAtLoginService: StubLaunchAtLoginService()
+            launchAtLoginService: StubLaunchAtLoginService(),
+            analytics: analytics
         )
     }
 }

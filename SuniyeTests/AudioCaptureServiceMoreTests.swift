@@ -14,8 +14,8 @@ final class AudioCaptureServiceMoreTests: XCTestCase {
             "No microphone is available."
         )
         XCTAssertEqual(
-            AudioCaptureServiceError.preferredDeviceUnavailable.errorDescription,
-            "The selected microphone is unavailable."
+            AudioCaptureServiceError.builtInMicrophoneOff.errorDescription,
+            "The built-in microphone is off while the lid is closed."
         )
         XCTAssertEqual(
             AudioCaptureServiceError.invalidInputFormat.errorDescription,
@@ -234,12 +234,24 @@ final class AudioCaptureServiceMoreTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(monitor.startCallCount, 2)
     }
 
-    func testDefaultInputChangeInterruptsSystemDefaultCapture() async throws {
+    func testDefaultInputChangeKeepsRecordingFromTheSameMicrophone() async throws {
+        // AirPods connect during a System default dictation and macOS makes them
+        // the default input. The dictation keeps its microphone.
         let monitor = FakeAudioDeviceMonitor()
-        let service = makeService(makeFactory(), monitor: monitor)
-        let reason = try await interruption(of: service, after: { monitor.emit(.defaultInput) })
+        let catalog = FakeAudioCaptureHardwareCatalog(route: makeDeviceRoute())
+        let service = makeService(makeFactory(), monitor: monitor, catalog: catalog)
 
-        XCTAssertEqual(reason, .deviceChanged)
+        let (outcome, interruptions) = try await outcomeAfterStop(of: service) {
+            catalog.devices = [
+                AudioInputDevice(id: "airpods", name: "AirPods Pro", isDefault: true, transport: .bluetooth),
+                AudioInputDevice(id: "test-device", name: "Test Microphone", isDefault: false, transport: .builtIn),
+            ]
+            monitor.emit(.devices)
+            monitor.emit(.defaultInput)
+        }
+
+        XCTAssertEqual(outcome, .complete)
+        XCTAssertEqual(interruptions, 0)
     }
 
     func testDefaultOutputChangeInterruptsVoiceProcessingCapture() async throws {
@@ -254,16 +266,18 @@ final class AudioCaptureServiceMoreTests: XCTestCase {
         XCTAssertEqual(reason, .deviceChanged)
     }
 
-    func testDevicesChangeToDifferentRouteInterrupts() async throws {
+    func testUnpluggedMicrophoneInterruptsAsUnavailable() async throws {
         let monitor = FakeAudioDeviceMonitor()
         let catalog = FakeAudioCaptureHardwareCatalog(route: makeDeviceRoute())
         let service = makeService(makeFactory(), monitor: monitor, catalog: catalog)
         let reason = try await interruption(of: service, after: {
-            catalog.route = self.makeDeviceRoute(effectiveInputDeviceID: "other-device")
+            catalog.devices = [
+                AudioInputDevice(id: "other-device", name: "Other Microphone", isDefault: true, transport: .builtIn),
+            ]
             monitor.emit(.devices)
         })
 
-        XCTAssertEqual(reason, .deviceChanged)
+        XCTAssertEqual(reason, .deviceUnavailable)
     }
 
     func testSelectedDeviceChangedInterrupts() async throws {
@@ -292,23 +306,11 @@ final class AudioCaptureServiceMoreTests: XCTestCase {
         XCTAssertEqual(reason, .ioStoppedAbnormally)
     }
 
-    func testRouteResolutionFailureDuringDeviceChangeInterruptsAsUnavailable() async throws {
-        let monitor = FakeAudioDeviceMonitor()
-        let catalog = FakeAudioCaptureHardwareCatalog(route: makeDeviceRoute())
-        let service = makeService(makeFactory(), monitor: monitor, catalog: catalog)
-        let reason = try await interruption(of: service, after: {
-            catalog.resolveError = FakeError(message: "device vanished")
-            monitor.emit(.selectedDeviceAlive)
-        })
-
-        XCTAssertEqual(reason, .deviceUnavailable)
-    }
-
     func testBenignDeviceNotificationsDoNotInterruptCapture() async throws {
         // Every non-interrupting branch of handleDeviceChange in one session:
         // processor overload (log only), unmuted input, default-output change on a
-        // non-voice-processing backend, default-input change with a pinned device,
-        // and an alive check that resolves to the same route.
+        // non-voice-processing backend, default-input change, and an alive check
+        // while the microphone in use is still listed.
         let monitor = FakeAudioDeviceMonitor()
         let catalog = FakeAudioCaptureHardwareCatalog(
             route: makeDeviceRoute(preferredInputDeviceID: "pinned-device")
@@ -400,6 +402,32 @@ final class AudioCaptureServiceMoreTests: XCTestCase {
 
     // MARK: - Helpers
 
+    /// Starts a System default capture, performs `change`, stops it, and returns
+    /// the outcome with the number of interruptions the service reported.
+    private func outcomeAfterStop(
+        of service: AudioCaptureService,
+        after change: () -> Void
+    ) async throws -> (AudioCaptureOutcome, Int) {
+        var interruptions = 0
+        service.onEvent = { event in
+            if case .interrupted = event {
+                interruptions += 1
+            }
+        }
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+
+        change()
+
+        // stopCapture is serialized behind the emitted changes on the control queue.
+        let captured = await service.stopCapture(sessionID: sessionID)
+        return (captured.outcome, interruptions)
+    }
+
     /// Starts a capture, performs `change`, and returns the interruption reason the
     /// service reported for that session (also asserting the final outcome matches).
     private func interruption(
@@ -461,7 +489,8 @@ final class AudioCaptureServiceMoreTests: XCTestCase {
             inputTransport: .builtIn,
             outputTransport: .builtIn,
             nominalInputSampleRate: 16_000,
-            inputChannelCount: 1
+            inputChannelCount: 1,
+            standIn: nil
         )
     }
 }
@@ -494,15 +523,22 @@ private final class FakeAudioDeviceMonitor: AudioDeviceMonitorProtocol {
 
 private final class FakeAudioCaptureHardwareCatalog: AudioCaptureHardwareCatalogProtocol {
     var route: AudioDeviceRoute
+    var devices: [AudioInputDevice]
     var resolveError: Error?
     var processInputMuted = false
 
     init(route: AudioDeviceRoute) {
         self.route = route
+        devices = [AudioInputDevice(
+            id: route.effectiveInputDeviceID,
+            name: route.effectiveInputName,
+            isDefault: true,
+            transport: route.inputTransport
+        )]
     }
 
     func availableInputDevices() -> [AudioInputDevice] {
-        []
+        devices
     }
 
     func resolveDeviceRoute(preferredInputDeviceID: String?) throws -> CoreAudioRouteResolution {

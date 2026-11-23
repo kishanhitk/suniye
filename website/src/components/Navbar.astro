@@ -28,11 +28,7 @@ const overArt = variant === "over-art";
       <span class="nav-brand font-display text-base tracking-tight">Suniye</span>
     </a>
     <div class="flex items-center gap-5">
-      {overArt ? (
-        <a href="/changelog" class="nav-link hidden text-sm sm:inline">Changelog</a>
-      ) : (
-        <a href="/" class="nav-link hidden text-sm sm:inline">Home</a>
-      )}
+      {!overArt && <a href="/" class="nav-link hidden text-sm sm:inline">Home</a>}
       <a
         href={GITHUB_URL}
         target="_blank"

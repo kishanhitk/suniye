@@ -6,6 +6,8 @@ import Foundation
 
 public enum DictationSource: String, Sendable, CaseIterable {
     case hotkey, manual, floatingIndicator, unknown
+    /// A double tap of the shortcut locked the recording. `hotkey` is a hold.
+    case hotkeyLock = "hotkey_lock"
 }
 
 public enum DictationDestination: String, Sendable, CaseIterable {
@@ -30,6 +32,38 @@ public enum DictationBlockedReason: String, Sendable, CaseIterable {
     case micDenied = "mic_denied"
     case accessibilityDenied = "accessibility_denied"
     case unknown
+    /// The key came up while a permission prompt held the start open, so the
+    /// recording was cancelled instead of starting with no key held.
+    case releasedDuringPrompt = "released_during_prompt"
+}
+
+/// Whether a fresh install could start on a built-in, download-free speech model.
+public enum SystemDefaultModelOutcome: String, Sendable, CaseIterable {
+    case adopted, unavailable, failed
+}
+
+/// Why the built-in model was not adopted. Closed set: never raw error text.
+public enum SystemDefaultModelReason: String, Sendable, CaseIterable {
+    case osTooOld = "os_too_old"
+    case transcriberUnavailable = "transcriber_unavailable"
+    case unsupportedLanguage = "unsupported_language"
+    case assetUnavailable = "asset_unavailable"
+    case loadFailed = "load_failed"
+    case decodeFailed = "decode_failed"
+}
+
+/// What moved onboarding to a step.
+public enum OnboardingAdvance: String, Sendable, CaseIterable {
+    /// The step's primary button.
+    case button
+    /// A dictation landed in another app while on the Accessibility step.
+    case insertion
+}
+
+/// How onboarding ended.
+public enum OnboardingEnd: String, Sendable, CaseIterable {
+    case finishButton = "finish_button"
+    case windowClosed = "window_closed"
 }
 
 public enum DictationCancelStage: String, Sendable, CaseIterable {
@@ -59,6 +93,32 @@ public enum AudioOutcome: String, Sendable, CaseIterable {
     case invalidSamples = "invalid_samples", interrupted, unknown
 }
 
+/// Why a capture used a microphone other than the saved one or the system default.
+public enum InputStandInReason: String, Sendable, CaseIterable {
+    case preferredMissing = "preferred_missing"
+    case lidClosed = "lid_closed"
+    case bluetoothDefault = "bluetooth_default"
+}
+
+public enum DictationEmptyReason: String, Sendable, CaseIterable {
+    /// The speech detector found no speech, so no engine ran.
+    case noSpeech = "no_speech"
+    case emptyTranscript = "empty_transcript"
+}
+
+/// Whether a double tap of the shortcut can lock a recording. The Globe key
+/// cannot while macOS also runs an action on each Globe tap.
+public enum DoubleTapAvailability: String, Sendable, CaseIterable {
+    case available
+    case globeChangesInputSource = "globe_changes_input_source"
+    case globeShowsEmoji = "globe_shows_emoji"
+    case globeStartsDictation = "globe_starts_dictation"
+}
+
+public enum RawTranscriptAction: String, Sendable, CaseIterable {
+    case opened, copied
+}
+
 public enum AudioInterruptionReason: String, Sendable, CaseIterable {
     case deviceChanged = "device_changed"
     case deviceUnavailable = "device_unavailable"
@@ -84,6 +144,8 @@ public enum OnboardingStepName: String, Sendable, CaseIterable {
     // `setup`/`magic_format`/`practice` remain for historical rows only.
     case speak
     case typeAnywhere = "type_anywhere"
+    /// The closing screen that names Magic Format, Speech Model and edit-by-voice.
+    case more
 }
 
 /// Which UI surface initiated an explicit permission ask.
@@ -91,6 +153,7 @@ public enum PermissionAskSurface: String, Sendable, CaseIterable {
     case onboarding, settings, dashboard
     case dictationAttempt = "dictation_attempt"
     case insertion
+    case meetingStart = "meeting_start"
 }
 
 /// How an explicit permission ask ended. Overlay cases are Permiso-specific:
@@ -123,6 +186,7 @@ public enum ModelDownloadOutcome: String, Sendable, CaseIterable {
 
 public enum UpdateActionKind: String, Sendable, CaseIterable {
     case manualCheck = "manual_check", autoToggle = "auto_toggle", channelChange = "channel_change", completed
+    case restartToUpdate = "restart_to_update"
 }
 
 /// A small, closed set of feature toggles worth tracking adoption for.
@@ -146,4 +210,103 @@ public enum AnalyticsErrorCode: String, Sendable, CaseIterable {
     case timeout, network, unauthorized, notFound = "not_found", cancelled
     case decoding, permissionDenied = "permission_denied", diskFull = "disk_full"
     case invalidState = "invalid_state", unknown
+}
+
+/// How a meeting recording started.
+public enum MeetingSource: String, Sendable, CaseIterable {
+    case manual, offer, automatic
+}
+
+/// Why a meeting recording stopped.
+public enum MeetingStopReason: String, Sendable, CaseIterable {
+    case user
+    case callEnded = "call_ended"
+    case sleep
+    case timeLimit = "time_limit"
+    case noSpeech = "no_speech"
+    case diskFull = "disk_full"
+    case writeFailed = "write_failed"
+    case quit
+}
+
+/// The tracks that recorded until a meeting stopped: the microphone ("you")
+/// and the audio of other apps ("them").
+public enum MeetingTracks: String, Sendable, CaseIterable {
+    case you, them
+    case youThem = "you_them"
+    case noTrack = "none"
+}
+
+/// How a meeting's transcript or summary ended.
+public enum MeetingOutcome: String, Sendable, CaseIterable {
+    case done
+    case noSpeech = "no_speech"
+    case failed
+}
+
+public enum MeetingSummaryEngine: String, Sendable, CaseIterable, Codable {
+    case appleIntelligence = "apple_intelligence"
+    case localModel = "local_model"
+    /// The user's OpenAI-compatible endpoint. The meeting text leaves the Mac.
+    case apiEndpoint = "api_endpoint"
+    /// The user's ChatGPT plan. The meeting text goes to OpenAI.
+    case chatgpt
+}
+
+/// Why a meeting's summary failed.
+public enum MeetingSummaryFailure: String, Sendable, CaseIterable, Codable {
+    case timeout
+    /// The answer stopped at a length limit.
+    case truncated
+    case empty
+    case notReady = "not_ready"
+    case modelError = "model_error"
+    case network
+    case keyRejected = "key_rejected"
+    case serviceError = "service_error"
+    /// The hosted model that the user chose has no key, no model ID or no
+    /// agreement for its endpoint.
+    case notSetUp = "not_set_up"
+    /// The user must connect ChatGPT again.
+    case signInEnded = "sign_in_ended"
+    case planLimit = "plan_limit"
+    /// OpenAI does not let the account use its plan in an app.
+    case planNotAllowed = "plan_not_allowed"
+}
+
+/// How one ChatGPT sign-in from Settings ended. `denied`: the user said no
+/// in the browser. `canceled`: the user stopped the wait in Suniye.
+public enum ChatGPTSignInOutcome: String, Sendable, CaseIterable {
+    case connected
+    case canceled
+    case denied
+    case noPlanPermission = "no_plan_permission"
+    case timedOut = "timed_out"
+    case failed
+}
+
+/// The text of a meeting that the user can change on its page.
+public enum MeetingEditedText: String, Sendable, CaseIterable {
+    case title, transcript, summary
+}
+
+/// The card about a call at the top right of the screen.
+public enum MeetingCallCardKind: String, Sendable, CaseIterable {
+    case offer
+    case started
+    case callEnded = "call_ended"
+}
+
+/// How a call card closed. `timeout`: it closed by itself; on the call-ended
+/// card that stops the recording. `callEnded`: the call ended before an
+/// answer to the offer.
+public enum MeetingCallCardAction: String, Sendable, CaseIterable {
+    case record
+    case notNow = "not_now"
+    case never
+    case timeout
+    case callEnded = "call_ended"
+    case cancel
+    case stopNow = "stop_now"
+    case keepRecording = "keep_recording"
 }

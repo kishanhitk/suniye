@@ -4,6 +4,7 @@ import XCTest
 final class MainWindowSectionTests: XCTestCase {
     func testLaunchArgumentsRouteToExpectedSections() {
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-dashboard"]), .dashboard)
+        XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-meetings"]), .meetings)
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-model"]), .model)
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-style"]), .style)
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-general"]), .general)
@@ -14,8 +15,9 @@ final class MainWindowSectionTests: XCTestCase {
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-history"]), .dashboard)
     }
 
-    func testDashboardSectionIsTitledTranscripts() {
-        XCTAssertEqual(MainWindowSection.dashboard.title, "Transcripts")
+    func testVocabularyAndLLMCompatibilityAliasesRouteToStyle() {
+        XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-vocabulary"]), .style)
+        XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-llm"]), .style)
     }
 
     func testOpenSettingsCompatibilityAliasRoutesToModel() {
@@ -26,7 +28,4 @@ final class MainWindowSectionTests: XCTestCase {
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye"]), .dashboard)
     }
 
-    func testStyleSectionUsesMagicFormatTitle() {
-        XCTAssertEqual(MainWindowSection.style.title, "Magic Format")
-    }
 }

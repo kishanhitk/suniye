@@ -1,0 +1,110 @@
+import SwiftUI
+
+struct MainWindowView: View {
+    @Bindable var appState: AppState
+    @State private var selection: MainWindowSection = MainWindowSection.initialSelection(arguments: CommandLine.arguments)
+    private let appIdentity = AppIdentity.current
+
+    var body: some View {
+        HStack(spacing: 0) {
+            sidebar
+            Rectangle()
+                .fill(MainWindowPalette.divider)
+                .frame(width: 1)
+            detail
+                .background {
+                    // The sidebar stays fully vibrant. Content needs to be read,
+                    // so the detail pane keeps the blur only as a hint: a
+                    // high-alpha scrim over it lets a little of the desktop
+                    // through without the text competing with a wallpaper.
+                    BehindWindowBlur(material: .underWindowBackground)
+                        .overlay(MainWindowPalette.windowBackground.opacity(AppMetrics.detailPaneOpacity))
+                        .ignoresSafeArea()
+                }
+        }
+        .onAppear {
+            logRenderedSection()
+        }
+        .onChange(of: selection) { _, _ in
+            logRenderedSection()
+        }
+        .onChange(of: appState.requestedSection, initial: true) { _, section in
+            guard let section else { return }
+            selection = section
+            appState.requestedSection = nil
+        }
+        .subtleScrollers()
+    }
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 24, height: 24)
+                Text(appIdentity.displayName)
+                    .font(AppTypography.appTitle)
+                    .foregroundStyle(MainWindowPalette.sidebarTitle)
+            }
+            .padding(.top, AppMetrics.sidebarBrandTop)
+            .padding(.horizontal, AppMetrics.sidebarBrandHorizontal)
+            .padding(.bottom, AppMetrics.sidebarBrandBottom)
+
+            VStack(alignment: .leading, spacing: AppMetrics.sidebarRowSpacing) {
+                ForEach(MainWindowSection.allCases, id: \.self) { section in
+                    SidebarNavigationRow(
+                        section: section,
+                        isSelected: selection == section,
+                        recording: section == .meetings ? appState.meetings.live.map { $0.isPaused ? .paused : .recording } : nil
+                    ) {
+                        selection = section
+                    }
+                    .accessibilityIdentifier(section.accessibilityIdentifier)
+                }
+            }
+            .padding(.horizontal, AppMetrics.sidebarPaddingHorizontal)
+
+            Spacer(minLength: 0)
+
+            // Full bleed: it separates the footer from the pane, so it runs the
+            // sidebar's whole width rather than lining up with the rows.
+            Rectangle()
+                .fill(MainWindowPalette.divider)
+                .frame(height: 1)
+                .padding(.bottom, AppMetrics.sidebarFooterPadding)
+
+            SidebarInputDeviceRow(appState: appState)
+                .padding(.horizontal, AppMetrics.sidebarPaddingHorizontal)
+                .padding(.bottom, AppMetrics.sidebarFooterPadding)
+        }
+        .frame(width: AppMetrics.sidebarWidth)
+        .background { BehindWindowBlur(material: .sidebar).ignoresSafeArea() }
+    }
+
+    private var detail: some View {
+        Group {
+            switch selection {
+            case .dashboard:
+                TranscriptsPage(appState: appState) { selection = $0 }
+            case .meetings:
+                MeetingsSection(meetings: appState.meetings, appState: appState)
+            case .model:
+                SpeechModelPage(appState: appState)
+            case .style:
+                StylePage(appState: appState)
+            case .general:
+                GeneralPage(appState: appState)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // Deliberately below the perception threshold: switching sections is a
+        // frequent act, and anything you can consciously see here is a tax. A
+        // cross-fade (not a slide) is also the Reduce Motion-friendly form.
+        .transition(.opacity)
+        .animation(.easeOut(duration: 0.12), value: selection)
+    }
+
+    private func logRenderedSection() {
+        AppLogger.shared.log(.info, "main window section rendered section=\(selection.rawValue)")
+    }
+}

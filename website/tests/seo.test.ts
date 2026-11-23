@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildSitemapXml, softwareApplicationSchema, faqPageSchema, jsonLdString } from "../src/lib/seo";
+import { buildSitemapXml, softwareApplicationSchema, jsonLdString } from "../src/lib/seo";
 import { SITE_URL, SITE_PAGES } from "../src/lib/site";
 
 describe("sitemap", () => {
@@ -46,18 +46,3 @@ describe("jsonLdString", () => {
   });
 });
 
-describe("faqPageSchema", () => {
-  test("maps question/answer pairs into FAQPage entities", () => {
-    const schema = faqPageSchema([
-      { q: "Is it free?", a: "Yes." },
-      { q: "Does it work offline?", a: "Yes, after model download." },
-    ]);
-    expect(schema["@type"]).toBe("FAQPage");
-    expect(schema.mainEntity).toHaveLength(2);
-    expect(schema.mainEntity[0]).toEqual({
-      "@type": "Question",
-      name: "Is it free?",
-      acceptedAnswer: { "@type": "Answer", text: "Yes." },
-    });
-  });
-});

@@ -5,7 +5,7 @@ final class HistoryStoreTests: XCTestCase {
     func testRoundTripPersistsDurationAndOrdering() {
         let suite = "dev.suniye.tests.history.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = HistoryStore(userDefaults: defaults, storageKey: "history")
+        let store = HistoryStore(userDefaults: defaults)
 
         let results = [
             RecentResult(
@@ -17,10 +17,11 @@ final class HistoryStoreTests: XCTestCase {
             ),
             RecentResult(
                 id: UUID(),
-                text: "second",
+                text: "Second.",
                 createdAt: Date(timeIntervalSince1970: 1_699_999_880.456),
                 durationSeconds: 3.4,
-                wasLLMPolished: true
+                wasLLMPolished: true,
+                rawText: "um second"
             )
         ]
 
@@ -32,6 +33,7 @@ final class HistoryStoreTests: XCTestCase {
         for (loadedResult, expectedResult) in zip(loaded, results) {
             XCTAssertEqual(loadedResult.id, expectedResult.id)
             XCTAssertEqual(loadedResult.text, expectedResult.text)
+            XCTAssertEqual(loadedResult.rawText, expectedResult.rawText)
             XCTAssertEqual(loadedResult.durationSeconds, expectedResult.durationSeconds, accuracy: 0.0001)
             XCTAssertEqual(loadedResult.wasLLMPolished, expectedResult.wasLLMPolished)
             XCTAssertEqual(
@@ -45,7 +47,7 @@ final class HistoryStoreTests: XCTestCase {
     func testLoadFallsBackToLegacyISO8601Encoding() throws {
         let suite = "dev.suniye.tests.history.legacy.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = HistoryStore(userDefaults: defaults, storageKey: "history")
+        let store = HistoryStore(userDefaults: defaults)
         let legacyEncoder = JSONEncoder()
         legacyEncoder.dateEncodingStrategy = .iso8601
 
@@ -57,7 +59,7 @@ final class HistoryStoreTests: XCTestCase {
             wasLLMPolished: true
         )
 
-        defaults.set(try legacyEncoder.encode([result]), forKey: "history")
+        defaults.set(try legacyEncoder.encode([result]), forKey: "dev.suniye.history")
 
         let loaded = store.load()
         XCTAssertEqual(loaded.count, 1)
@@ -70,5 +72,34 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(loadedResult.durationSeconds, result.durationSeconds, accuracy: 0.0001)
         XCTAssertEqual(loadedResult.wasLLMPolished, result.wasLLMPolished)
         XCTAssertEqual(loadedResult.createdAt.timeIntervalSince1970, result.createdAt.timeIntervalSince1970, accuracy: 0.001)
+    }
+
+    func testLoadReturnsEmptyWhenNothingIsStored() {
+        let suite = "dev.suniye.tests.history.empty.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = HistoryStore(userDefaults: defaults)
+
+        XCTAssertEqual(store.load(), [])
+    }
+
+    func testSaveSilentlySkipsUnencodableResults() {
+        let suite = "dev.suniye.tests.history.unencodable.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = HistoryStore(userDefaults: defaults)
+
+        // Infinity is not representable by the JSON encoder, so save must
+        // bail out without writing anything.
+        let unencodable = RecentResult(
+            id: UUID(),
+            text: "bad duration",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            durationSeconds: .infinity,
+            wasLLMPolished: false
+        )
+
+        store.save([unencodable])
+
+        XCTAssertNil(defaults.data(forKey: "dev.suniye.history"))
+        XCTAssertEqual(store.load(), [])
     }
 }

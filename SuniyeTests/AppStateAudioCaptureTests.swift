@@ -4,18 +4,40 @@ import XCTest
 
 @MainActor
 final class AppStateAudioCaptureTests: XCTestCase {
-    private func audioRoute(backend: AudioCaptureBackend, fallback: AudioCaptureFallbackReason?) -> AudioRouteSnapshot {
+    private func audioRoute(
+        backend: AudioCaptureBackend,
+        fallback: AudioCaptureFallbackReason?,
+        standIn: AudioInputStandIn? = nil
+    ) -> AudioRouteSnapshot {
         AudioRouteSnapshot(
             preferredInputDeviceID: nil, effectiveInputDeviceID: "d", effectiveInputName: "Mic",
             inputTransport: .builtIn, outputTransport: .builtIn, inputSampleRate: 16_000,
             inputChannelCount: 1, requestedEchoCancellation: false, effectiveEchoCancellation: false,
-            backend: backend, fallbackReason: fallback
+            backend: backend, fallbackReason: fallback, standIn: standIn
         )
+    }
+
+    func testAudioBackendUsedEventNamesTheStandInReasonAndNotTheMicrophone() {
+        let standIns: [(AudioInputStandIn, String)] = [
+            (.preferredMissing, "preferred_missing"),
+            (.offWithLidClosed(name: "MacBook Pro Microphone"), "lid_closed"),
+            (.bluetoothDefault(name: "AirPods Pro"), "bluetooth_default"),
+        ]
+        for (standIn, label) in standIns {
+            let props = AppState.audioBackendUsedEvent(
+                for: audioRoute(backend: .voiceProcessingEngine, fallback: nil, standIn: standIn)
+            ).props
+            XCTAssertEqual(props["input_stand_in"], .label(label))
+            XCTAssertEqual(Set(props.keys), ["backend", "fallback_occurred", "rung", "input_stand_in"])
+        }
+
+        let chosen = AppState.audioBackendUsedEvent(for: audioRoute(backend: .voiceProcessingEngine, fallback: nil)).props
+        XCTAssertNil(chosen["input_stand_in"])
     }
 
     func testAudioBackendUsedEventDerivesRungAndFallback() {
         func decode(_ r: AudioRouteSnapshot) -> (backend: SafeLabel, fell: Bool, rung: Int)? {
-            guard case let .audioBackendUsed(backend, fell, rung) = AppState.audioBackendUsedEvent(for: r) else { return nil }
+            guard case let .audioBackendUsed(backend, fell, rung, _) = AppState.audioBackendUsedEvent(for: r) else { return nil }
             return (backend, fell, rung)
         }
         // Primary rung, no fallback.
@@ -44,26 +66,21 @@ final class AppStateAudioCaptureTests: XCTestCase {
         let started = expectation(description: "capture started")
         audioCapture.onStartCapture = { _ in started.fulfill() }
         let appState = readyAppState(audioCapture: audioCapture)
-        appState.selectedInputDeviceID = "usb-mic"
+        appState.microphone.selectedInputDeviceID = "usb-mic"
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
 
         XCTAssertEqual(audioCapture.lastPreferredInputDeviceID, "usb-mic")
         XCTAssertEqual(appState.phase, .recording)
     }
 
-    func testUnavailablePreferredInputDeviceIsPreservedAndActionable() {
+    func testMissingSavedMicrophoneStaysSavedAndSettingsNameTheStandIn() {
         let audioCapture = StubAudioCaptureService()
         audioCapture.availableDevices = [
-            AudioInputDevice(
-                id: "built-in",
-                name: "Built-in Microphone",
-                isDefault: true,
-                transport: .builtIn
-            ),
+            AudioInputDevice(id: "built-in", name: "MacBook Pro Microphone", isDefault: true, transport: .builtIn),
         ]
-        audioCapture.routeSnapshotError = AudioCaptureServiceError.preferredDeviceUnavailable
+        audioCapture.route = makeRoute(id: "built-in", name: "MacBook Pro Microphone", standIn: .preferredMissing)
         let settingsStore = TestGeneralSettingsStore(
             value: GeneralSettings(
                 preferredInputDeviceID: "studio-mic",
@@ -76,15 +93,121 @@ final class AppStateAudioCaptureTests: XCTestCase {
             generalSettingsStore: settingsStore
         )
 
-        XCTAssertEqual(appState.selectedInputDeviceID, "studio-mic")
-        XCTAssertEqual(appState.selectedInputDeviceName, "Studio Microphone")
+        XCTAssertEqual(appState.microphone.selectedInputDeviceID, "studio-mic")
         XCTAssertEqual(
-            appState.availableInputDevices.first(where: { $0.id == "studio-mic" })?.isAvailable,
-            false
+            appState.microphone.availableInputDevices.first(where: { $0.id == "studio-mic" })?.availability,
+            .notConnected
         )
-        XCTAssertEqual(appState.recommendedInputDevice?.id, "built-in")
-        XCTAssertEqual(appState.effectiveInputDeviceStatusText, "Studio Microphone is unavailable")
-        XCTAssertNotNil(appState.audioRouteWarningText)
+        XCTAssertEqual(appState.microphone.activeInputDeviceName, "MacBook Pro Microphone")
+        XCTAssertEqual(
+            appState.microphone.inputStandInNote,
+            "Studio Microphone isn't connected, so Suniye uses MacBook Pro Microphone."
+        )
+        XCTAssertEqual(appState.microphone.effectiveInputDeviceStatusText, appState.microphone.inputStandInNote)
+        XCTAssertNil(appState.microphone.audioRouteWarningText)
+    }
+
+    func testStandInNoteNamesTheSkippedMicrophone() {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.route = makeRoute(
+            id: "built-in",
+            name: "MacBook Pro Microphone",
+            standIn: .bluetoothDefault(name: "AirPods Pro")
+        )
+        let appState = makeTestAppState(audioCaptureService: audioCapture)
+        XCTAssertEqual(
+            appState.microphone.inputStandInNote,
+            "AirPods Pro is Bluetooth, so Suniye uses MacBook Pro Microphone."
+        )
+
+        audioCapture.route = makeRoute(
+            id: "display-mic",
+            name: "Studio Display Microphone",
+            transport: .usb,
+            standIn: .offWithLidClosed(name: "MacBook Pro Microphone")
+        )
+        appState.microphone.refreshInputDevices()
+        XCTAssertEqual(
+            appState.microphone.inputStandInNote,
+            "MacBook Pro Microphone is off while the lid is closed, so Suniye uses Studio Display Microphone."
+        )
+
+        audioCapture.route = makeRoute(id: "built-in", name: "MacBook Pro Microphone", standIn: nil)
+        appState.microphone.refreshInputDevices()
+        XCTAssertNil(appState.microphone.inputStandInNote)
+        XCTAssertEqual(appState.microphone.effectiveInputDeviceStatusText, "Using MacBook Pro Microphone - Built-in")
+    }
+
+    func testSettingsSayWhyNoMicrophoneCanRecord() {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.availableDevices = [
+            AudioInputDevice(
+                id: "built-in",
+                name: "MacBook Pro Microphone",
+                isDefault: true,
+                transport: .builtIn,
+                availability: .offWithLidClosed
+            ),
+        ]
+        audioCapture.routeSnapshotError = AudioCaptureServiceError.builtInMicrophoneOff
+
+        let appState = makeTestAppState(audioCaptureService: audioCapture)
+
+        XCTAssertNil(appState.microphone.audioRouteSnapshot)
+        XCTAssertEqual(
+            appState.microphone.effectiveInputDeviceStatusText,
+            "The built-in microphone is off while the lid is closed."
+        )
+        XCTAssertNil(appState.microphone.recommendedInputDevice)
+    }
+
+    func testRecommendationSkipsTheMicrophoneTheLidSwitchedOff() {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.availableDevices = [
+            AudioInputDevice(
+                id: "built-in",
+                name: "MacBook Pro Microphone",
+                isDefault: true,
+                transport: .builtIn,
+                availability: .offWithLidClosed
+            ),
+            AudioInputDevice(id: "airpods", name: "AirPods Pro", isDefault: false, transport: .bluetooth),
+        ]
+        audioCapture.route = makeRoute(
+            id: "airpods",
+            name: "AirPods Pro",
+            transport: .bluetooth,
+            standIn: .offWithLidClosed(name: "MacBook Pro Microphone")
+        )
+
+        let appState = makeTestAppState(audioCaptureService: audioCapture)
+
+        XCTAssertNotNil(appState.microphone.audioRouteWarningText)
+        XCTAssertNil(appState.microphone.recommendedInputDevice)
+    }
+
+    func testDeviceChangeDuringDictationKeepsTheRouteItRecordsFrom() async throws {
+        let audioCapture = StubAudioCaptureService()
+        let started = expectation(description: "capture started")
+        let canceled = expectation(description: "capture canceled")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        audioCapture.onCancelCapture = { _ in canceled.fulfill() }
+        let appState = readyAppState(audioCapture: audioCapture)
+
+        appState.toggleFloatingIndicatorRecording()
+        await fulfillment(of: [started], timeout: 1)
+        let sessionID = try XCTUnwrap(audioCapture.lastStartedSessionID)
+
+        // The saved USB microphone comes back; the next dictation will use it.
+        audioCapture.route = makeRoute(id: "studio-mic", name: "Studio Microphone", transport: .usb, standIn: nil)
+        audioCapture.onEvent?(.devicesChanged(audioCapture.availableDevices))
+        await drainScheduledTasks()
+        XCTAssertEqual(appState.microphone.activeInputDeviceName, "System Microphone")
+
+        audioCapture.onEvent?(.interrupted(sessionID: sessionID, reason: .inputMuted))
+        await fulfillment(of: [canceled], timeout: 1)
+        await drainScheduledTasks()
+        XCTAssertEqual(appState.microphone.activeInputDeviceName, "Studio Microphone")
     }
 
     func testRecommendedInputDeviceActionPersistsActualDeviceName() {
@@ -114,7 +237,8 @@ final class AppStateAudioCaptureTests: XCTestCase {
             requestedEchoCancellation: false,
             effectiveEchoCancellation: false,
             backend: .inputOnlyHAL,
-            fallbackReason: nil
+            fallbackReason: nil,
+            standIn: nil
         )
         let settingsStore = TestGeneralSettingsStore()
         let appState = makeTestAppState(
@@ -122,11 +246,11 @@ final class AppStateAudioCaptureTests: XCTestCase {
             generalSettingsStore: settingsStore
         )
 
-        appState.useRecommendedInputDevice()
+        appState.microphone.useRecommendedInputDevice()
 
-        XCTAssertEqual(appState.selectedInputDeviceID, "built-in")
+        XCTAssertEqual(appState.microphone.selectedInputDeviceID, "built-in")
         XCTAssertEqual(settingsStore.latest.preferredInputDeviceName, "Built-in Microphone")
-        XCTAssertTrue(appState.audioRouteWarningText?.contains("call-quality") == true)
+        XCTAssertTrue(appState.microphone.audioRouteWarningText?.contains("call-quality") == true)
     }
 
     func testQuickReleaseDuringCaptureStartStopsTheSameSession() async {
@@ -139,9 +263,9 @@ final class AppStateAudioCaptureTests: XCTestCase {
         audioCapture.onStopCapture = { _ in stopped.fulfill() }
         let appState = readyAppState(audioCapture: audioCapture)
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [stopped], timeout: 1)
         audioCapture.resumeStartCapture()
         await drainScheduledTasks()
@@ -167,9 +291,9 @@ final class AppStateAudioCaptureTests: XCTestCase {
             transcriptionService: transcriptionService
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [stopped], timeout: 1)
         await drainScheduledTasks()
 
@@ -186,7 +310,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
         audioCapture.onCancelCapture = { _ in canceled.fulfill() }
         let appState = readyAppState(audioCapture: audioCapture)
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         let sessionID = try XCTUnwrap(audioCapture.lastStartedSessionID)
         audioCapture.onEvent?(.interrupted(sessionID: sessionID, reason: .inputMuted))
@@ -212,7 +336,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
             transcriptionService: transcriptionService
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         let sessionID = try XCTUnwrap(audioCapture.lastStartedSessionID)
         audioCapture.onEvent?(.interrupted(sessionID: sessionID, reason: .maximumDurationReached))
@@ -248,7 +372,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
         let appState = readyAppState(audioCapture: audioCapture)
         appState.echoCancellationEnabled = true
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
 
         XCTAssertEqual(audioCapture.lastEchoCancellationEnabled, true)
@@ -273,6 +397,20 @@ final class AppStateAudioCaptureTests: XCTestCase {
         XCTAssertEqual(
             appState.floatingIndicatorState,
             .listening(levels: Array(repeating: 0.42, count: AudioLevelMeter.bandCount), source: .manual, preview: .off)
+        )
+    }
+
+    private func makeRoute(
+        id: String,
+        name: String,
+        transport: AudioDeviceTransport = .builtIn,
+        standIn: AudioInputStandIn?
+    ) -> AudioRouteSnapshot {
+        AudioRouteSnapshot(
+            preferredInputDeviceID: nil, effectiveInputDeviceID: id, effectiveInputName: name,
+            inputTransport: transport, outputTransport: .builtIn, inputSampleRate: 48_000,
+            inputChannelCount: 1, requestedEchoCancellation: false, effectiveEchoCancellation: false,
+            backend: .inputOnlyHAL, fallbackReason: nil, standIn: standIn
         )
     }
 

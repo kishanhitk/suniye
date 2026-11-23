@@ -9,6 +9,12 @@ const SherpaOnnxOfflineRecognizer *SuniyeCreateOfflineRecognizerSafe(
     char **errorMessage
 );
 
+const SherpaOnnxVoiceActivityDetector *SuniyeCreateVoiceActivityDetectorSafe(
+    const SherpaOnnxVadModelConfig *config,
+    float bufferSizeInSeconds,
+    char **errorMessage
+);
+
 void SuniyeFreeCString(char *string);
 
 #ifdef __cplusplus

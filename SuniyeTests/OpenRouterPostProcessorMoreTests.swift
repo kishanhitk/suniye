@@ -44,7 +44,7 @@ final class OpenRouterPostProcessorMoreTests: XCTestCase {
 
     // MARK: - generate
 
-    func testGenerateBuildsEditModeRequestAndSanitizesOutput() async throws {
+    func testGenerateBuildsEditModeRequestAndOnlyTrimsOutput() async throws {
         let processor = OpenRouterPostProcessor(session: makeSession())
 
         MoreTestsChatURLProtocol.handler = { request in
@@ -63,7 +63,7 @@ final class OpenRouterPostProcessorMoreTests: XCTestCase {
 
             return try MoreTestsChatURLProtocol.jsonResponse(
                 for: request,
-                content: "  rewritten output  "
+                content: " \n```\nPolished: rewritten\n```\n "
             )
         }
 
@@ -73,7 +73,7 @@ final class OpenRouterPostProcessorMoreTests: XCTestCase {
             config: makeConfig()
         )
 
-        XCTAssertEqual(output, "rewritten output")
+        XCTAssertEqual(output, "```\nPolished: rewritten\n```", "the API engine only trims outer whitespace")
     }
 
     func testGenerateThrowsEmptyOutputForWhitespaceResponse() async {

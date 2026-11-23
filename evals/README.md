@@ -125,6 +125,37 @@ The runner starts `llama-server` itself, uses the Gemma-style single user turn, 
 ~/Library/Application Support/Suniye/llm/gemma-4-e2b-Q4_K_M.gguf
 ```
 
+Options for a comparison of llama-server builds or flags:
+
+- `--cases` takes more than one file. `--rounds N` runs all of them N times on one server.
+- `--server-arg` adds one llama-server argument. Repeat it, and write `--server-arg=--flag` for a value that starts with a dash.
+- The script sends one warm-up request first, like the app. The report has p50 and p90 latency, decode speed, draft token counts, and the peak memory of llama-server.
+
+```bash
+python3 scripts/eval_magic_format.py \
+  --server Suniye/LocalLLM/llama-server \
+  --cases evals/magic_format_cases.json evals/magic_format_advanced_cases.json evals/magic_format_edit_cases.json \
+  --rounds 2 --server-arg=--jinja \
+  --server-arg=--spec-type --server-arg=draft-mtp \
+  --server-arg=--spec-draft-model --server-arg="$HOME/Library/Application Support/Suniye/llm/mtp-gemma-4-E2B-it-Q4_0.gguf" \
+  --json-output evals/runs/gemma_mtp.json
+```
+
+### llama.cpp 7e960f40 and the MTP drafter (KIS-268, 21 Nov 2026)
+
+Gemma v14 prompt, round 2 of 2, one Mac, runs back to back. The 144 outputs of each run are byte-identical to the run on the old build.
+
+| llama-server | main (44) | advanced (4) | referential (24) | main p50 | main p90 | decode tokens/s |
+|---|---|---|---|---|---|---|
+| 06938ac1 | 44 | 4 | 24 | 741 ms | 1095 ms | 29.8 |
+| 7e960f40 | 44 | 4 | 24 | 654 ms | 1043 ms | 27.3 |
+| 7e960f40 with the drafter | 44 | 4 | 24 | 383 ms | 588 ms | 52.2 |
+
+- Decode speed is the server's own rate. 7e960f40 leaves the first token of each answer out of it, and 06938ac1 counts it.
+- The drafter proposed 888 tokens in the main suite, and Gemma accepted 718 (81%).
+- With the drafter, each case after the warm-up request reads 2,438 to 2,441 prompt tokens from the server's cache.
+- Peak physical footprint of llama-server: 379 MB without the drafter, 484 MB with it.
+
 The default prompt is `evals/prompts/gemma_magic_format_v14.txt`. Earlier prompt files are kept as useful baselines for comparing simple-to-improved prompt behavior. Tuning candidates live in `evals/prompts/candidates/`.
 
 ## Version scores (39-case suite, Gemma 4 E2B Q4_K_M, temp 0)
@@ -227,6 +258,27 @@ v14 then closed every remaining model gap:
 
 Result: **39/39, 24/24 referential probe, 4/4 advanced, injection 2/2 — five consecutive all-green
 rounds** (the previously flappy cases included). Run artifacts: `evals/runs/v14_*.json`.
+
+## Paragraph breaks (KIS-252)
+
+Both harnesses handle a spoken "new paragraph" the way `MagicFormatPipeline.polish` does:
+
+- The transcript gets a blank line in place of each command before the model reads it. "new paragraph" after a word such as "a", "the", "each" or "my", or before a word such as "spacing" or "break", stays as words.
+- The first word after a blank line gets a capital letter, unless it already has a capital inside ("iPhone").
+- If the answer has no blank line and one line break per dictated break, each of those line breaks becomes a blank line. The app does this only when the dictation has no list cue; the harnesses have no list-cue detector and always do it.
+- Blank lines are compared. Before KIS-252 both harnesses changed "\n\n" to "\n", so a paragraph case passed even though the app rejected the answer.
+- The Apple harness compiles `Suniye/MagicFormat/MagicFormatParagraphBreaks.swift` through a symlink. `scripts/eval_magic_format.py` has a Python copy of it.
+- Neither harness runs the app's output check, its retry or the prompt composer's list section.
+
+The 39-case suite (now 44) has three "new paragraph" cases (`paragraph_command_001`, lowercase; `paragraph_command_002`, ASR punctuation; `paragraph_command_003`, the Apple Speech style with commas around the command) and one content case (`paragraph_phrase_kept_001`, "add a new paragraph about pricing").
+
+| suite | Gemma v14 | Apple v45 (single-turn) |
+|-------|-----------|-------------------------|
+| main (44) | 44/44 | 39/44 (same 5 failures as before; 4 new cases pass) |
+| advanced (4) | 4/4 | 3/4 (paragraph case now passes) |
+| referential (24) | 24/24 | not run |
+
+On 20 extra "new paragraph" dictations (not committed), the blank lines were correct in 20/20 for Gemma and 20/20 for Apple. Before KIS-252 the app accepted 0 of them with a blank line: the output check rejected every empty line.
 
 ## ASR model comparison (`evals/asr-compare`)
 
