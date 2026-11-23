@@ -31,17 +31,35 @@ final class SidebarAccessoriesTests: XCTestCase {
         XCTAssertEqual(SettingsPane.microphone.sidebarAccessory(silent), .attention)
     }
 
+    /// The Globe key setting only changes how double-tap works; a shortcut
+    /// that the app refused stops dictation.
     func testShortcutsGetTheDotOnlyForARejectedShortcut() {
-        let appState = makeTestAppState()
+        let appState = makeTestAppState(systemGlobeKeyActionProvider: { .startDictation })
+        appState.refreshSystemGlobeKeyAction()
+        XCTAssertEqual(appState.globeDoubleTapConflict, .startDictation)
         XCTAssertNil(SettingsPane.shortcuts.sidebarAccessory(appState))
 
         appState.hotkeyValidationMessage = "Paste Last Transcript already uses this shortcut."
         XCTAssertEqual(SettingsPane.shortcuts.sidebarAccessory(appState), .attention)
     }
 
-    /// The Speech model row and the Transcripts page report the same problem.
-    func testSpeechModelDotFollowsTheTranscriptsProblem() {
+    /// macOS can hold the login item for approval while the switch shows on;
+    /// an unsigned build that cannot have one shows the switch off.
+    func testGeneralGetsTheDotWhenTheLoginItemCannotOpenTheApp() {
         let appState = makeTestAppState()
+        appState.launchAtLoginStatus = .unsupported("This build cannot open at login.")
+        XCTAssertNil(SettingsPane.general.sidebarAccessory(appState))
+
+        appState.launchAtLoginStatus = .requiresApproval
+        XCTAssertEqual(SettingsPane.general.sidebarAccessory(appState), .attention)
+    }
+
+    /// The Speech model row and the Transcripts page report the same problem,
+    /// and Settings carries the dot of the pane.
+    func testSpeechModelDotFollowsTheTranscriptsProblem() {
+        let appState = makeGrantedAppState()
+        XCTAssertNil(MainWindowSection.settings.sidebarAccessory(appState))
+
         appState.phase = .error
         appState.lastError = "The speech model could not load."
 
@@ -73,9 +91,19 @@ final class SidebarAccessoriesTests: XCTestCase {
     }
 
     func testAMissingGrantPutsTheDotOnSettings() {
-        let appState = makeTestAppState()
-        appState.hasMicPermission = false
+        let appState = makeGrantedAppState()
+        XCTAssertNil(MainWindowSection.settings.sidebarAccessory(appState))
 
+        appState.hasMicPermission = false
         XCTAssertEqual(MainWindowSection.settings.sidebarAccessory(appState), .attention)
+    }
+
+    /// A test app starts without grants, which lists the Permissions pane and
+    /// puts a dot on Settings before any other problem.
+    private func makeGrantedAppState() -> AppState {
+        let appState = makeTestAppState()
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        return appState
     }
 }

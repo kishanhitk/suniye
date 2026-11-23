@@ -40,7 +40,10 @@ extension SettingsPane {
             }
             return appState.hasAttention(at: .settings(.speechModel)) ? .attention : nil
         case .general:
-            return appState.launchAtLoginError == nil ? nil : .attention
+            // The switch shows on while macOS holds the login item for
+            // approval, but the app does not open at login until then.
+            let loginItemBlocked = appState.launchAtLoginError != nil || appState.launchAtLoginStatus == .requiresApproval
+            return loginItemBlocked ? .attention : nil
         case .indicator, .meetings:
             return nil
         }
