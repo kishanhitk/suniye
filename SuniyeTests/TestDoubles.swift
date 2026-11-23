@@ -204,6 +204,7 @@ final class MemorySecretItem: SecretItem, @unchecked Sendable {
 
 @MainActor
 final class StubAppUpdateController: AppUpdateControllerProtocol {
+    var isEnabled = true
     var canCheckForUpdates = false
     var isUpdateReadyToInstall = false
     var automaticallyChecksForUpdates = false

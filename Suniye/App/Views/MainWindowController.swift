@@ -11,6 +11,10 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private weak var appState: AppState?
 
+    var hasAttachedSheet: Bool {
+        window?.attachedSheet != nil
+    }
+
     private override init() {}
 
     func show(appState: AppState) {
@@ -110,6 +114,7 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
             KeychainService.removePlainTextKeyFiles()
         }
         if !ProcessInfo.processInfo.isRunningUnderXCTest {
+            sharedAppState.applyAppearance()
             statusItemController = StatusItemController(appState: sharedAppState)
             MainWindowController.shared.show(appState: sharedAppState)
         }

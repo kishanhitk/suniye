@@ -145,6 +145,10 @@ struct MeetingTemplateEditor: View {
                 try await meetings.saveTemplates(drafts)
                 dismiss()
             } catch {
+                // Shows the template with no name, so its empty field is in view.
+                if case let .emptyName(templateID) = error as? MeetingTemplateError {
+                    selectedID = templateID
+                }
                 saveError = error.localizedDescription
             }
         }

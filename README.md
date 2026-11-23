@@ -36,7 +36,7 @@ Hold your hotkey, say what you mean, release. Your words land at the cursor in M
 - **Private by default.** Local speech models transcribe on-device. Your audio never touches a network, so there's nothing to store, leak, or train on.
 - **Instant.** No round-trip to a server. The model is always loaded, so speech becomes text in milliseconds, not seconds.
 - **Everywhere you type.** Text is inserted through the macOS Accessibility APIs, so it works in every app — not just a special editor.
-- **Shortcuts that fit you.** Customize dictation, Edit Mode, and recovery shortcuts from General settings.
+- **Shortcuts that fit you.** Customize dictation, Edit Mode, and recovery shortcuts in Settings > Shortcuts.
 - **Yours to inspect.** Open source under the MIT license — read every line, build it yourself, or send a patch.
 
 ## How it works
@@ -72,7 +72,7 @@ Suniye is signed with an Apple Developer ID and notarized by Apple, so macOS ope
 
 A short onboarding takes you from Welcome to your first dictation. Suniye asks for **Microphone** when you start your first try, and for **Accessibility** (to type into other apps) once you have seen it work.
 
-On macOS 26 Suniye starts on Apple's built-in on-device speech engine, so there is nothing to download. If that engine can't run on your Mac (older macOS, an unsupported language, or a setting from your organization), Suniye downloads its recommended model, **Parakeet TDT 0.6B v3**, instead. You can switch models any time in **Speech Model**.
+On macOS 26 Suniye starts on Apple's built-in on-device speech engine, so there is nothing to download. If that engine can't run on your Mac (older macOS, an unsupported language, or a setting from your organization), Suniye downloads its recommended model, **Parakeet TDT 0.6B v3**, instead. You can switch models any time in **Settings > Speech model**.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed steps.
 
@@ -167,7 +167,7 @@ Suniye checks for updates in the background; **Stable** is the default. To ride 
 
 ### Reporting a problem
 
-Use **Report a Problem** from the menu bar, the General page, or the Help menu. Suniye sends your description and an optional, sanitized diagnostics bundle to the maintainer's private queue. Diagnostics are logs and metadata only — audio, transcripts, clipboard contents, API keys, and model files are never included.
+Use **Report a Problem** from the menu bar, Settings > General, or the Help menu. Suniye sends your description and an optional, sanitized diagnostics bundle to the maintainer's private queue. Diagnostics are logs and metadata only — audio, transcripts, clipboard contents, API keys, and model files are never included.
 
 ## Contributing
 

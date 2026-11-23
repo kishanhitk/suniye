@@ -22,19 +22,19 @@ struct AttentionItem: Identifiable, Equatable {
     let title: String
     let detail: String
     let severity: AttentionSeverity
-    let recommendedSection: MainWindowSection
+    let recommendedDestination: MainWindowDestination
     let fixAction: AttentionItemFixAction?
 
     var fixTitle: String? {
         fixAction?.title
     }
 
-    init(id: String, title: String, detail: String, severity: AttentionSeverity, recommendedSection: MainWindowSection, fixAction: AttentionItemFixAction? = nil) {
+    init(id: String, title: String, detail: String, severity: AttentionSeverity, recommendedDestination: MainWindowDestination, fixAction: AttentionItemFixAction? = nil) {
         self.id = id
         self.title = title
         self.detail = detail
         self.severity = severity
-        self.recommendedSection = recommendedSection
+        self.recommendedDestination = recommendedDestination
         self.fixAction = fixAction
     }
 }

@@ -6,7 +6,7 @@ import SwiftUI
 /// themselves, grouped by day and searchable.
 struct TranscriptsPage: View {
     @Bindable var appState: AppState
-    let onNavigate: (MainWindowSection) -> Void
+    let onNavigate: (MainWindowDestination) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var searchText = ""
@@ -79,7 +79,7 @@ struct TranscriptsPage: View {
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
                 ForEach(appState.attentionItems) { item in
                     AttentionTile(item: item) {
-                        onNavigate(item.recommendedSection)
+                        onNavigate(item.recommendedDestination)
                     } onFixAction: { action in
                         appState.handleAttentionFixAction(action)
                     }

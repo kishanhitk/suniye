@@ -15,11 +15,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let stopMeetingItem = NSMenuItem(title: "Stop Recording", action: #selector(stopMeeting), keyEquivalent: "")
     private let openMeetingItem = NSMenuItem(title: "Open Meeting Notes", action: #selector(openMeeting), keyEquivalent: "")
     private let finishSetupItem = NSMenuItem(title: "", action: #selector(openMainWindow), keyEquivalent: "")
-    private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openMainWindow), keyEquivalent: "o")
+    private lazy var openAppItem = NSMenuItem(title: "Open \(appIdentity.displayName)", action: #selector(openMainWindow), keyEquivalent: "o")
+    private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openSettings), keyEquivalent: ",")
     private let copyLastTranscriptItem = NSMenuItem(title: "Copy Last Transcript", action: #selector(copyLastTranscript), keyEquivalent: "")
-    private let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+    private let checkUpdatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
-    private let reportIssueItem = NSMenuItem(title: "Report a Problem...", action: #selector(reportIssue), keyEquivalent: "")
+    private let updatesSeparator = NSMenuItem.separator()
+    private let reportIssueItem = NSMenuItem(title: "Report a Problem…", action: #selector(reportIssue), keyEquivalent: "")
     private lazy var quitItem = NSMenuItem(title: "Quit \(appIdentity.displayName)", action: #selector(quitApp), keyEquivalent: "q")
     private var onboardingFinishObserver: NSObjectProtocol?
     private var homeHint: NSPopover?
@@ -75,9 +77,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             item.target = self
         }
         finishSetupItem.target = self
+        openAppItem.target = self
         openSettingsItem.target = self
         copyLastTranscriptItem.target = self
         checkUpdatesItem.target = self
+        checkUpdatesItem.isHidden = !appState.updatesEnabled
         downloadItem.target = self
         reportIssueItem.target = self
         quitItem.target = self
@@ -92,12 +96,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // mid-setup must see a labeled way back (with live download progress),
         // not a normal-looking menu that silently does nothing.
         menu.addItem(finishSetupItem)
+        menu.addItem(openAppItem)
         menu.addItem(openSettingsItem)
         menu.addItem(copyLastTranscriptItem)
         menu.addItem(.separator())
         menu.addItem(checkUpdatesItem)
         menu.addItem(downloadItem)
-        menu.addItem(.separator())
+        menu.addItem(updatesSeparator)
         menu.addItem(reportIssueItem)
         menu.addItem(quitItem)
 
@@ -152,6 +157,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         checkUpdatesItem.target = self
+        checkUpdatesItem.isHidden = !appState.updatesEnabled
 
         copyLastTranscriptItem.isEnabled = appState.library.lastTranscriptText != nil
 
@@ -159,12 +165,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             checkUpdatesItem.title = "Restart to Update"
             checkUpdatesItem.action = #selector(restartToUpdate)
         } else {
-            checkUpdatesItem.title = "Check for Updates..."
+            checkUpdatesItem.title = "Check for Updates…"
             checkUpdatesItem.action = #selector(checkForUpdates)
         }
 
         downloadItem.isEnabled = phase == .needsModel || phase == .downloadingModel || phase == .error
         downloadItem.isHidden = !(phase == .needsModel || phase == .downloadingModel || phase == .error)
+        // A build without updates and with its model ready hides both items;
+        // NSMenu would then show two separators next to each other.
+        updatesSeparator.isHidden = checkUpdatesItem.isHidden && downloadItem.isHidden
 
         if let button = statusItem.button {
             button.image = statusItemImage(for: phase)
@@ -245,6 +254,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func openMainWindow() {
         AppLogger.shared.log(.info, "menu action: open main window")
         appState.openMainWindow()
+    }
+
+    @objc
+    private func openSettings() {
+        AppLogger.shared.log(.info, "menu action: open settings")
+        appState.openMainWindow(at: .settings())
     }
 
     @objc

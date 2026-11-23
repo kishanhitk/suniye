@@ -4,6 +4,8 @@ import Sparkle
 
 @MainActor
 protocol AppUpdateControllerProtocol: AnyObject {
+    /// False in builds that ship without updates, such as Preview.
+    var isEnabled: Bool { get }
     var canCheckForUpdates: Bool { get }
     var isUpdateReadyToInstall: Bool { get }
     var automaticallyChecksForUpdates: Bool { get set }
@@ -17,6 +19,7 @@ protocol AppUpdateControllerProtocol: AnyObject {
 
 @MainActor
 final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUUpdaterDelegate {
+    var isEnabled: Bool { true }
     private var updaterController: SPUStandardUpdaterController!
     private var canCheckForUpdatesObservation: AnyCancellable?
     private var hasStarted = false
@@ -125,6 +128,7 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
 
 @MainActor
 final class DisabledUpdateController: AppUpdateControllerProtocol {
+    var isEnabled: Bool { false }
     var canCheckForUpdates: Bool { false }
     var isUpdateReadyToInstall: Bool { false }
     var automaticallyChecksForUpdates: Bool {

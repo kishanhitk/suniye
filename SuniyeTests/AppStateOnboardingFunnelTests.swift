@@ -370,9 +370,9 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         let spy = SpyAnalytics()
         let appState = nudgeReadyState(spy: spy)
 
-        let section = appState.openMagicFormatSetupFromNudge()
+        let destination = appState.openMagicFormatSetupFromNudge()
 
-        XCTAssertEqual(section, .style)
+        XCTAssertEqual(destination, .section(.style))
         XCTAssertFalse(appState.shouldShowMagicFormatNudge)
         let actions = spy.trackedEvents.compactMap { event -> MFNudgeAction? in
             if case let .mfNudge(action) = event { return action }

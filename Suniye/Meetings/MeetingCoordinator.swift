@@ -372,7 +372,16 @@ final class MeetingCoordinator {
 
     /// Saves the list that the template editor shows. When the Default
     /// template is not in it any more, General is the default again.
+    /// Names are trimmed, and a template with no name is refused.
     func saveTemplates(_ list: [MeetingTemplate]) async throws {
+        let list = list.map { template in
+            var template = template
+            template.name = template.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            return template
+        }
+        if let unnamed = list.first(where: { $0.name.isEmpty }) {
+            throw MeetingTemplateError.emptyName(templateID: unnamed.id)
+        }
         try await templates.replace(with: list)
         if !list.contains(where: { $0.id == settings.templateID }) {
             updateSettings { $0.templateID = MeetingTemplate.general.id }

@@ -19,6 +19,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
         let saved = try XCTUnwrap(defaults.data(forKey: "dev.suniye.general.settings"))
         var expected = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(stored.utf8)) as? [String: Any])
         expected["showsMeetingTime"] = true
+        expected["appearance"] = "system"
         XCTAssertEqual(
             try JSONSerialization.jsonObject(with: saved) as? NSDictionary,
             expected as NSDictionary

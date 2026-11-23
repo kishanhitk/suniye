@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Off: the page is the before-and-after and one button.
 ///
-/// No card, no HEARD/PASTED labels, no chip row naming the changes — the arrow
+/// No HEARD/PASTED labels, no chip row naming the changes — the arrow
 /// says which is which and the text shows the rest. Existing settings stay
 /// listed but dim and without chevrons, so nothing looks deleted while nothing
 /// invites a change that could not take effect.
@@ -13,9 +13,17 @@ struct MagicFormatOffState: View {
     private static let heard = "hey jacob comma new line quick update on the migration um three things we still need first move the postgres call into the g r p c service second um backfill the old rows and third rename the flag to enable dot new dot sync uh let's ship it thursday no actually friday the fourth because staging is down till then thanks rocket emoji"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            demonstration
-            callToAction
+        SettingsSection {
+            SettingsCustomRow {
+                demonstration
+                    .padding(.vertical, 6)
+            }
+            SettingsCustomRow {
+                callToAction
+            }
+        }
+
+        SettingsSection {
             dimmedSettings
         }
     }
@@ -24,7 +32,7 @@ struct MagicFormatOffState: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(Self.heard)
                 .font(AppTypography.body)
-                .foregroundStyle(MainWindowPalette.tertiaryText)
+                .foregroundStyle(MainWindowPalette.settingsSecondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             Image(systemName: "arrow.down")
@@ -58,9 +66,12 @@ struct MagicFormatOffState: View {
 
     private var callToAction: some View {
         HStack(alignment: .firstTextBaseline, spacing: 14) {
-            Button(needsDownload ? "Turn on" : "Turn on", action: onTurnOn)
+            Button("Turn On", action: onTurnOn)
                 .buttonStyle(.borderedProminent)
-                .disabled(needsDownload && !appState.canStartLocalGemmaDownload)
+                .settingsControlAnchor(.magicFormat)
+                // During a download Turn On only turns Magic Format on; the
+                // page then shows the download with Cancel.
+                .disabled(needsDownload && !appState.canStartLocalGemmaDownload && !appState.localGemmaInstallState.isActive)
 
             Text(numbers: costText)
                 .font(AppTypography.subheadline)
@@ -88,31 +99,20 @@ struct MagicFormatOffState: View {
     }
 
     /// Listed, not offered.
+    @ViewBuilder
     private var dimmedSettings: some View {
-        VStack(spacing: 0) {
-            DisclosureSettingRow(title: "Engine", value: engineValue, isEnabled: false)
-            RowSeparator()
-            DisclosureSettingRow(title: "Base instructions", value: "Default", isEnabled: false)
-            RowSeparator()
-            DisclosureSettingRow(
-                title: "App-specific writing style",
-                value: appPromptSummary,
-                isEnabled: false
-            )
-        }
+        DisclosureSettingRow(title: SettingsRowID.magicFormatEngine.title, value: engineValue, isEnabled: false)
+        DisclosureSettingRow(title: SettingsRowID.baseInstructions.title, value: "Default", isEnabled: false)
+        DisclosureSettingRow(
+            title: SettingsRowID.appSpecificWritingStyle.title,
+            value: appState.llmAppPromptSummary,
+            isEnabled: false
+        )
     }
 
     private var engineValue: String {
         appState.localGemmaInstallState.isInstalled
             ? appState.localGemmaModelEntry.displayName
             : "Local model"
-    }
-
-    private var appPromptSummary: String {
-        let count = appState.llmAppPromptBindings.count
-        guard count > 0 else {
-            return "None"
-        }
-        return count == 1 ? "1 app" : "\(count) apps"
     }
 }
