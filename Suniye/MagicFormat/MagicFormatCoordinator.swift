@@ -69,8 +69,8 @@ final class MagicFormatCoordinator {
         let hasAPIKey: Bool
         let appleAvailability: AppleFoundationModelsAvailability
         let localGemmaAvailability: LocalGemmaAvailability
-        let readAPIKey: () -> String?
-        let onAPIKeyReadFailed: () -> Void
+        let readAPIKey: () async -> String?
+        let onAPIKeyReadFailed: () async -> Void
         let startSlowWarning: () -> Task<Void, Never>
         /// Advertise the current stage to both the status text and the pill.
         let setStage: (String) -> Void
@@ -189,7 +189,7 @@ final class MagicFormatCoordinator {
         }
     }
 
-    private func resolveAPIConfig(request: PolishRequest) -> Result<LLMConfig, APIConfigFailure> {
+    private func resolveAPIConfig(request: PolishRequest) async -> Result<LLMConfig, APIConfigFailure> {
         guard let endpointURL = request.settings.validatedEndpointURL else {
             return .failure(.invalidEndpoint)
         }
@@ -199,9 +199,9 @@ final class MagicFormatCoordinator {
         guard request.hasAPIKey else {
             return .failure(.missingKey)
         }
-        guard let apiKey = request.readAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let apiKey = await request.readAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
               !apiKey.isEmpty else {
-            request.onAPIKeyReadFailed()
+            await request.onAPIKeyReadFailed()
             return .failure(.keyReadFailed)
         }
         return .success(Self.makeAPIConfig(settings: request.settings, apiKey: apiKey, endpointURL: endpointURL, modelId: modelId))
@@ -209,7 +209,7 @@ final class MagicFormatCoordinator {
 
     private func polishWithAPI(input: String, rawText: String, request: PolishRequest) async -> MagicFormatPolishOutcome {
         let config: LLMConfig
-        switch resolveAPIConfig(request: request) {
+        switch await resolveAPIConfig(request: request) {
         case let .success(resolved):
             config = resolved
         case let .failure(failure):
@@ -325,7 +325,7 @@ final class MagicFormatCoordinator {
                     config: Self.makeEditModeLocalGemmaConfig(settings: request.settings)
                 )
             case .openAICompatible:
-                switch resolveAPIConfig(request: request) {
+                switch await resolveAPIConfig(request: request) {
                 case let .success(config):
                     output = try await apiPostProcessor.generate(
                         instructions: instructions,

@@ -135,6 +135,7 @@
 		5FE11D0387C7BA12FCDA3C4B /* MeetingTranscriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 852F40AAC9CE96D78EFF08AC /* MeetingTranscriptTests.swift */; };
 		60DD5304C8A38B9FE28E2B5C /* LocalGemmaLlamaCppClientMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9F972E159D2C73AD2E548F9 /* LocalGemmaLlamaCppClientMoreTests.swift */; };
 		61986F04977EB71320143584 /* Qwen3ASRTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8598B79F810A504CC068E2B /* Qwen3ASRTranscriptionService.swift */; };
+		6329C02CD614904D6633427B /* KeychainItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBF8C0ED2269D418244020BF /* KeychainItem.swift */; };
 		63B5E0D3334CB7E08AF7D5EA /* LocalGemmaPostProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA71D523EC88C51E2E911E4B /* LocalGemmaPostProcessorTests.swift */; };
 		6415322519C76DC11B5098D8 /* AccessibilityOnboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82B9324F23E0707C4D71A016 /* AccessibilityOnboarding.swift */; };
 		66D90E67FBAF0C6DBB211790 /* AppStateTranscriptsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D9DA16DEEA33C55FFEF659 /* AppStateTranscriptsTests.swift */; };
@@ -665,6 +666,7 @@
 		E9F972E159D2C73AD2E548F9 /* LocalGemmaLlamaCppClientMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaLlamaCppClientMoreTests.swift; sourceTree = "<group>"; };
 		EA85018741AA6759EA4673CE /* LLMPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMPostProcessor.swift; sourceTree = "<group>"; };
 		EB37B94E17F7F98AC28DE3B4 /* EditLearningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditLearningTests.swift; sourceTree = "<group>"; };
+		EBF8C0ED2269D418244020BF /* KeychainItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainItem.swift; sourceTree = "<group>"; };
 		EC1E39FABAADF5375B7FCBE4 /* MeetingSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSummary.swift; sourceTree = "<group>"; };
 		EC6C22E7CEC7674001C2CD06 /* CohereTranscribeDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CohereTranscribeDecodingTests.swift; sourceTree = "<group>"; };
 		ED00AFE9182736436D9F3768 /* APIEndpointMeetingSummaryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpointMeetingSummaryModel.swift; sourceTree = "<group>"; };
@@ -715,6 +717,7 @@
 			children = (
 				9044A7C4A8E272E7DD540E1E /* AppLogger.swift */,
 				7CA10EB8C84897F696A908DF /* AppSupportDirectory.swift */,
+				EBF8C0ED2269D418244020BF /* KeychainItem.swift */,
 				8A869CBDB7FC8EA39C42431E /* ModelDownloadSupport.swift */,
 				5FA534F7CE17705702C8E337 /* Timeout.swift */,
 				FAF46137E6C95BCA322F7211 /* Views */,
@@ -1517,6 +1520,7 @@
 				7694B6F89D9CEC47010E3D04 /* IssueReportService.swift in Sources */,
 				9840E58357F352B218E9560E /* IssueReportView.swift in Sources */,
 				818B5A72C19132E340FABB00 /* IssueReportWindowController.swift in Sources */,
+				6329C02CD614904D6633427B /* KeychainItem.swift in Sources */,
 				B41367E69D55F36D6503ACC9 /* KeychainService.swift in Sources */,
 				F51AB85283295FEEB0FA0866 /* LLMPostProcessor.swift in Sources */,
 				14ABF89F63C4BD2E9C27D242 /* LLMSettings.swift in Sources */,

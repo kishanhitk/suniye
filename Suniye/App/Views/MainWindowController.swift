@@ -110,6 +110,9 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
             }
         }
         observeWorkspaceLifecycle()
+        if ProcessInfo.processInfo.shouldStartRuntimeServices {
+            KeychainService.removePlainTextKeyFiles()
+        }
         if !ProcessInfo.processInfo.isRunningUnderXCTest {
             sharedAppState.applyAppearance()
             statusItemController = StatusItemController(appState: sharedAppState)

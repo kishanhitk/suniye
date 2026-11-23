@@ -405,6 +405,27 @@ private final class LockedList: @unchecked Sendable {
     }
 }
 
+// MARK: - Saved sign-in
+
+final class KeychainChatGPTCredentialStoreTests: XCTestCase {
+    func testTheSignInIsSavedWholeAndADeletedOrUnreadableItemLoadsNothing() throws {
+        let item = MemorySecretItem()
+        let store = KeychainChatGPTCredentialStore(item: item)
+        XCTAssertNil(store.load())
+
+        let saved = credentials()
+        try store.save(saved)
+        XCTAssertEqual(store.load(), saved)
+
+        store.delete()
+        XCTAssertNil(item.data)
+        XCTAssertNil(store.load())
+
+        try item.write(Data("not a sign-in".utf8))
+        XCTAssertNil(store.load())
+    }
+}
+
 // MARK: - Connection
 
 final class ChatGPTConnectionTests: XCTestCase {

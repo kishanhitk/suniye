@@ -96,7 +96,7 @@ Turn a raw transcript into polished text on your terms. It's off until you turn 
 
 1. **Apple Intelligence** — on supported Macs, nothing leaves the machine.
 2. **A local model** — a small on-device formatter (Gemma) that works fully offline.
-3. **Your own provider** — bring an OpenAI-compatible key; only text (never audio) is sent, and only if you choose this.
+3. **Your own provider** — bring an OpenAI-compatible key, which Suniye keeps in the macOS Keychain; only text (never audio) is sent, and only if you choose this.
 
 ## Choose your speech model
 
