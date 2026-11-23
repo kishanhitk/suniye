@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+env:
+  XCODE_VERSION: '26.6'
+
 jobs:
   release:
     runs-on: macos-26
@@ -21,7 +24,7 @@ jobs:
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest
+          xcode-version: ${{ env.XCODE_VERSION }}
 
       - name: Install XcodeGen
         run: brew install xcodegen
