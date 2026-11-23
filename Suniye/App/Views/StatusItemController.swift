@@ -20,6 +20,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let copyLastTranscriptItem = NSMenuItem(title: "Copy Last Transcript", action: #selector(copyLastTranscript), keyEquivalent: "")
     private let checkUpdatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
+    private let updatesSeparator = NSMenuItem.separator()
     private let reportIssueItem = NSMenuItem(title: "Report a Problem…", action: #selector(reportIssue), keyEquivalent: "")
     private lazy var quitItem = NSMenuItem(title: "Quit \(appIdentity.displayName)", action: #selector(quitApp), keyEquivalent: "q")
     private var onboardingFinishObserver: NSObjectProtocol?
@@ -101,7 +102,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(checkUpdatesItem)
         menu.addItem(downloadItem)
-        menu.addItem(.separator())
+        menu.addItem(updatesSeparator)
         menu.addItem(reportIssueItem)
         menu.addItem(quitItem)
 
@@ -170,6 +171,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         downloadItem.isEnabled = phase == .needsModel || phase == .downloadingModel || phase == .error
         downloadItem.isHidden = !(phase == .needsModel || phase == .downloadingModel || phase == .error)
+        // A build without updates and with its model ready hides both items;
+        // NSMenu would then show two separators next to each other.
+        updatesSeparator.isHidden = checkUpdatesItem.isHidden && downloadItem.isHidden
 
         if let button = statusItem.button {
             button.image = statusItemImage(for: phase)
