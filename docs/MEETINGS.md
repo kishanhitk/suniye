@@ -74,7 +74,7 @@ After a quit or a crash, the next launch writes no transcript by itself: it does
 - The pill shows a red dot, the recorded time and one level meter for the louder track. **Settings → Indicator → Show meeting time** (on by default) shows or hides the time.
 - After the stop, the transcript model writes the transcript from the audio files. The meeting page shows "Finishing the transcript…" with the minutes done.
 - **Settings → Meetings → Transcript model**:
-  - **Same as dictation** (default): the dictation model, on the dictation engine.
+  - **Same as Dictation** (default): the dictation model, on the dictation engine.
   - A model you pick, the dictation model too: it loads for the transcript on an engine of its own and unloads after it, so a switch of the dictation model does not change it. Dictation keeps its model. The Mac holds both models in memory while the transcript is written.
 - A dictation goes first: from the key-down to the end of the dictation, no piece of audio starts decoding. The piece that decodes at the key-down finishes.
 - One transcript at a time: when two meetings wait for a transcript, the second one starts after the first one ends, with the transcript model that was set when it was asked for. Until then its page shows "Waiting for another transcript…".
@@ -104,8 +104,8 @@ Limits of this measurement: one meeting, in English, with four speakers; each tr
 
 **Settings → Meetings → Keep meeting audio**:
 
-- **Until the transcript is ready** (default): the audio goes when the transcript is final.
-- **7 days** or **30 days**: the audio goes that long after the end of the meeting.
+- **Until the Transcript Is Ready** (default): the audio goes when the transcript is final.
+- **7 Days** or **30 Days**: the audio goes that long after the end of the meeting.
 
 Suniye checks at launch and after each transcript, with no timer. A change of the setting applies at the next check, so a wrong click deletes nothing at once. A meeting with no finished transcript keeps its audio for **Finish Transcript**, and the meeting whose audio plays keeps it until the next check. **Delete Meeting** deletes the audio at once.
 

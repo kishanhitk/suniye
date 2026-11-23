@@ -37,12 +37,12 @@ struct SpeechModelPage: View {
             }
 
             SettingsSection {
-                DisclosureSettingRow(.speechModel, value: entry.displayName) {
+                DisclosureSettingRow(.speechModel, in: appState, value: entry.displayName) {
                     showsModelChooser = true
                 }
 
                 if SettingsRowID.modelStatus.isAvailable(in: appState) {
-                    ControlSettingRow(.modelStatus) {
+                    ControlSettingRow(.modelStatus, in: appState) {
                         HStack(spacing: 10) {
                             Text(numbers: appState.modelStatusValue)
                                 .foregroundStyle(appState.modelStatusColor)
@@ -59,12 +59,12 @@ struct SpeechModelPage: View {
             }
 
             SettingsSection {
-                ValueSettingRow(.modelLanguages, value: entry.languageSummary)
-                ValueSettingRow(.modelSpeed, value: entry.speedLabel)
-                ValueSettingRow(.modelOnDisk, value: diskText)
+                ValueSettingRow(.modelLanguages, in: appState, value: entry.languageSummary)
+                ValueSettingRow(.modelSpeed, in: appState, value: entry.speedLabel)
+                ValueSettingRow(.modelOnDisk, in: appState, value: diskText)
 
                 if SettingsRowID.revealModelInFinder.isAvailable(in: appState) {
-                    DisclosureSettingRow(.revealModelInFinder, value: "", opensOutside: true) {
+                    DisclosureSettingRow(.revealModelInFinder, in: appState, value: "", opensOutside: true) {
                         appState.openModelFolder(for: entry.id)
                     }
                 }

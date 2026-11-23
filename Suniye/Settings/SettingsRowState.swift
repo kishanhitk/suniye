@@ -11,7 +11,7 @@ extension SettingsRowID {
         case .accessibilityPermission:
             return !appState.hasAccessibilityPermission
         case .modelStatus:
-            return appState.modelPrimaryActionTitle != "Current"
+            return !appState.isSelectedModelCurrent
         case .revealModelInFinder:
             return appState.asrModelSecondaryActionsEnabled(for: appState.currentASRModelEntry.id)
         case .magicFormatEngine, .baseInstructions, .appSpecificWritingStyle, .vocabulary, .keepLearning:
@@ -25,28 +25,31 @@ extension SettingsRowID {
         }
     }
 
-    /// Whether search lists the row. A Magic Format row stays listed while
-    /// Magic Format is off: the page still names it, and opening it shows the
-    /// page with its switch.
+    /// Whether search lists the row. While Magic Format is off its rows stay
+    /// listed: the page still names them, and opening one shows the page with
+    /// its switch.
     @MainActor
     func isSearchable(in appState: AppState) -> Bool {
-        isAvailable(in: appState) || place == .magicFormat
+        isAvailable(in: appState) || (place == .magicFormat && !appState.llmEnabled)
     }
 
     /// The row a search result opens: the row itself, or the Magic Format
-    /// switch while the row is hidden because Magic Format is off.
+    /// switch while Magic Format is off.
     @MainActor
     func searchTarget(in appState: AppState) -> SettingsRowID {
         isAvailable(in: appState) ? self : .magicFormat
     }
 
     /// Whether the row's control can change anything. Live preview needs a
-    /// model that writes text while you speak.
+    /// model that writes text while you speak. The Never ask for sheet can only
+    /// remove apps, which the call card adds.
     @MainActor
     func isEnabled(in appState: AppState) -> Bool {
         switch self {
         case .liveTranscriptionPreview:
             return appState.currentASRModelEntry.family.supportsLivePreview
+        case .neverAskFor:
+            return !appState.meetings.settings.neverAskBundleIDs.isEmpty
         default:
             return true
         }

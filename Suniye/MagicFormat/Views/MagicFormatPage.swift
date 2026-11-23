@@ -1,11 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// Magic Format: each group of rows is a card, rows are separated by a
-/// hairline, and every row ends in a chevron rather than a verb. The
-/// filename, download size, keep-alive trade-off and eval note all moved into the
-/// sheet you open to change that thing — they answer questions you only ask while
-/// editing.
+/// Magic Format: the engine, the instructions and the vocabulary, each a card.
+/// A row that opens a sheet ends in a chevron; the sheet holds the details
+/// that only matter while editing, such as the file name and download size.
 struct StylePage: View {
     @Bindable var appState: AppState
 
@@ -110,16 +108,16 @@ struct StylePage: View {
                 sheet = .engine
             }
 
-            if appState.usesLocalGemmaMagicFormatSettings {
+            if SettingsRowID.keepAlive.isAvailable(in: appState) {
                 keepAliveRow
             }
         }
 
         SettingsSection("Instructions") {
-            DisclosureSettingRow(.baseInstructions, value: isPromptAtDefault ? "Default" : "Edited") {
+            DisclosureSettingRow(.baseInstructions, in: appState, value: isPromptAtDefault ? "Default" : "Edited") {
                 sheet = .instructions
             }
-            DisclosureSettingRow(.appSpecificWritingStyle, value: appPromptSummary) {
+            DisclosureSettingRow(.appSpecificWritingStyle, in: appState, value: appState.llmAppPromptSummary) {
                 sheet = .perApp
             }
         }
@@ -135,7 +133,7 @@ struct StylePage: View {
     /// It is also the term the runtime itself uses (llama.cpp / Ollama
     /// keep_alive), and what the type is already called: LocalLLMKeepAlive.
     private var keepAliveRow: some View {
-        ControlSettingRow(.keepAlive) {
+        ControlSettingRow(.keepAlive, in: appState) {
             Picker(SettingsRowID.keepAlive.title, selection: $appState.localModelKeepAlive) {
                 ForEach(LocalLLMKeepAlive.allCases, id: \.self) { option in
                     Text(option.displayName).tag(option)
@@ -153,11 +151,7 @@ struct StylePage: View {
     /// words sits under them.
     private var vocabularySection: some View {
         SettingsSection(SettingsRowID.vocabulary.title) {
-            ToggleSettingRow(
-                title: SettingsRowID.keepLearning.title,
-                isOn: $appState.learnFromEditsEnabled,
-                anchor: .keepLearning
-            )
+            ToggleSettingRow(.keepLearning, in: appState, isOn: $appState.learnFromEditsEnabled)
 
             SettingsCustomRow(anchor: .vocabulary) {
                 VStack(alignment: .leading, spacing: 12) {
@@ -266,9 +260,6 @@ struct StylePage: View {
         appState.activeMagicFormatPrompt == appState.activeMagicFormatEngine.defaultPrompt
     }
 
-    private var appPromptSummary: String {
-        AppNameList.summary(appState.llmAppPromptBindings.map(\.appDisplayName))
-    }
 }
 
 enum MagicFormatSheetRoute: String, Identifiable {

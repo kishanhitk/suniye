@@ -254,7 +254,7 @@ private struct MeetingRow: View {
                         if record.status == .notTranscribed {
                             Text("Not finished")
                                 .font(AppTypography.caption.weight(.medium))
-                                .foregroundStyle(MainWindowPalette.warningTagText)
+                                .foregroundStyle(MainWindowPalette.warningText)
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 1)
                                 .background(Capsule().fill(Color.orange.opacity(0.16)))

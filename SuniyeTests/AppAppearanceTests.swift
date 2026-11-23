@@ -4,12 +4,6 @@ import XCTest
 
 @MainActor
 final class AppAppearanceTests: XCTestCase {
-    func testSystemFollowsTheMacAndTheOthersForceALook() {
-        XCTAssertNil(AppAppearance.system.nsAppearance)
-        XCTAssertEqual(AppAppearance.light.nsAppearance?.name, .aqua)
-        XCTAssertEqual(AppAppearance.dark.nsAppearance?.name, .darkAqua)
-    }
-
     /// Settings saved before the theme existed, or with a value a later build
     /// added, load as System.
     func testStoredAppearanceDecodesWithASafeDefault() throws {

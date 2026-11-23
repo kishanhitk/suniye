@@ -145,3 +145,11 @@ actor MeetingTemplateStore {
         try encoder.encode(templates).write(to: fileURL, options: .atomic)
     }
 }
+
+enum MeetingTemplateError: LocalizedError, Equatable {
+    case emptyName(templateID: String)
+
+    var errorDescription: String? {
+        "Every template needs a name."
+    }
+}

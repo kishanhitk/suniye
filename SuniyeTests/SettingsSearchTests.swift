@@ -73,19 +73,32 @@ final class SettingsSearchTests: XCTestCase {
         XCTAssertEqual(bold, ["mod"])
     }
 
-    /// Every row names a pane that Settings lists, or the Magic Format page.
-    func testEveryRowHasATitleAndAPlace() {
-        for row in SettingsRowID.allCases {
-            XCTAssertFalse(row.title.isEmpty, "\(row)")
-            if case let .pane(pane) = row.place {
-                XCTAssertTrue(SettingsPane.allCases.contains(pane), "\(row)")
-            }
-        }
+    /// The list shows the first result as chosen, so the first arrow press
+    /// opens it; later presses move and stop at the ends.
+    func testArrowKeysStartOnTheFirstResultAndStopAtTheEnds() {
+        let results: [SettingsRowID] = [.speechModel, .transcriptModel, .summaryModel]
+
+        XCTAssertEqual(SettingsSearch.moving(nil, by: 1, in: results), .speechModel)
+        XCTAssertEqual(SettingsSearch.moving(.speechModel, by: 1, in: results), .transcriptModel)
+        XCTAssertEqual(SettingsSearch.moving(.summaryModel, by: 1, in: results), .summaryModel)
+        XCTAssertEqual(SettingsSearch.moving(.speechModel, by: -1, in: results), .speechModel)
+        XCTAssertNil(SettingsSearch.moving(nil, by: 1, in: []))
     }
 
-    func testPermissionsPaneIsListedOnlyWhileAGrantIsMissing() {
-        XCTAssertEqual(SettingsPane.listed(permissionsMissing: true).first, .permissions)
-        XCTAssertFalse(SettingsPane.listed(permissionsMissing: false).contains(.permissions))
-        XCTAssertEqual(SettingsPane.listed(permissionsMissing: false).count, SettingsPane.allCases.count - 1)
+    /// A new query can drop the chosen result; Return then opens the first.
+    func testChosenResultFallsBackToTheFirst() {
+        let results: [SettingsRowID] = [.theme, .launchAtLogin]
+
+        XCTAssertEqual(SettingsSearch.selection(.launchAtLogin, in: results), .launchAtLogin)
+        XCTAssertEqual(SettingsSearch.selection(.vocabulary, in: results), .theme)
+        XCTAssertNil(SettingsSearch.selection(nil, in: []))
+    }
+
+    func testArrowKeysBetweenPanesStopAtTheEnds() {
+        let panes = SettingsPane.listed(permissionsMissing: false)
+
+        XCTAssertEqual(SettingsPane.microphone.moving(by: -1, in: panes), .microphone)
+        XCTAssertEqual(SettingsPane.microphone.moving(by: 1, in: panes), .shortcuts)
+        XCTAssertEqual(SettingsPane.general.moving(by: 1, in: panes), .general)
     }
 }

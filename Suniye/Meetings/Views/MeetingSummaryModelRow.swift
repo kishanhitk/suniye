@@ -12,7 +12,7 @@ struct MeetingSummaryModelRow: View {
     }
 
     var body: some View {
-        ControlSettingRow(.summaryModel) {
+        ControlSettingRow(.summaryModel, in: appState) {
             HStack(spacing: 10) {
                 if choice != .automatic {
                     Button("Options…") { setUp(choice) }

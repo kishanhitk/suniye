@@ -136,24 +136,19 @@ struct MeetingTemplateEditor: View {
 
     /// Done keeps the drafts; with no change it only closes.
     private func save() {
-        let cleaned = drafts.map { template in
-            var template = template
-            template.name = template.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            return template
-        }
-        guard !cleaned.contains(where: { $0.name.isEmpty }) else {
-            saveError = "Every template needs a name."
-            return
-        }
-        guard cleaned != saved else {
+        guard drafts != saved else {
             dismiss()
             return
         }
         Task {
             do {
-                try await meetings.saveTemplates(cleaned)
+                try await meetings.saveTemplates(drafts)
                 dismiss()
             } catch {
+                // Shows the template with no name, so its empty field is in view.
+                if case let .emptyName(templateID) = error as? MeetingTemplateError {
+                    selectedID = templateID
+                }
                 saveError = error.localizedDescription
             }
         }

@@ -350,6 +350,24 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(settled)
     }
 
+    func testTemplateNamesAreTrimmedAndAnEmptyNameIsRefused() async throws {
+        let coordinator = makeCoordinator()
+        let retro = MeetingTemplate(id: "retro", name: "  Retro  ", sections: "## Went well")
+        try await coordinator.saveTemplates(MeetingTemplate.builtIn + [retro])
+        let saved = await coordinator.templates.templates()
+        XCTAssertEqual(saved.first { $0.id == "retro" }?.name, "Retro")
+
+        let unnamed = MeetingTemplate(id: "blank", name: "   ", sections: "## Notes")
+        do {
+            try await coordinator.saveTemplates(MeetingTemplate.builtIn + [unnamed])
+            XCTFail("A template with no name was saved.")
+        } catch {
+            XCTAssertEqual(error as? MeetingTemplateError, .emptyName(templateID: "blank"))
+        }
+        let kept = await coordinator.templates.templates()
+        XCTAssertFalse(kept.contains { $0.id == "blank" })
+    }
+
     func testDeletingTheDefaultTemplateMakesGeneralTheDefault() async throws {
         let coordinator = makeCoordinator()
         let retro = MeetingTemplate(id: "retro", name: "Retro", sections: "## Went well")

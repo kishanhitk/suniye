@@ -19,6 +19,7 @@ protocol AppUpdateControllerProtocol: AnyObject {
 
 @MainActor
 final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUUpdaterDelegate {
+    var isEnabled: Bool { true }
     private var updaterController: SPUStandardUpdaterController!
     private var canCheckForUpdatesObservation: AnyCancellable?
     private var hasStarted = false
@@ -123,10 +124,6 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
     func feedURLString(for updater: SPUUpdater) -> String? {
         updateChannel.appcastURLString
     }
-}
-
-extension AppUpdateControllerProtocol {
-    var isEnabled: Bool { true }
 }
 
 @MainActor

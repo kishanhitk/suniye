@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import Suniye
 
@@ -70,24 +71,45 @@ final class SettingsRowStateTests: XCTestCase {
         XCTAssertEqual(SettingsRowID.meetingFiles.currentInfo(in: appState), "Audio is deleted when the transcript is ready.")
     }
 
-    func testOtherRowsAreEnabledAndKeepTheirCatalogHint() {
+    /// While Magic Format is on, search leaves out a row that the page hides:
+    /// opening it would find nothing.
+    func testMagicFormatRowsHiddenWhileOnAreNotListed() {
         let appState = makeTestAppState()
-        XCTAssertTrue(SettingsRowID.echoCancellation.isEnabled(in: appState))
-        XCTAssertEqual(SettingsRowID.echoCancellation.currentInfo(in: appState), SettingsRowID.echoCancellation.info)
+        appState.llmProvider = .openAICompatible
+        appState.llmEnabled = true
+        XCTAssertFalse(SettingsRowID.keepAlive.isSearchable(in: appState))
+
+        appState.llmEnabled = false
+        XCTAssertTrue(SettingsRowID.keepAlive.isSearchable(in: appState))
+        XCTAssertEqual(SettingsRowID.keepAlive.searchTarget(in: appState), .magicFormat)
     }
 
-    /// A search result opens its pane and row; a Magic Format row opens the
-    /// Magic Format page.
-    func testRowDestinations() {
-        XCTAssertEqual(
-            MainWindowDestination.row(.holdToDictate),
-            MainWindowDestination(section: .settings, pane: .shortcuts, row: .holdToDictate)
-        )
-        XCTAssertEqual(
-            MainWindowDestination.row(.vocabulary),
-            MainWindowDestination(section: .style, row: .vocabulary)
-        )
-        XCTAssertEqual(MainWindowDestination.settingsSearch.section, .settings)
-        XCTAssertTrue(MainWindowDestination.settingsSearch.focusesSearch)
+    func testNeverAskForOpensNothingWhileTheListIsEmpty() {
+        let appState = makeTestAppState()
+
+        appState.meetings.updateSettings { $0.neverAskBundleIDs = [] }
+        XCTAssertFalse(SettingsRowID.neverAskFor.isEnabled(in: appState))
+
+        appState.meetings.updateSettings { $0.neverAskBundleIDs = ["us.zoom.xos"] }
+        XCTAssertTrue(SettingsRowID.neverAskFor.isEnabled(in: appState))
+    }
+
+    /// A row built from the catalog shows the hint that search matches and is
+    /// dimmed when its control can change nothing.
+    func testCatalogRowsShowTheirCurrentState() {
+        let appState = makeTestAppState()
+        appState.meetings.updateSettings {
+            $0.audioRetention = .thirtyDays
+            $0.neverAskBundleIDs = []
+        }
+
+        let files = ControlSettingRow(.meetingFiles, in: appState) { EmptyView() }
+        XCTAssertEqual(files.title, "Meeting files")
+        XCTAssertEqual(files.info, "Audio is deleted 30 days after the meeting.")
+        XCTAssertEqual(files.anchor, .meetingFiles)
+
+        let neverAsk = DisclosureSettingRow(.neverAskFor, in: appState, value: "None")
+        XCTAssertFalse(neverAsk.isEnabled)
+        XCTAssertEqual(neverAsk.anchor, .neverAskFor)
     }
 }

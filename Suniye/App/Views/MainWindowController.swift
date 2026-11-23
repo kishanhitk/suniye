@@ -11,6 +11,10 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private weak var appState: AppState?
 
+    var hasAttachedSheet: Bool {
+        window?.attachedSheet != nil
+    }
+
     private override init() {}
 
     func show(appState: AppState) {

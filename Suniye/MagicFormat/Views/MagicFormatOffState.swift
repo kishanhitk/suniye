@@ -69,7 +69,9 @@ struct MagicFormatOffState: View {
             Button("Turn On", action: onTurnOn)
                 .buttonStyle(.borderedProminent)
                 .settingsControlAnchor(.magicFormat)
-                .disabled(needsDownload && !appState.canStartLocalGemmaDownload)
+                // During a download Turn On only turns Magic Format on; the
+                // page then shows the download with Cancel.
+                .disabled(needsDownload && !appState.canStartLocalGemmaDownload && !appState.localGemmaInstallState.isActive)
 
             Text(numbers: costText)
                 .font(AppTypography.subheadline)
@@ -99,11 +101,11 @@ struct MagicFormatOffState: View {
     /// Listed, not offered.
     @ViewBuilder
     private var dimmedSettings: some View {
-        DisclosureSettingRow(title: "Engine", value: engineValue, isEnabled: false)
-        DisclosureSettingRow(title: "Base instructions", value: "Default", isEnabled: false)
+        DisclosureSettingRow(title: SettingsRowID.magicFormatEngine.title, value: engineValue, isEnabled: false)
+        DisclosureSettingRow(title: SettingsRowID.baseInstructions.title, value: "Default", isEnabled: false)
         DisclosureSettingRow(
-            title: "App-specific writing style",
-            value: appPromptSummary,
+            title: SettingsRowID.appSpecificWritingStyle.title,
+            value: appState.llmAppPromptSummary,
             isEnabled: false
         )
     }
@@ -112,13 +114,5 @@ struct MagicFormatOffState: View {
         appState.localGemmaInstallState.isInstalled
             ? appState.localGemmaModelEntry.displayName
             : "Local model"
-    }
-
-    private var appPromptSummary: String {
-        let count = appState.llmAppPromptBindings.count
-        guard count > 0 else {
-            return "None"
-        }
-        return count == 1 ? "1 app" : "\(count) apps"
     }
 }

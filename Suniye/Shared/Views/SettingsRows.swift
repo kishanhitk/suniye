@@ -233,17 +233,6 @@ struct CappedWidth: Layout {
     }
 }
 
-/// `CappedWidth` as a modifier, for a control built in a computed property.
-struct CappedWidthModifier: ViewModifier {
-    let maxWidth: CGFloat
-
-    func body(content: Content) -> some View {
-        CappedWidth(maxWidth: maxWidth) {
-            content
-        }
-    }
-}
-
 /// A row that opens something: the value it is set to, then a chevron, or an
 /// arrow when it opens something outside this window (a website, Finder,
 /// another window).
@@ -297,18 +286,6 @@ private extension DisclosureSettingRow {
     }
 }
 
-extension DisclosureSettingRow {
-    init(
-        _ row: SettingsRowID,
-        value: String,
-        isEnabled: Bool = true,
-        opensOutside: Bool = false,
-        action: (() -> Void)? = nil
-    ) {
-        self.init(title: row.title, value: value, isEnabled: isEnabled, opensOutside: opensOutside, anchor: row, action: action)
-    }
-}
-
 /// A row that opens something shows the press at once, as a system list row
 /// does, because the sheet, window or Finder it opens can take a moment. The
 /// fill fades on release; there is no scale, rows do not move.
@@ -351,12 +328,6 @@ struct ToggleSettingRow: View {
     }
 }
 
-extension ToggleSettingRow {
-    init(_ row: SettingsRowID, info: String? = nil, isOn: Binding<Bool>, isEnabled: Bool = true) {
-        self.init(title: row.title, info: info ?? row.info, isOn: isOn, isEnabled: isEnabled, anchor: row)
-    }
-}
-
 /// A row that only reports a value: no chevron, because nothing opens.
 struct ValueSettingRow: View {
     let title: String
@@ -375,16 +346,11 @@ struct ValueSettingRow: View {
     }
 }
 
-extension ValueSettingRow {
-    init(_ row: SettingsRowID, value: String) {
-        self.init(title: row.title, info: row.info, value: value, anchor: row)
-    }
-}
-
 /// A row whose control is a menu or any small inline control.
 struct ControlSettingRow<Control: View>: View {
     let title: String
     var info: String?
+    var isEnabled = true
     var anchor: SettingsRowID?
     @ViewBuilder let control: Control
 
@@ -393,13 +359,8 @@ struct ControlSettingRow<Control: View>: View {
             control
         }
         .settingsRowChrome(anchor)
-    }
-}
-
-extension ControlSettingRow {
-    /// `info` replaces the catalog hint, for rows whose hint depends on state.
-    init(_ row: SettingsRowID, info: String? = nil, @ViewBuilder control: () -> Control) {
-        self.init(title: row.title, info: info ?? row.info, anchor: row, control: control)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.5)
     }
 }
 

@@ -217,6 +217,12 @@ struct InputDeviceMenuChoice: Hashable {
 }
 
 extension MicrophoneChoice {
+    /// No microphone can record: the one state that stops dictation, so the
+    /// sidebar marks it and the footer shows a warning.
+    var hasNoInput: Bool {
+        audioRouteSnapshot == nil
+    }
+
     /// System Default, then every device, for both microphone menus. A saved
     /// microphone that is disconnected is listed but cannot be chosen again; a
     /// built-in one that the closed lid switched off can, for use after

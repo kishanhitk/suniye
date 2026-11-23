@@ -39,8 +39,8 @@ struct PermissionsPane: View {
     var body: some View {
         SettingsForm(title: SettingsPane.permissions.title, subtitle: subtitle) {
             SettingsSection {
-                if !appState.hasMicPermission {
-                    ControlSettingRow(.microphonePermission) {
+                if SettingsRowID.microphonePermission.isAvailable(in: appState) {
+                    ControlSettingRow(.microphonePermission, in: appState) {
                         grantButtons(
                             // After a denial macOS never asks again: Grant would
                             // only open System Settings too.
@@ -51,11 +51,8 @@ struct PermissionsPane: View {
                     }
                 }
 
-                if !appState.hasAccessibilityPermission {
-                    ControlSettingRow(
-                        .accessibilityPermission,
-                        info: SettingsRowID.accessibilityPermission.currentInfo(in: appState)
-                    ) {
+                if SettingsRowID.accessibilityPermission.isAvailable(in: appState) {
+                    ControlSettingRow(.accessibilityPermission, in: appState) {
                         grantButtons(
                             // A stale grant is fixed in System Settings only.
                             canAsk: !appState.accessibilityGrantLikelyStale,
@@ -102,31 +99,18 @@ struct MicrophonePane: View {
     var body: some View {
         SettingsForm(title: SettingsPane.microphone.title) {
             SettingsSection {
-                ControlSettingRow(.inputDevice, info: SettingsRowID.inputDevice.currentInfo(in: appState)) {
+                ControlSettingRow(.inputDevice, in: appState) {
                     // A menu picker is as wide as its longest device name; 200
                     // keeps the hint on one line. A cut name shows in full in
                     // the tooltip.
                     CappedWidth(maxWidth: 200) {
-                        Picker(
-                            "Input device",
-                            selection: Binding(
-                                get: { appState.microphone.selectedInputDeviceID },
-                                set: { appState.microphone.selectedInputDeviceID = $0 }
-                            )
-                        ) {
-                            ForEach(appState.microphone.menuChoices, id: \.self) { choice in
-                                Text(choice.title)
-                                    .tag(choice.id)
-                                    .disabled(!choice.isSelectable)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .help(selectedInputDeviceTitle)
+                        InputDevicePicker(title: SettingsRowID.inputDevice.title, microphone: appState.microphone)
+                            .pickerStyle(.menu)
+                            .help(selectedInputDeviceTitle)
                     }
                 }
 
-                if let warning = Self.inputWarning(appState) {
+                if let warning = inputWarning {
                     SettingsWarningRow(warning: warning) {
                         if let recommended = appState.microphone.recommendedInputDevice {
                             Button("Use \(recommended.name)") {
@@ -145,17 +129,17 @@ struct MicrophonePane: View {
             }
 
             SettingsSection {
-                ToggleSettingRow(.echoCancellation, isOn: $appState.echoCancellationEnabled)
-                ToggleSettingRow(.soundFeedback, isOn: $appState.soundFeedbackEnabled)
+                ToggleSettingRow(.echoCancellation, in: appState, isOn: $appState.echoCancellationEnabled)
+                ToggleSettingRow(.soundFeedback, in: appState, isOn: $appState.soundFeedbackEnabled)
             }
         }
-        .animation(SettingsMotion.curve(reduceMotion: reduceMotion), value: Self.inputWarning(appState))
+        .animation(SettingsMotion.curve(reduceMotion: reduceMotion), value: inputWarning)
         .animation(SettingsMotion.curve(reduceMotion: reduceMotion), value: appState.microphone.inputStandInNote)
     }
 
     /// A microphone problem is worth interrupting the list for; a working
     /// microphone is not.
-    static func inputWarning(_ appState: AppState) -> String? {
+    private var inputWarning: String? {
         if appState.microphone.audioRouteSnapshot == nil {
             return appState.microphone.audioRouteWarningText ?? appState.microphone.effectiveInputDeviceStatusText
         }
@@ -177,7 +161,7 @@ struct ShortcutsPane: View {
     var body: some View {
         SettingsForm(title: SettingsPane.shortcuts.title) {
             SettingsSection {
-                ControlSettingRow(.holdToDictate) {
+                ControlSettingRow(.holdToDictate, in: appState) {
                     HotkeyRecorderButton(
                         configuration: Binding(
                             get: { appState.hotkeyConfiguration },
@@ -190,7 +174,7 @@ struct ShortcutsPane: View {
                     )
                 }
 
-                if let notice = Self.globeNotice(appState) {
+                if let notice = globeNotice {
                     SettingsWarningRow(warning: notice) {
                         Button("Open System Settings") {
                             appState.openKeyboardSettings()
@@ -198,7 +182,7 @@ struct ShortcutsPane: View {
                     }
                 }
 
-                ControlSettingRow(.pasteLastTranscript) {
+                ControlSettingRow(.pasteLastTranscript, in: appState) {
                     HotkeyRecorderButton(
                         configuration: Binding(
                             get: { appState.pasteLastTranscriptHotkeyConfiguration },
@@ -211,7 +195,7 @@ struct ShortcutsPane: View {
                     )
                 }
 
-                ControlSettingRow(.holdToEditSelection) {
+                ControlSettingRow(.holdToEditSelection, in: appState) {
                     HotkeyRecorderButton(
                         configuration: $appState.editModeHotkeyConfiguration,
                         allowsClear: true,
@@ -225,15 +209,15 @@ struct ShortcutsPane: View {
             }
 
             SettingsSection {
-                ToggleSettingRow(.pressEnterAfterPasting, isOn: $appState.autoSubmitEnabled)
+                ToggleSettingRow(.pressEnterAfterPasting, in: appState, isOn: $appState.autoSubmitEnabled)
             }
         }
         .animation(SettingsMotion.curve(reduceMotion: reduceMotion), value: appState.hotkeyValidationMessage)
         .animation(SettingsMotion.curve(reduceMotion: reduceMotion), value: appState.globeDoubleTapConflict)
     }
 
-    static func globeNotice(_ appState: AppState) -> String? {
-        appState.globeDoubleTapConflict.flatMap(globeDoubleTapNotice)
+    private var globeNotice: String? {
+        appState.globeDoubleTapConflict.flatMap(Self.globeDoubleTapNotice)
     }
 
     private static func globeDoubleTapNotice(_ conflict: SystemGlobeKeyAction) -> String? {
@@ -260,18 +244,13 @@ struct IndicatorPane: View {
     var body: some View {
         SettingsForm(title: SettingsPane.indicator.title) {
             SettingsSection {
-                ToggleSettingRow(
-                    .liveTranscriptionPreview,
-                    info: SettingsRowID.liveTranscriptionPreview.currentInfo(in: appState),
-                    isOn: $appState.liveTranscriptionPreviewEnabled,
-                    isEnabled: SettingsRowID.liveTranscriptionPreview.isEnabled(in: appState)
-                )
-                ToggleSettingRow(.hideWhileIdle, isOn: $appState.hideFloatingIndicatorWhenIdle)
-                ToggleSettingRow(.showMeetingTime, isOn: $appState.showsMeetingTime)
+                ToggleSettingRow(.liveTranscriptionPreview, in: appState, isOn: $appState.liveTranscriptionPreviewEnabled)
+                ToggleSettingRow(.hideWhileIdle, in: appState, isOn: $appState.hideFloatingIndicatorWhenIdle)
+                ToggleSettingRow(.showMeetingTime, in: appState, isOn: $appState.showsMeetingTime)
             }
 
             SettingsSection {
-                ControlSettingRow(.indicatorPosition) {
+                ControlSettingRow(.indicatorPosition, in: appState) {
                     HStack(spacing: 10) {
                         Text(appState.floatingIndicatorPlacement == nil ? "Default" : "Moved")
                             .foregroundStyle(MainWindowPalette.settingsSecondaryText)
@@ -283,18 +262,6 @@ struct IndicatorPane: View {
                     }
                 }
             }
-        }
-    }
-}
-
-// MARK: - Meetings
-
-struct MeetingsSettingsPane: View {
-    let appState: AppState
-
-    var body: some View {
-        SettingsForm(title: SettingsPane.meetings.title) {
-            MeetingSettingsRows(appState: appState)
         }
     }
 }
@@ -315,16 +282,21 @@ struct GeneralSettingsPane: View {
             privacy
             about
         }
-        .animation(SettingsMotion.curve(reduceMotion: reduceMotion), value: Self.launchAtLoginNotice(appState))
+        .animation(SettingsMotion.curve(reduceMotion: reduceMotion), value: launchAtLoginNotice?.message)
     }
 
-    static func launchAtLoginNotice(_ appState: AppState) -> String? {
-        appState.launchAtLoginError ?? appState.launchAtLoginWarningText
+    /// A failure to change the login item is an error; a login item that
+    /// macOS holds for approval is a warning.
+    private var launchAtLoginNotice: (message: String, tint: Color)? {
+        if let error = appState.launchAtLoginError {
+            return (error, MainWindowPalette.errorText)
+        }
+        return appState.launchAtLoginWarningText.map { ($0, MainWindowPalette.warningText) }
     }
 
     private var appearanceSection: some View {
         SettingsSection("Appearance") {
-            ControlSettingRow(.theme) {
+            ControlSettingRow(.theme, in: appState) {
                 Picker("Theme", selection: $appState.appearance) {
                     ForEach(AppAppearance.allCases) { appearance in
                         Text(appearance.title).tag(appearance)
@@ -341,17 +313,15 @@ struct GeneralSettingsPane: View {
         SettingsSection("Startup") {
             ToggleSettingRow(
                 .launchAtLogin,
+                in: appState,
                 isOn: Binding(
                     get: { appState.launchAtLoginEnabledForUI },
                     set: { appState.setLaunchAtLoginEnabled($0) }
                 )
             )
         } footer: {
-            if let notice = Self.launchAtLoginNotice(appState) {
-                SettingsProblemLine(
-                    message: notice,
-                    tint: appState.launchAtLoginError == nil ? MainWindowPalette.warningText : MainWindowPalette.errorText
-                )
+            if let notice = launchAtLoginNotice {
+                SettingsProblemLine(message: notice.message, tint: notice.tint)
             }
         }
     }
@@ -360,12 +330,13 @@ struct GeneralSettingsPane: View {
         SettingsSection("Privacy") {
             ToggleSettingRow(
                 .shareAnonymousAnalytics,
+                in: appState,
                 isOn: Binding(
                     get: { appState.shareAnalyticsEnabled },
                     set: { appState.shareAnalyticsEnabled = $0 }
                 )
             )
-            DisclosureSettingRow(.whatWeCollect, value: "", opensOutside: true) {
+            DisclosureSettingRow(.whatWeCollect, in: appState, value: "", opensOutside: true) {
                 appState.openAnalyticsPrivacyInfo()
             }
         }
@@ -373,7 +344,7 @@ struct GeneralSettingsPane: View {
 
     private var about: some View {
         SettingsSection("About") {
-            ControlSettingRow(.version, info: SettingsRowID.version.currentInfo(in: appState)) {
+            ControlSettingRow(.version, in: appState) {
                 HStack(spacing: 10) {
                     Text(numbers: appState.appVersionText)
                         .foregroundStyle(MainWindowPalette.settingsSecondaryText)
@@ -394,8 +365,8 @@ struct GeneralSettingsPane: View {
 
             // A build without updates (Preview) hides the controls that would
             // do nothing; the Version hint says why.
-            if appState.updatesEnabled {
-                ControlSettingRow(.updateChannel, info: SettingsRowID.updateChannel.currentInfo(in: appState)) {
+            if SettingsRowID.updateChannel.isAvailable(in: appState) {
+                ControlSettingRow(.updateChannel, in: appState) {
                     Picker(
                         "Update channel",
                         selection: Binding(
@@ -412,9 +383,12 @@ struct GeneralSettingsPane: View {
                     .pickerStyle(.menu)
                     .fixedSize()
                 }
+            }
 
+            if SettingsRowID.checkAutomatically.isAvailable(in: appState) {
                 ToggleSettingRow(
                     .checkAutomatically,
+                    in: appState,
                     isOn: Binding(
                         get: { appState.automaticallyChecksForUpdates },
                         set: { appState.setAutomaticallyChecksForUpdates($0) }
@@ -422,7 +396,7 @@ struct GeneralSettingsPane: View {
                 )
             }
 
-            DisclosureSettingRow(.reportAProblem, value: "", opensOutside: true) {
+            DisclosureSettingRow(.reportAProblem, in: appState, value: "", opensOutside: true) {
                 appState.openIssueReportWindow()
             }
         }
@@ -430,16 +404,6 @@ struct GeneralSettingsPane: View {
 }
 
 // MARK: - Shared pieces
-
-/// One icon column, so the note and the warning text start at the same x.
-private struct NoticeIcon: View {
-    let systemName: String
-
-    var body: some View {
-        Image(systemName: systemName)
-            .frame(width: 18)
-    }
-}
 
 /// A problem in a section, with the action that fixes it.
 private struct SettingsWarningRow<Action: View>: View {
@@ -453,7 +417,9 @@ private struct SettingsWarningRow<Action: View>: View {
             Label {
                 Text(numbers: warning).foregroundStyle(MainWindowPalette.settingsText)
             } icon: {
-                NoticeIcon(systemName: "exclamationmark.triangle.fill").foregroundStyle(MainWindowPalette.warningText)
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .frame(width: 18)
+                    .foregroundStyle(MainWindowPalette.warningText)
             }
             .font(AppTypography.subheadline)
             .fixedSize(horizontal: false, vertical: true)

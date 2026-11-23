@@ -159,8 +159,8 @@ enum SettingsRowID: String, CaseIterable, Hashable {
         }
     }
 
-    /// The hint behind the row's info mark. A row whose hint depends on state
-    /// has none here; `currentInfo(in:)` gives the hint it shows.
+    /// The hint under the row's title. `currentInfo(in:)` gives the hint the
+    /// row shows, which can depend on state.
     var info: String? {
         switch self {
         case .microphonePermission:
@@ -349,6 +349,36 @@ enum SettingsSearch {
             lhs.points == rhs.points ? lhs.index < rhs.index : lhs.points > rhs.points
         }
         return matches.map(\.row)
+    }
+
+    /// The chosen result while it is still listed, otherwise the first one: a
+    /// new query or a change in what the app shows can remove the chosen row.
+    static func selection(_ chosen: SettingsRowID?, in results: [SettingsRowID]) -> SettingsRowID? {
+        if let chosen, results.contains(chosen) {
+            return chosen
+        }
+        return results.first
+    }
+
+    /// The result an arrow key chooses. The first press takes the first
+    /// result, which the list already shows as chosen; later presses move
+    /// `step` places and stop at the ends.
+    static func moving(_ chosen: SettingsRowID?, by step: Int, in results: [SettingsRowID]) -> SettingsRowID? {
+        guard let chosen, let index = results.firstIndex(of: chosen) else {
+            return results.first
+        }
+        return results[min(max(index + step, 0), results.count - 1)]
+    }
+
+    static func countLine(_ count: Int) -> String {
+        switch count {
+        case 0:
+            return "No results"
+        case 1:
+            return "1 result"
+        default:
+            return "\(count) results"
+        }
     }
 
     /// The title with the part that each query word matched in bold.

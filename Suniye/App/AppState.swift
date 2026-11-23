@@ -292,6 +292,11 @@ final class AppState {
         get { llmSettings.learnFromEditsEnabled }
         set { updateLLMSettings { $0.learnFromEditsEnabled = newValue } }
     }
+    /// The apps with their own writing style, as a settings row shows them.
+    var llmAppPromptSummary: String {
+        AppNameList.summary(llmAppPromptBindings.map(\.appDisplayName))
+    }
+
     var llmAppPromptBindings: [AppPromptBinding] {
         get { llmSettings.appPromptBindings }
         set { updateLLMSettings { $0.appPromptBindings = newValue } }
@@ -613,11 +618,16 @@ final class AppState {
         }
     }
 
+    /// The selected model is loaded and no download or load is running on it.
+    var isSelectedModelCurrent: Bool {
+        activeASRModelOperationID != selectedASRModelID && loadedASRModelID == selectedASRModelID
+    }
+
     var modelPrimaryActionTitle: String {
         if activeASRModelOperationID == selectedASRModelID {
             return phase == .loading ? "Loading…" : "Downloading…"
         }
-        if loadedASRModelID == selectedASRModelID {
+        if isSelectedModelCurrent {
             return "Current"
         }
         if isModelInstalled {
@@ -949,7 +959,7 @@ final class AppState {
     let meetings: MeetingCoordinator
     let chatGPTSetup: ChatGPTSummarySetup
     private let chatGPTPlan: ChatGPTPlanClient
-    /// A section that code outside the main window asked to show. The window
+    /// A place that code outside the main window asked to show. The window
     /// shows it and clears the request.
     var requestedDestination: MainWindowDestination?
     @ObservationIgnored private var callCardPresenter: MeetingCallCardPresenter?
@@ -2678,8 +2688,11 @@ final class AppState {
         }
     }
 
+    /// A destination is dropped while onboarding runs or a sheet is open: the
+    /// window would move under the sheet and lose what it holds, and onboarding
+    /// would open it after Finish.
     func openMainWindow(at destination: MainWindowDestination? = nil) {
-        if let destination {
+        if let destination, activeOnboardingStep == nil, !MainWindowController.shared.hasAttachedSheet {
             requestedDestination = destination
         }
         MainWindowController.shared.show(appState: self)

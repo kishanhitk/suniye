@@ -18,9 +18,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private lazy var openAppItem = NSMenuItem(title: "Open \(appIdentity.displayName)", action: #selector(openMainWindow), keyEquivalent: "o")
     private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openSettings), keyEquivalent: ",")
     private let copyLastTranscriptItem = NSMenuItem(title: "Copy Last Transcript", action: #selector(copyLastTranscript), keyEquivalent: "")
-    private let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+    private let checkUpdatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
-    private let reportIssueItem = NSMenuItem(title: "Report a Problem...", action: #selector(reportIssue), keyEquivalent: "")
+    private let reportIssueItem = NSMenuItem(title: "Report a Problem…", action: #selector(reportIssue), keyEquivalent: "")
     private lazy var quitItem = NSMenuItem(title: "Quit \(appIdentity.displayName)", action: #selector(quitApp), keyEquivalent: "q")
     private var onboardingFinishObserver: NSObjectProtocol?
     private var homeHint: NSPopover?
@@ -80,6 +80,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openSettingsItem.target = self
         copyLastTranscriptItem.target = self
         checkUpdatesItem.target = self
+        checkUpdatesItem.isHidden = !appState.updatesEnabled
         downloadItem.target = self
         reportIssueItem.target = self
         quitItem.target = self
@@ -155,6 +156,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         checkUpdatesItem.target = self
+        checkUpdatesItem.isHidden = !appState.updatesEnabled
 
         copyLastTranscriptItem.isEnabled = appState.library.lastTranscriptText != nil
 
@@ -162,7 +164,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             checkUpdatesItem.title = "Restart to Update"
             checkUpdatesItem.action = #selector(restartToUpdate)
         } else {
-            checkUpdatesItem.title = "Check for Updates..."
+            checkUpdatesItem.title = "Check for Updates…"
             checkUpdatesItem.action = #selector(checkForUpdates)
         }
 

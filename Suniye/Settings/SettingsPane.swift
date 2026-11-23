@@ -51,6 +51,18 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
         }
     }
 
+    var launchArgument: String {
+        "--open-settings-\(rawValue)"
+    }
+
+    /// The pane `step` places away in `panes`, stopped at the ends.
+    func moving(by step: Int, in panes: [SettingsPane]) -> SettingsPane {
+        guard let index = panes.firstIndex(of: self) else {
+            return self
+        }
+        return panes[min(max(index + step, 0), panes.count - 1)]
+    }
+
     static func listed(permissionsMissing: Bool) -> [SettingsPane] {
         permissionsMissing ? allCases : allCases.filter { $0 != .permissions }
     }

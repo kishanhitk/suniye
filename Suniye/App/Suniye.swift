@@ -32,7 +32,7 @@ struct SuniyeApp: App {
                         sharedAppState.restartToUpdate()
                     }
                     .disabled(!sharedAppState.canRestartToUpdate)
-                } else {
+                } else if sharedAppState.updatesEnabled {
                     Button("Check for Updates…") {
                         sharedAppState.checkForUpdates()
                     }

@@ -9,11 +9,17 @@ final class MainWindowDestinationTests: XCTestCase {
         XCTAssertEqual(MainWindowDestination.initial(arguments: ["Suniye", "--open-settings"]), .settings())
     }
 
-    /// Speech Model and General were sections before they became Settings
-    /// panes; scripts still pass their arguments.
-    func testFormerSectionArgumentsOpenTheirPanes() {
-        XCTAssertEqual(MainWindowDestination.initial(arguments: ["Suniye", "--open-model"]), .settings(.speechModel))
-        XCTAssertEqual(MainWindowDestination.initial(arguments: ["Suniye", "--open-general"]), .settings(.general))
+    func testPaneArgumentsOpenTheirSettingsPane() {
+        XCTAssertEqual(MainWindowDestination.initial(arguments: ["Suniye", "--open-settings-speechModel"]), .settings(.speechModel))
+        XCTAssertEqual(MainWindowDestination.initial(arguments: ["Suniye", "--open-settings-general"]), .settings(.general))
+    }
+
+    /// A row opens the page that holds it: its Settings pane, or Magic Format.
+    func testRowsOpenThePlaceThatHoldsThem() {
+        XCTAssertEqual(MainWindowDestination.row(.holdToDictate).section, .settings)
+        XCTAssertEqual(MainWindowDestination.row(.holdToDictate).pane, .shortcuts)
+        XCTAssertEqual(MainWindowDestination.row(.vocabulary).section, .style)
+        XCTAssertNil(MainWindowDestination.row(.vocabulary).pane)
     }
 
     /// History merged into Transcripts; the old argument must keep working.

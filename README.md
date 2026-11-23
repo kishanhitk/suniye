@@ -36,7 +36,7 @@ Hold your hotkey, say what you mean, release. Your words land at the cursor in M
 - **Private by default.** Local speech models transcribe on-device. Your audio never touches a network, so there's nothing to store, leak, or train on.
 - **Instant.** No round-trip to a server. The model is always loaded, so speech becomes text in milliseconds, not seconds.
 - **Everywhere you type.** Text is inserted through the macOS Accessibility APIs, so it works in every app — not just a special editor.
-- **Shortcuts that fit you.** Customize dictation, Edit Mode, and recovery shortcuts from General settings.
+- **Shortcuts that fit you.** Customize dictation, Edit Mode, and recovery shortcuts in Settings > Shortcuts.
 - **Yours to inspect.** Open source under the MIT license — read every line, build it yourself, or send a patch.
 
 ## How it works

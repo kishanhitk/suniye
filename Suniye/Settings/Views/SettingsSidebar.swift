@@ -1,14 +1,14 @@
 import AppKit
 import SwiftUI
 
-/// The sidebar while Settings is open: a row back, the search field and the
+/// The sidebar while Settings is open: a row back, the search box and the
 /// panes. A query replaces the panes with its results.
 struct SettingsSidebar: View {
     @Bindable var appState: AppState
     let panes: [SettingsPane]
     @Binding var selectedPane: SettingsPane
     @Binding var query: String
-    /// Set when something asks for the search field, such as ⌘K.
+    /// Set when something asks for the search box, such as ⌘K.
     @Binding var focusPending: Bool
     /// Where the back row returns to, for its spoken name.
     let backTitle: String
@@ -18,8 +18,7 @@ struct SettingsSidebar: View {
     let onOpen: (SettingsRowID) -> Void
 
     @State private var selectedRow: SettingsRowID?
-    /// ⌘K and ⌘F select the old query, so typing starts a new search.
-    @State private var focusTrigger = 0
+    @State private var focusRequest: SearchFocusRequest?
     @FocusState private var isPaneListFocused: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -39,7 +38,7 @@ struct SettingsSidebar: View {
 
             SettingsSearchBox(
                 text: $query,
-                focusTrigger: focusTrigger,
+                focusRequest: $focusRequest,
                 onMove: moveSelection,
                 onSubmit: openSelection
             )
@@ -59,9 +58,10 @@ struct SettingsSidebar: View {
             // ⌘F finds in Settings as it does on Transcripts. A key
             // equivalent, so it works wherever the focus is in the window.
             Button("Find in Settings") {
-                focusTrigger += 1
+                focusRequest = SearchFocusRequest(selectsAll: true)
             }
             .keyboardShortcut("f", modifiers: .command)
+            .focusable(false)
             .opacity(0)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
@@ -69,11 +69,11 @@ struct SettingsSidebar: View {
         .onChange(of: query) { _, _ in
             selectedRow = nil
         }
-        .task(id: focusPending) {
-            guard focusPending else {
+        .onChange(of: focusPending, initial: true) { _, pending in
+            guard pending else {
                 return
             }
-            focusTrigger += 1
+            focusRequest = SearchFocusRequest(selectsAll: true)
             focusPending = false
         }
     }
@@ -101,20 +101,13 @@ struct SettingsSidebar: View {
         .onMoveCommand { direction in
             switch direction {
             case .up:
-                stepPane(by: -1)
+                selectedPane = selectedPane.moving(by: -1, in: panes)
             case .down:
-                stepPane(by: 1)
+                selectedPane = selectedPane.moving(by: 1, in: panes)
             default:
                 break
             }
         }
-    }
-
-    private func stepPane(by step: Int) {
-        guard let index = panes.firstIndex(of: selectedPane) else {
-            return
-        }
-        selectedPane = panes[min(max(index + step, 0), panes.count - 1)]
     }
 
     private var results: [SettingsRowID] {
@@ -128,9 +121,9 @@ struct SettingsSidebar: View {
     @ViewBuilder
     private var resultList: some View {
         let results = results
-        let selection = Self.selection(selectedRow, in: results)
+        let selection = SettingsSearch.selection(selectedRow, in: results)
 
-        Text(numbers: Self.countLine(results.count))
+        Text(numbers: SettingsSearch.countLine(results.count))
             .font(AppTypography.caption)
             .foregroundStyle(MainWindowPalette.secondaryText)
             .padding(.leading, AppMetrics.sidebarTextInset)
@@ -157,20 +150,18 @@ struct SettingsSidebar: View {
         }
     }
 
-    /// The arrow keys move through the results and the pane follows, as a
-    /// list selection does. A Magic Format result waits for Return: opening it
-    /// leaves Settings, which would end the search.
+    /// With a query the arrow keys move through the results and the pane
+    /// follows, as a list selection does; without one they move between
+    /// panes. A Magic Format result waits for Return: opening it leaves
+    /// Settings, which would end the search.
     private func moveSelection(by step: Int) {
         guard !query.isEmpty else {
-            stepPane(by: step)
+            selectedPane = selectedPane.moving(by: step, in: panes)
             return
         }
-        let results = results
-        guard let current = Self.selection(selectedRow, in: results),
-              let index = results.firstIndex(of: current) else {
+        guard let row = SettingsSearch.moving(selectedRow, by: step, in: results) else {
             return
         }
-        let row = results[min(max(index + step, 0), results.count - 1)]
         selectedRow = row
         AccessibilityNotification.Announcement("\(row.title), \(row.place.title)").post()
         if row.place != .magicFormat {
@@ -179,33 +170,13 @@ struct SettingsSidebar: View {
     }
 
     private func openSelection() {
-        if let row = Self.selection(selectedRow, in: results) {
+        if let row = SettingsSearch.selection(selectedRow, in: results) {
             open(row)
         }
     }
 
     private func open(_ row: SettingsRowID) {
         onOpen(row.searchTarget(in: appState))
-    }
-
-    /// The chosen result while it is still listed, otherwise the first one: a
-    /// new query or a change in what the app shows can remove the chosen row.
-    private static func selection(_ chosen: SettingsRowID?, in results: [SettingsRowID]) -> SettingsRowID? {
-        if let chosen, results.contains(chosen) {
-            return chosen
-        }
-        return results.first
-    }
-
-    private static func countLine(_ count: Int) -> String {
-        switch count {
-        case 0:
-            return "No results"
-        case 1:
-            return "1 result"
-        default:
-            return "\(count) results"
-        }
     }
 }
 
@@ -216,8 +187,6 @@ private struct SettingsResultRow: View {
     let query: String
     let isSelected: Bool
     let action: () -> Void
-
-    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
@@ -238,66 +207,34 @@ private struct SettingsResultRow: View {
             .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
-                    .fill(fill)
-            )
+            .sidebarRowBackground(isSelected: isSelected)
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle(pressedScale: 0.985))
-        .onHover { isHovered = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovered)
         .accessibilityLabel("\(row.title), \(row.place.title)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
-
-    private var fill: Color {
-        if isSelected {
-            return MainWindowPalette.selectedFill
-        }
-        return isHovered ? MainWindowPalette.selectedFill.opacity(0.5) : .clear
-    }
 }
 
-extension SettingsPane {
-    /// The dot or status at the end of the pane's sidebar row.
-    @MainActor
-    func sidebarAccessory(_ appState: AppState) -> SidebarRowAccessory? {
-        switch self {
-        case .permissions:
-            return .attention
-        case .microphone:
-            return MicrophonePane.inputWarning(appState) == nil ? nil : .attention
-        case .shortcuts:
-            let hasProblem = appState.hotkeyValidationMessage != nil || ShortcutsPane.globeNotice(appState) != nil
-            return hasProblem ? .attention : nil
-        case .speechModel:
-            if appState.phase == .downloadingModel {
-                return .status("\(Int(appState.downloadProgress * 100))%")
-            }
-            let loadFailed = appState.phase == .error && appState.lastFailedASRModelID == appState.selectedASRModelID
-            return appState.phase == .needsModel || loadFailed ? .attention : nil
-        case .general:
-            return GeneralSettingsPane.launchAtLoginNotice(appState) == nil ? nil : .attention
-        case .indicator, .meetings:
-            return nil
-        }
-    }
+/// A request for the keyboard focus in the search box. Each request has its
+/// own identity, so a rebuilt field never handles one twice.
+private struct SearchFocusRequest: Equatable {
+    let id = UUID()
+    /// ⌘K and ⌘F select the old query, so typing starts a new search; a click
+    /// puts the caret after it.
+    let selectsAll: Bool
 }
 
-/// The search field, drawn like a sidebar row: the same height, corner and
+/// The search box, drawn like a sidebar row: the same height, corner and
 /// grid, so the magnifier sits in the icon column and the text starts on the
 /// labels' edge.
 private struct SettingsSearchBox: View {
     @Binding var text: String
-    let focusTrigger: Int
+    @Binding var focusRequest: SearchFocusRequest?
     let onMove: (Int) -> Void
     let onSubmit: () -> Void
 
     @State private var isFocused = false
-    @State private var isHovered = false
-    /// A click on the magnifier or the padding focuses the field too.
-    @State private var clicks = 0
 
     var body: some View {
         HStack(spacing: AppMetrics.sidebarIconSpacing) {
@@ -305,12 +242,12 @@ private struct SettingsSearchBox: View {
                 .font(AppTypography.sidebarIcon)
                 .frame(width: AppMetrics.sidebarIconColumn)
                 .foregroundStyle(MainWindowPalette.secondaryText)
+                .allowsHitTesting(false)
 
             SettingsSearchTextField(
                 text: $text,
                 isFocused: $isFocused,
-                focusTrigger: focusTrigger,
-                clickTrigger: clicks,
+                focusRequest: focusRequest,
                 onMove: onMove,
                 onSubmit: onSubmit
             )
@@ -329,18 +266,16 @@ private struct SettingsSearchBox: View {
         }
         .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
         .frame(height: AppMetrics.sidebarRowHeight)
-        .background(
-            RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
-                .fill(isFocused || isHovered ? MainWindowPalette.selectedFill : MainWindowPalette.selectedFill.opacity(0.5))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
-                .strokeBorder(Color.accentColor.opacity(isFocused ? 0.55 : 0), lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { clicks &+= 1 }
-        .onHover { isHovered = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovered)
+        // A click on the magnifier or the padding focuses the field. A click on
+        // the text reaches the field itself, which places the caret there.
+        .background {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    focusRequest = SearchFocusRequest(selectsAll: false)
+                }
+        }
+        .sidebarRowBackground(isSelected: isFocused, showsFocus: isFocused, isField: true)
         .animation(.easeOut(duration: 0.12), value: isFocused)
     }
 }
@@ -350,12 +285,7 @@ private struct SettingsSearchBox: View {
 private struct SettingsSearchTextField: NSViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
-    /// A new value moves the keyboard focus to the field and selects the
-    /// query, so typing starts a new search (⌘K, ⌘F).
-    let focusTrigger: Int
-    /// A new value moves the keyboard focus to the field with the caret after
-    /// the query (a click on the box).
-    let clickTrigger: Int
+    let focusRequest: SearchFocusRequest?
     let onMove: (Int) -> Void
     let onSubmit: () -> Void
 
@@ -383,7 +313,7 @@ private struct SettingsSearchTextField: NSViewRepresentable {
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         field.delegate = context.coordinator
         field.onFocus = { [weak coordinator = context.coordinator] in
-            coordinator?.parent.isFocused = true
+            coordinator?.setFocused(true)
         }
         return field
     }
@@ -393,13 +323,9 @@ private struct SettingsSearchTextField: NSViewRepresentable {
         if field.stringValue != text {
             field.stringValue = text
         }
-        if focusTrigger != context.coordinator.handledFocusTrigger {
-            context.coordinator.handledFocusTrigger = focusTrigger
-            field.takeFocusWhenInWindow(selectingAll: true)
-        }
-        if clickTrigger != context.coordinator.handledClickTrigger {
-            context.coordinator.handledClickTrigger = clickTrigger
-            field.takeFocusWhenInWindow(selectingAll: false)
+        if let focusRequest, focusRequest.id != context.coordinator.handledRequestID {
+            context.coordinator.handledRequestID = focusRequest.id
+            field.takeFocusWhenInWindow(selectingAll: focusRequest.selectsAll)
         }
     }
 
@@ -411,15 +337,13 @@ private struct SettingsSearchTextField: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: SettingsSearchTextField
-        /// Start at the current requests, so a rebuilt field does not take the
+        /// Starts at the current request, so a rebuilt field does not take the
         /// focus for a request that an earlier field already handled.
-        var handledFocusTrigger: Int
-        var handledClickTrigger: Int
+        var handledRequestID: UUID?
 
         init(parent: SettingsSearchTextField) {
             self.parent = parent
-            handledFocusTrigger = parent.focusTrigger
-            handledClickTrigger = parent.clickTrigger
+            handledRequestID = parent.focusRequest?.id
         }
 
         /// Every edit, as it happens, so a SwiftUI update never writes old
@@ -431,7 +355,16 @@ private struct SettingsSearchTextField: NSViewRepresentable {
         }
 
         func controlTextDidEndEditing(_ notification: Notification) {
-            parent.isFocused = false
+            setFocused(false)
+        }
+
+        /// On the next turn of the main queue: the field takes the focus from
+        /// `updateNSView`, and SwiftUI state must not change during an update.
+        /// The queue keeps the order of focus and end of editing.
+        func setFocused(_ focused: Bool) {
+            DispatchQueue.main.async { [self] in
+                parent.isFocused = focused
+            }
         }
 
         func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
