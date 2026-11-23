@@ -84,7 +84,10 @@ struct StylePage: View {
         guard appState.llmEnabled else {
             return ("Off. Dictation is pasted exactly as heard.", MainWindowPalette.settingsSecondaryText)
         }
-        if appState.localGemmaInstallState.isActive {
+        // The download banner says why the local model cannot run yet. A chosen
+        // provider that does not wait for that model keeps its own warning.
+        let waitsForLocalModel = appState.llmProvider == .localGemma || appState.llmProvider == .automatic
+        if appState.localGemmaInstallState.isActive, waitsForLocalModel {
             return nil
         }
         switch appState.magicFormatSetupState {
