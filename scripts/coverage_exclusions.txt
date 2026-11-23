@@ -24,6 +24,7 @@ Suniye/Dictation/HotkeyService.swift                  # Carbon hotkey registrati
 Suniye/Onboarding/AccessibilityOnboarding.swift       # drives live AXIsProcessTrusted permission flow
 Suniye/Dictation/SoundFeedbackService.swift           # NSSound playback wrapper
 Suniye/Settings/LaunchAtLoginService.swift            # SMAppService registration; needs signed, installed app
+Suniye/Shared/KeychainItem.swift                      # SecItem calls on the login Keychain; a test run must not read or write it. Its users are tested with an item in memory
 Suniye/SpeechModels/Engines/AppleSpeechTranscriptionService.swift # SpeechAnalyzer/SpeechTranscriber/AssetInventory (incl. the fresh-install default check); needs macOS 26 + a downloaded speech model asset (engine routing is tested via RoutingTranscriptionServiceTests)
 Suniye/SpeechModels/Engines/OrtSession.swift          # ONNX Runtime session create/run; needs a real model (opt-in CohereTranscriptionServiceRealModelTests). Env + tensor helpers stay gated in OnnxRuntime.swift
 Suniye/SpeechModels/Engines/CohereTranscriptionService.swift # encoder/decoder sessions over the 2.9 GB Cohere model; decode logic is extracted to CohereTranscribeDecoding.swift (covered), guards to CohereProviderTests
@@ -67,6 +68,5 @@ Suniye/Meetings/Views/MeetingTemplateEditor.swift     # SwiftUI render only (tem
 Suniye/Meetings/Views/MeetingActions.swift            # dialog state and AppKit panels; each action calls the covered MeetingCoordinator
 Suniye/Meetings/Views/MeetingSettingsGroup.swift      # SwiftUI render only (the choices call the covered MeetingCoordinator)
 Suniye/Meetings/Views/MeetingSummaryModelRow.swift    # SwiftUI render only (the setup rules are in APIEndpointMeetingSummaryModel.swift and ChatGPTSummarySetup.swift, covered)
-Suniye/ChatGPT/ChatGPTCredentialStore.swift           # SecItem calls on the login Keychain; a test run must not read or write it. The connection is tested with a store in memory
 Suniye/Meetings/Views/MeetingCallCardPanel.swift      # NSPanel and SwiftUI render only (each button calls the covered MeetingCoordinator)
 Suniye/MagicFormat/Views/MagicFormatProviderPresentation.swift # SwiftUI render only

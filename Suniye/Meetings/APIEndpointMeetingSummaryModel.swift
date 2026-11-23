@@ -31,7 +31,7 @@ struct APIEndpointMeetingSummaryModel: MeetingSummaryModel {
 
     let client: ChatCompletionClient
     /// Read for each request, so a change in Settings counts at once.
-    let setup: () -> APIEndpointSummarySetup?
+    let setup: () async -> APIEndpointSummarySetup?
 
     var writesWholeSummary: Bool { true }
 
@@ -44,7 +44,7 @@ struct APIEndpointMeetingSummaryModel: MeetingSummaryModel {
     }
 
     func generate(_ request: MeetingSummaryRequest) async throws -> String {
-        guard let setup = setup() else {
+        guard let setup = await setup() else {
             throw MeetingSummaryError.failed(.notSetUp)
         }
         // No `temperature` and no `max_tokens`: reasoning models refuse the
