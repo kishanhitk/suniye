@@ -74,30 +74,30 @@ final class AppStateDisplayTests: XCTestCase {
 
         appState.phase = .ready
         appState.loadedASRModelID = appState.selectedASRModelID
-        XCTAssertEqual(appState.modelStatusColor, .green)
+        XCTAssertEqual(appState.modelStatusColor, MainWindowPalette.successText)
         appState.loadedASRModelID = nil
-        XCTAssertEqual(appState.modelStatusColor, .orange)
+        XCTAssertEqual(appState.modelStatusColor, MainWindowPalette.warningText)
 
         appState.phase = .downloadingModel
         appState.activeASRModelOperationID = appState.selectedASRModelID
-        XCTAssertEqual(appState.modelStatusColor, .accentColor)
+        XCTAssertEqual(appState.modelStatusColor, MainWindowPalette.accentText)
         appState.activeASRModelOperationID = .moonshineBase
         appState.loadedASRModelID = appState.selectedASRModelID
-        XCTAssertEqual(appState.modelStatusColor, .green)
+        XCTAssertEqual(appState.modelStatusColor, MainWindowPalette.successText)
         appState.loadedASRModelID = nil
-        XCTAssertEqual(appState.modelStatusColor, .orange)
+        XCTAssertEqual(appState.modelStatusColor, MainWindowPalette.warningText)
 
         appState.phase = .error
         appState.lastFailedASRModelID = appState.selectedASRModelID
-        XCTAssertEqual(appState.modelStatusColor, .red)
+        XCTAssertEqual(appState.modelStatusColor, MainWindowPalette.errorText)
         appState.lastFailedASRModelID = nil
         appState.loadedASRModelID = appState.selectedASRModelID
-        XCTAssertEqual(appState.modelStatusColor, .green)
+        XCTAssertEqual(appState.modelStatusColor, MainWindowPalette.successText)
         appState.loadedASRModelID = nil
-        XCTAssertEqual(appState.modelStatusColor, .orange)
+        XCTAssertEqual(appState.modelStatusColor, MainWindowPalette.warningText)
 
         appState.phase = .needsModel
-        XCTAssertEqual(appState.modelStatusColor, .orange)
+        XCTAssertEqual(appState.modelStatusColor, MainWindowPalette.warningText)
     }
 
     func testModelPrimaryActionTitleBranches() {

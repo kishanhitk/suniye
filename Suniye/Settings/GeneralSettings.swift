@@ -44,6 +44,7 @@ struct GeneralSettings: Codable, Equatable {
     /// Opt-out toggle for anonymous usage analytics. Default on; disclosed in
     /// onboarding and controllable in Settings. When false, nothing is emitted.
     var shareAnalyticsEnabled: Bool = true
+    var appearance: AppAppearance = .system
 }
 
 extension GeneralSettings {
@@ -80,6 +81,8 @@ extension GeneralSettings {
         updateChannel = storedUpdateChannel.flatMap(UpdateChannel.init(rawValue:)) ?? .stable
         accessibilityDragHelperEnabled = try container.decodeIfPresent(Bool.self, forKey: .accessibilityDragHelperEnabled) ?? true
         shareAnalyticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .shareAnalyticsEnabled) ?? true
+        let storedAppearance = try container.decodeIfPresent(String.self, forKey: .appearance)
+        appearance = storedAppearance.flatMap(AppAppearance.init(rawValue:)) ?? .system
     }
 }
 

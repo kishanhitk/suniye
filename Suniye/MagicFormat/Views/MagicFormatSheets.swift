@@ -158,7 +158,7 @@ struct EngineSheet: View {
                 .controlSize(.small)
                 .disabled(appState.isMagicFormatSetupTestInProgress)
             } else if appState.appleMagicFormatAvailability == .appleIntelligenceNotEnabled {
-                Button("Open Settings") { appState.openAppleIntelligenceSettings() }
+                Button("Open System Settings") { appState.openAppleIntelligenceSettings() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             }

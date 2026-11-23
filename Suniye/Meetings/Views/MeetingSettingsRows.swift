@@ -1,20 +1,20 @@
 import AppKit
 import SwiftUI
 
-/// The Meetings group on the General page.
-struct MeetingSettingsGroup: View {
+/// The sections of the Meetings pane in Settings.
+struct MeetingSettingsRows: View {
     let appState: AppState
     @State private var editingTemplates = false
     @State private var editingNeverAsk = false
     @State private var diskBytes: Int64?
     @State private var templates: [MeetingTemplate] = []
 
+    /// Four sections: calls, models, templates, files. Each sheet and load sits
+    /// on the row that uses it, because a modifier on a group of sections would
+    /// apply to every section in it.
     var body: some View {
-        SettingsGroup(heading: "Meetings") {
-            ControlSettingRow(
-                title: "When a call starts",
-                info: "Suniye notices when a call app starts a call."
-            ) {
+        SettingsSection {
+            ControlSettingRow(.whenACallStarts) {
                 Picker(
                     "When a call starts",
                     selection: Binding(
@@ -31,45 +31,58 @@ struct MeetingSettingsGroup: View {
                 .fixedSize()
             }
 
-            RowSeparator()
-            DisclosureSettingRow(title: "Never ask for", value: neverAskValue) {
+            // The sheet can only remove apps (the call card adds them), so the
+            // row opens nothing while the list is empty.
+            DisclosureSettingRow(
+                .neverAskFor,
+                value: neverAskValue,
+                isEnabled: !meetings.settings.neverAskBundleIDs.isEmpty
+            ) {
                 editingNeverAsk = true
             }
+            .sheet(isPresented: $editingNeverAsk) {
+                NeverAskSheet(meetings: meetings)
+            }
+        }
 
-            RowSeparator()
+        SettingsSection {
             MeetingTranscriptModelRow(appState: appState)
-
-            RowSeparator()
             MeetingSummaryModelRow(appState: appState)
+        }
 
-            RowSeparator()
-            ControlSettingRow(title: "Default template") {
-                Picker(
-                    "Default template",
-                    selection: Binding(
-                        get: { meetings.settings.templateID },
-                        set: { id in meetings.updateSettings { $0.templateID = id } }
-                    )
-                ) {
-                    ForEach(templates) { template in
-                        Text(template.name).tag(template.id)
+        SettingsSection {
+            ControlSettingRow(.defaultTemplate) {
+                // Template names are typed by the user, so the menu is capped.
+                CappedWidth(maxWidth: 220) {
+                    Picker(
+                        "Default template",
+                        selection: Binding(
+                            get: { meetings.settings.templateID },
+                            set: { id in meetings.updateSettings { $0.templateID = id } }
+                        )
+                    ) {
+                        ForEach(templates) { template in
+                            Text(template.name).tag(template.id)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .fixedSize()
+            }
+            .task(id: editingTemplates) {
+                templates = await meetings.templates.templates()
             }
 
-            RowSeparator()
-            DisclosureSettingRow(title: "Summary templates", value: "") {
+            DisclosureSettingRow(.summaryTemplates, value: "") {
                 editingTemplates = true
             }
+            .sheet(isPresented: $editingTemplates) {
+                MeetingTemplateEditor(meetings: meetings)
+            }
+        }
 
-            RowSeparator()
-            ControlSettingRow(
-                title: "Keep meeting audio",
-                info: "Audio lets you play back and transcribe a meeting again. Transcripts and notes stay until you delete them. A change applies the next time Suniye opens or finishes a transcript."
-            ) {
+        SettingsSection {
+            ControlSettingRow(.keepMeetingAudio) {
                 Picker(
                     "Keep meeting audio",
                     selection: Binding(
@@ -77,7 +90,7 @@ struct MeetingSettingsGroup: View {
                         set: { retention in meetings.updateSettings { $0.audioRetention = retention } }
                     )
                 ) {
-                    Text("Until the transcript is ready").tag(MeetingAudioRetention.untilTranscript)
+                    Text("Until the Transcript Is Ready").tag(MeetingAudioRetention.untilTranscript)
                     Text("7 days").tag(MeetingAudioRetention.sevenDays)
                     Text("30 days").tag(MeetingAudioRetention.thirtyDays)
                 }
@@ -86,39 +99,24 @@ struct MeetingSettingsGroup: View {
                 .fixedSize()
             }
 
-            RowSeparator()
-            ControlSettingRow(title: "Meeting files", info: Self.audioRule(meetings.settings.audioRetention)) {
+            ControlSettingRow(.meetingFiles, info: SettingsRowID.meetingFiles.currentInfo(in: appState)) {
                 HStack(spacing: 10) {
                     Text(numbers: diskBytes.map(Self.size) ?? "")
-                        .foregroundStyle(MainWindowPalette.secondaryText)
+                        .foregroundStyle(MainWindowPalette.settingsSecondaryText)
                     Button("Show in Finder") {
                         try? FileManager.default.createDirectory(at: meetings.store.rootDirectory, withIntermediateDirectories: true)
                         NSWorkspace.shared.activateFileViewerSelecting([meetings.store.rootDirectory])
                     }
                 }
             }
-        }
-        .sheet(isPresented: $editingTemplates) {
-            MeetingTemplateEditor(meetings: meetings)
-        }
-        .task(id: editingTemplates) {
-            templates = await meetings.templates.templates()
-        }
-        .sheet(isPresented: $editingNeverAsk) {
-            NeverAskSheet(meetings: meetings)
-        }
-        .task(id: [meetings.meetings.count, meetings.audioOnMac.count]) {
-            diskBytes = await meetings.store.diskUsage()
+            .task(id: [meetings.meetings.count, meetings.audioOnMac.count]) {
+                diskBytes = await meetings.store.diskUsage()
+            }
         }
     }
 
     private var meetings: MeetingCoordinator {
         appState.meetings
-    }
-
-    private static func audioRule(_ retention: MeetingAudioRetention) -> String {
-        guard let days = retention.days else { return "Audio is deleted when the transcript is ready." }
-        return "Audio is deleted \(days) days after the meeting."
     }
 
     /// "0 bytes", not ByteCountFormatter's "Zero KB".
@@ -129,9 +127,10 @@ struct MeetingSettingsGroup: View {
         return formatter.string(fromByteCount: bytes)
     }
 
+    /// Teams and Webex each have two bundle IDs, so names repeat before the
+    /// list removes them.
     private var neverAskValue: String {
-        let names = meetings.settings.neverAskBundleIDs.map(Self.appName)
-        return names.isEmpty ? "None" : names.joined(separator: ", ")
+        AppNameList.summary(meetings.settings.neverAskBundleIDs.map(Self.appName))
     }
 
     /// The name that the call card used for the app.
@@ -155,7 +154,7 @@ private struct NeverAskSheet: View {
             } else {
                 ForEach(meetings.settings.neverAskBundleIDs, id: \.self) { bundleID in
                     HStack {
-                        Text(MeetingSettingsGroup.appName(bundleID))
+                        Text(MeetingSettingsRows.appName(bundleID))
                         Spacer()
                         Button("Remove") {
                             meetings.updateSettings { $0.neverAskBundleIDs.removeAll { $0 == bundleID } }
@@ -184,7 +183,7 @@ private struct MeetingTranscriptModelRow: View {
     }
 
     var body: some View {
-        ControlSettingRow(title: "Transcript model", info: "Writes the transcript after the recording stops. Dictation keeps its own model.") {
+        ControlSettingRow(.transcriptModel) {
             if let downloading = appState.meetingTranscriptModelDownload {
                 download(downloading)
             } else {
@@ -202,14 +201,15 @@ private struct MeetingTranscriptModelRow: View {
         }
     }
 
-    /// A fixed width: a pop-up sizes itself to its widest item, and the
-    /// items of models that are not on the Mac carry their download size.
+    /// Capped, not fixed: the items of models that are not on the Mac carry
+    /// their download size, and a fixed frame centered the menu away from the
+    /// trailing edge the other menus end on.
     private var picker: some View {
         Picker(
             "Transcript model",
             selection: Binding(get: { selection }, set: { appState.useForMeetingTranscripts($0) })
         ) {
-            Text("Same as dictation").tag(ASRModelID?.none)
+            Text("Same as Dictation").tag(ASRModelID?.none)
             Divider()
             ForEach(appState.asrModelCatalog) { entry in
                 Text(label(entry))
@@ -219,7 +219,7 @@ private struct MeetingTranscriptModelRow: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
-        .frame(width: 210)
+        .modifier(CappedWidthModifier(maxWidth: 210))
     }
 
     private func download(_ model: ASRModelID) -> some View {

@@ -98,7 +98,7 @@ struct MeetingSummaryTab: View {
                 Task { await meetings.regenerate(record.id) }
             }
         case .meetingSettings:
-            return Button("Meeting Settings…") { appState.openMainWindow(at: .general) }
+            return Button("Meeting Settings…") { appState.openMainWindow(at: .row(.summaryModel)) }
         case .summarizeOnThisMac:
             return Button("Summarize on this Mac") {
                 Task { await meetings.regenerate(record.id, onThisMac: true) }

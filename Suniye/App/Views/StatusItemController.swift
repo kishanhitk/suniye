@@ -15,7 +15,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let stopMeetingItem = NSMenuItem(title: "Stop Recording", action: #selector(stopMeeting), keyEquivalent: "")
     private let openMeetingItem = NSMenuItem(title: "Open Meeting Notes", action: #selector(openMeeting), keyEquivalent: "")
     private let finishSetupItem = NSMenuItem(title: "", action: #selector(openMainWindow), keyEquivalent: "")
-    private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openMainWindow), keyEquivalent: "o")
+    private lazy var openAppItem = NSMenuItem(title: "Open \(appIdentity.displayName)", action: #selector(openMainWindow), keyEquivalent: "o")
+    private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openSettings), keyEquivalent: ",")
     private let copyLastTranscriptItem = NSMenuItem(title: "Copy Last Transcript", action: #selector(copyLastTranscript), keyEquivalent: "")
     private let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
@@ -75,6 +76,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             item.target = self
         }
         finishSetupItem.target = self
+        openAppItem.target = self
         openSettingsItem.target = self
         copyLastTranscriptItem.target = self
         checkUpdatesItem.target = self
@@ -92,6 +94,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // mid-setup must see a labeled way back (with live download progress),
         // not a normal-looking menu that silently does nothing.
         menu.addItem(finishSetupItem)
+        menu.addItem(openAppItem)
         menu.addItem(openSettingsItem)
         menu.addItem(copyLastTranscriptItem)
         menu.addItem(.separator())
@@ -245,6 +248,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func openMainWindow() {
         AppLogger.shared.log(.info, "menu action: open main window")
         appState.openMainWindow()
+    }
+
+    @objc
+    private func openSettings() {
+        AppLogger.shared.log(.info, "menu action: open settings")
+        appState.openMainWindow(at: .settings())
     }
 
     @objc

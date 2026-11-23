@@ -136,13 +136,22 @@ struct MeetingTemplateEditor: View {
 
     /// Done keeps the drafts; with no change it only closes.
     private func save() {
-        guard drafts != saved else {
+        let cleaned = drafts.map { template in
+            var template = template
+            template.name = template.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            return template
+        }
+        guard !cleaned.contains(where: { $0.name.isEmpty }) else {
+            saveError = "Every template needs a name."
+            return
+        }
+        guard cleaned != saved else {
             dismiss()
             return
         }
         Task {
             do {
-                try await meetings.saveTemplates(drafts)
+                try await meetings.saveTemplates(cleaned)
                 dismiss()
             } catch {
                 saveError = error.localizedDescription

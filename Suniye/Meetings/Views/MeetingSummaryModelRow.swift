@@ -12,10 +12,7 @@ struct MeetingSummaryModelRow: View {
     }
 
     var body: some View {
-        ControlSettingRow(
-            title: "Summary model",
-            info: "Writes the summary after the transcript. ChatGPT and API endpoint send the transcript and your notes to that service."
-        ) {
+        ControlSettingRow(.summaryModel) {
             HStack(spacing: 10) {
                 if choice != .automatic {
                     Button("Options…") { setUp(choice) }

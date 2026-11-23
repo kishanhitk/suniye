@@ -6,9 +6,9 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
     /// working.
     case dashboard
     case meetings
-    case model
     case style
-    case general
+    /// Opens the Settings panes in place of the section list.
+    case settings
 
     var title: String {
         switch self {
@@ -16,12 +16,10 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
             return "Transcripts"
         case .meetings:
             return "Meetings"
-        case .model:
-            return "Speech Model"
         case .style:
             return "Magic Format"
-        case .general:
-            return "General"
+        case .settings:
+            return "Settings"
         }
     }
 
@@ -31,11 +29,9 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
             return "text.alignleft"
         case .meetings:
             return "person.2"
-        case .model:
-            return "cpu"
         case .style:
             return "sparkles"
-        case .general:
+        case .settings:
             return "gearshape"
         }
     }
@@ -46,26 +42,5 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
 
     var accessibilityIdentifier: String {
         "main-window-section-\(rawValue)"
-    }
-
-    static func initialSelection(arguments: [String]) -> MainWindowSection {
-        for section in MainWindowSection.allCases where arguments.contains(section.launchArgument) {
-            return section
-        }
-
-        // History merged into Transcripts; the old argument still has to work.
-        if arguments.contains("--open-history") {
-            return .dashboard
-        }
-
-        if arguments.contains("--open-settings") {
-            return .model
-        }
-
-        if arguments.contains("--open-vocabulary") || arguments.contains("--open-llm") {
-            return .style
-        }
-
-        return .dashboard
     }
 }

@@ -107,6 +107,7 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         }
         observeWorkspaceLifecycle()
         if !ProcessInfo.processInfo.isRunningUnderXCTest {
+            sharedAppState.applyAppearance()
             statusItemController = StatusItemController(appState: sharedAppState)
             MainWindowController.shared.show(appState: sharedAppState)
         }

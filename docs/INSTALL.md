@@ -64,7 +64,7 @@ The first-run onboarding has four screens:
 Speech model on a fresh install:
 - On macOS 26, Suniye checks that Apple's built-in speech engine works on your Mac and uses it. Nothing is downloaded.
 - If that check fails (macOS 14–15, an unsupported language, a setting from your organization, or the system speech files cannot be installed), Suniye downloads `Parakeet TDT 0.6B v3` and shows the progress on the second screen.
-- After onboarding, open `Speech Model` to install or switch to another supported model.
+- After onboarding, open `Settings > Speech model` to install or switch to another supported model.
 - Magic Format is not part of onboarding. Turn it on later from `Magic Format`.
 
 ### 6) Update flow

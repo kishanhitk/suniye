@@ -18,13 +18,13 @@ Suniye releases are signed with an Apple Developer ID and notarized, so macOS op
 ## Onboarding downloaded a speech model on macOS 26
 - Suniye uses Apple's built-in speech engine only when it works on your Mac. If it does not (unsupported language, a setting from your organization, or the system speech files cannot be installed), Suniye downloads `Parakeet TDT 0.6B v3` instead.
 - `~/Library/Application Support/Suniye/logs/app.log` names the reason on the line `system default model unavailable`.
-- To use a different model, open `Speech Model`, install it, then click `Use Model`.
+- To use a different model, open `Settings > Speech model`, install it, then click `Use Model`.
 
 ## Holding the dictation key did nothing after the microphone prompt
 - If you let go of the key while macOS asks for Microphone access, Suniye does not start recording. The floating indicator shows `Hold again to dictate`. Hold the key again.
 
 ## Double-tap does not lock the recording with the Globe shortcut
-- With Globe as the shortcut, double-tap works only when Keyboard settings say "Press 🌐 key to: Do Nothing". Any other choice also runs on each Globe tap: Show Emoji & Symbols (the macOS default), Change Input Source, or Start Dictation, which records at the same time as Suniye. Settings > General shows a notice.
+- With Globe as the shortcut, double-tap works only when Keyboard settings say "Press 🌐 key to: Do Nothing". Any other choice also runs on each Globe tap: Show Emoji & Symbols (the macOS default), Change Input Source, or Start Dictation, which records at the same time as Suniye. Settings > Shortcuts shows a notice.
 - Open System Settings > Keyboard and set "Press 🌐 key to" to Do Nothing. Or choose a key-combo shortcut in Suniye.
 
 ## Esc did not cancel the recording
@@ -42,7 +42,7 @@ Suniye releases are signed with an Apple Developer ID and notarized, so macOS op
 - The Local Model is optional and separate from the speech model used for transcription.
 
 ## Model is installed but won’t load
-- Open `Speech Model` and try switching to another installed model.
+- Open `Settings > Speech model` and try switching to another installed model.
 - If the current model still fails, delete it from the model library and download it again.
 - Check `~/Library/Application Support/Suniye/logs/app.log` for the failing model name and validation error.
 

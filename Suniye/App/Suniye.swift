@@ -12,6 +12,20 @@ struct SuniyeApp: App {
             EmptyView()
         }
         .commands {
+            // Replaces the item of the empty Settings scene above: Settings is
+            // part of the main window.
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    sharedAppState.openMainWindow(at: .settings())
+                }
+                .keyboardShortcut(",", modifiers: .command)
+
+                Button("Search Settings") {
+                    sharedAppState.openMainWindow(at: .settingsSearch)
+                }
+                .keyboardShortcut("k", modifiers: .command)
+            }
+
             CommandGroup(after: .appInfo) {
                 if sharedAppState.isUpdateReadyToInstall {
                     Button("Restart to Update") {
@@ -19,7 +33,7 @@ struct SuniyeApp: App {
                     }
                     .disabled(!sharedAppState.canRestartToUpdate)
                 } else {
-                    Button("Check for Updates...") {
+                    Button("Check for Updates…") {
                         sharedAppState.checkForUpdates()
                     }
                     .disabled(!sharedAppState.canCheckForUpdates)
@@ -27,7 +41,7 @@ struct SuniyeApp: App {
             }
 
             CommandGroup(after: .help) {
-                Button("Report a Problem...") {
+                Button("Report a Problem…") {
                     sharedAppState.openIssueReportWindow()
                 }
                 .keyboardShortcut("/", modifiers: [.command, .shift])

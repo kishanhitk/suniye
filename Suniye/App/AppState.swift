@@ -99,6 +99,14 @@ final class AppState {
         get { generalSettings.updateChannel }
         set { updateGeneralSettings { $0.updateChannel = newValue } }
     }
+    /// False when this build ships without updates, such as Preview.
+    var updatesEnabled: Bool {
+        appUpdateController.isEnabled
+    }
+    var appearance: AppAppearance {
+        get { generalSettings.appearance }
+        set { updateGeneralSettings { $0.appearance = newValue } }
+    }
     var hotkeyConfiguration: HotkeyConfiguration {
         get { generalSettings.hotkeyConfiguration }
         set { changeHotkeys(generalSettings.hotkeys.settingDictation(newValue)) }
@@ -789,12 +797,12 @@ final class AppState {
     }
 
     /// The nudge's CTA: records the open, retires the card, and hands the
-    /// caller the section to navigate to (the existing Magic Format settings
+    /// caller the destination to navigate to (the existing Magic Format
     /// page, which already handles provider choice, unavailability, and repair).
-    func openMagicFormatSetupFromNudge() -> MainWindowSection {
+    func openMagicFormatSetupFromNudge() -> MainWindowDestination {
         analytics.track(.mfNudge(action: .opened))
         updateGeneralSettings { $0.magicFormatNudgeDismissed = true }
-        return .style
+        return .section(.style)
     }
 
     var attentionItems: [AttentionItem] {
@@ -809,7 +817,7 @@ final class AppState {
                     title: "Transcription unavailable",
                     detail: error,
                     severity: .error,
-                    recommendedSection: .general
+                    recommendedDestination: .settings(.speechModel)
                 )
             )
         }
@@ -821,7 +829,7 @@ final class AppState {
                     title: "Dictation model not installed",
                     detail: "Download \(currentASRModelEntry.displayName) to enable offline speech recognition.",
                     severity: .warning,
-                    recommendedSection: .model
+                    recommendedDestination: .settings(.speechModel)
                 )
             )
         }
@@ -833,7 +841,7 @@ final class AppState {
                     title: "Microphone permission missing",
                     detail: "Grant microphone access so audio can be captured.",
                     severity: .warning,
-                    recommendedSection: .general,
+                    recommendedDestination: .settings(.permissions),
                     fixAction: .requestMicrophonePermission
                 )
             )
@@ -848,7 +856,7 @@ final class AppState {
                         ? staleAccessibilityGrantInstruction
                         : "Grant accessibility access so transcribed text can be inserted.",
                     severity: .warning,
-                    recommendedSection: .general,
+                    recommendedDestination: .settings(.permissions),
                     fixAction: .requestAccessibilityPermission
                 )
             )
@@ -861,7 +869,7 @@ final class AppState {
                     title: "Magic Format needs service setup",
                     detail: endpointValidationError,
                     severity: .warning,
-                    recommendedSection: .style
+                    recommendedDestination: .section(.style)
                 )
             )
         }
@@ -873,7 +881,7 @@ final class AppState {
                     title: "Magic Format needs service setup",
                     detail: modelValidationError,
                     severity: .warning,
-                    recommendedSection: .style
+                    recommendedDestination: .section(.style)
                 )
             )
         }
@@ -885,7 +893,7 @@ final class AppState {
                     title: "Magic Format needs an API key",
                     detail: "Magic Format is on, but your API key is missing.",
                     severity: .warning,
-                    recommendedSection: .style
+                    recommendedDestination: .section(.style)
                 )
             )
         }
@@ -897,7 +905,7 @@ final class AppState {
                     title: "Magic Format Apple Intelligence unavailable",
                     detail: "\(appleMagicFormatAvailability.statusText) This only affects Magic Format cleanup.",
                     severity: .warning,
-                    recommendedSection: .style
+                    recommendedDestination: .section(.style)
                 )
             )
         }
@@ -909,7 +917,7 @@ final class AppState {
                     title: "Magic Format local model unavailable",
                     detail: "\(localGemmaMagicFormatAvailability.statusText) This only affects Magic Format cleanup, not dictation.",
                     severity: .warning,
-                    recommendedSection: .style
+                    recommendedDestination: .section(.style)
                 )
             )
         }
@@ -943,7 +951,7 @@ final class AppState {
     private let chatGPTPlan: ChatGPTPlanClient
     /// A section that code outside the main window asked to show. The window
     /// shows it and clears the request.
-    var requestedSection: MainWindowSection?
+    var requestedDestination: MainWindowDestination?
     @ObservationIgnored private var callCardPresenter: MeetingCallCardPresenter?
     private let localLLMModelManager: LocalLLMModelManagerProtocol
     private let llmSettingsStore: LLMSettingsStoreProtocol
@@ -1263,7 +1271,7 @@ final class AppState {
                 self?.floatingIndicatorController.updateMeeting(session)
             }
             let callCardPresenter = MeetingCallCardPresenter(meetings: meetings) { [weak self] in
-                self?.openMainWindow(at: .general)
+                self?.openMainWindow(at: .settings(.meetings))
             }
             self.callCardPresenter = callCardPresenter
             meetings.onCallCardChange = { card in
@@ -2670,9 +2678,9 @@ final class AppState {
         }
     }
 
-    func openMainWindow(at section: MainWindowSection? = nil) {
-        if let section {
-            requestedSection = section
+    func openMainWindow(at destination: MainWindowDestination? = nil) {
+        if let destination {
+            requestedDestination = destination
         }
         MainWindowController.shared.show(appState: self)
     }
@@ -3929,6 +3937,14 @@ final class AppState {
         if new.updateChannel != old.updateChannel {
             applyUpdateChannelToController()
         }
+        if new.appearance != old.appearance, runtimeServicesEnabled {
+            applyAppearance()
+        }
+    }
+
+    /// Sets the light or dark look for every window of the app.
+    func applyAppearance() {
+        NSApp.appearance = generalSettings.appearance.nsAppearance
     }
 
     private func changeHotkeys(_ result: Result<HotkeyBindings, HotkeyBindings.Rejection>) {
@@ -4472,7 +4488,7 @@ extension AppState: MeetingHost {
     /// Opens the main window at a meeting's page, or at the list for nil.
     func openMeeting(_ id: UUID?) {
         meetings.openMeetingID = id
-        openMainWindow(at: .meetings)
+        openMainWindow(at: .section(.meetings))
     }
 
     var meetingInputDeviceID: String? {

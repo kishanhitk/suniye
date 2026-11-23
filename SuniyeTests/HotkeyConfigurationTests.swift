@@ -54,6 +54,29 @@ final class HotkeyConfigurationTests: XCTestCase {
         )
     }
 
+    /// Keys without a printed letter get the names a Mac menu shows.
+    func testNavigationAndFunctionKeysHaveNames() {
+        XCTAssertEqual(HotkeyConfiguration.keyName(for: UInt32(kVK_LeftArrow)), "←")
+        XCTAssertEqual(HotkeyConfiguration.keyName(for: UInt32(kVK_DownArrow)), "↓")
+        XCTAssertEqual(HotkeyConfiguration.keyName(for: UInt32(kVK_PageUp)), "⇞")
+        XCTAssertEqual(HotkeyConfiguration.keyName(for: UInt32(kVK_ForwardDelete)), "⌦")
+        XCTAssertEqual(HotkeyConfiguration.keyName(for: UInt32(kVK_F1)), "F1")
+        XCTAssertEqual(HotkeyConfiguration.keyName(for: UInt32(kVK_F12)), "F12")
+        XCTAssertEqual(HotkeyConfiguration.keyName(for: UInt32(kVK_F20)), "F20")
+    }
+
+    /// One cap per key, modifiers in menu order, then the key.
+    func testKeyCapLabels() {
+        let combo = HotkeyConfiguration.keyCombo(
+            keyCode: UInt32(kVK_ANSI_V),
+            carbonModifiers: UInt32(cmdKey) | UInt32(controlKey) | UInt32(optionKey) | UInt32(shiftKey)
+        )
+        XCTAssertEqual(combo.keyCapLabels, ["⌃", "⌥", "⇧", "⌘", "V"])
+        XCTAssertEqual(combo.compactDisplayString, "⌃⌥⇧⌘V")
+        XCTAssertEqual(HotkeyConfiguration.globe.keyCapLabels, ["Globe"])
+        XCTAssertEqual(HotkeyConfiguration.globe.compactDisplayString, "Globe")
+    }
+
     func testKeyNameFallsBackToNumericDescription() {
         XCTAssertEqual(HotkeyConfiguration.keyName(for: 999), "Key 999")
     }

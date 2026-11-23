@@ -146,8 +146,15 @@ struct StylePageVocabularyTag: View {
                     .help("Learned from your edits")
             }
 
+            // One line, cut in the middle: a long phrase must not push its own
+            // remove button out of the card.
             Text(term)
                 .font(AppTypography.callout)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 240, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .help(term)
 
             Button(action: onRemove) {
                 Image(systemName: "xmark")

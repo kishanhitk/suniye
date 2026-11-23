@@ -41,7 +41,7 @@ Suniye finds a call from the apps that hold the microphone:
 | A browser whose window title names Google Meet, Zoom, Microsoft Teams, Webex, Jitsi or Whereby | 2 s |
 | Any other browser | 20 s, and only the offer, never an automatic start |
 
-**Settings → General → Meetings → When a call starts**:
+**Settings → Meetings → When a call starts**:
 
 - **Ask** (default): a card asks "Record this Zoom call?". It closes after 20 s. Its ··· menu has **Never Ask for Zoom** and **Meeting Settings…**.
 - **Record Automatically**: the recording starts, and the card shows **Cancel** for 5 s. Cancel deletes the recording.
@@ -71,9 +71,9 @@ After a quit or a crash, the next launch writes no transcript by itself: it does
 ## Transcript
 
 - No speech recognition runs while the meeting records. The meeting page shows the notes, the meters and the warnings.
-- The pill shows a red dot, the recorded time and one level meter for the louder track. **Settings → General → Indicator → Show meeting time** (on by default) shows or hides the time.
+- The pill shows a red dot, the recorded time and one level meter for the louder track. **Settings → Indicator → Show meeting time** (on by default) shows or hides the time.
 - After the stop, the transcript model writes the transcript from the audio files. The meeting page shows "Finishing the transcript…" with the minutes done.
-- **Settings → General → Meetings → Transcript model**:
+- **Settings → Meetings → Transcript model**:
   - **Same as dictation** (default): the dictation model, on the dictation engine.
   - A model you pick, the dictation model too: it loads for the transcript on an engine of its own and unloads after it, so a switch of the dictation model does not change it. Dictation keeps its model. The Mac holds both models in memory while the transcript is written.
 - A dictation goes first: from the key-down to the end of the dictation, no piece of audio starts decoding. The piece that decodes at the key-down finishes.
@@ -102,7 +102,7 @@ Limits of this measurement: one meeting, in English, with four speakers; each tr
 
 ## Meeting audio
 
-**Settings → General → Meetings → Keep meeting audio**:
+**Settings → Meetings → Keep meeting audio**:
 
 - **Until the transcript is ready** (default): the audio goes when the transcript is final.
 - **7 days** or **30 days**: the audio goes that long after the end of the meeting.
@@ -133,7 +133,7 @@ While the audio is on the Mac, **Transcribe Again…** in the meeting's ··· m
 
 ### Summary model
 
-**Settings → General → Meetings → Summary model**.
+**Settings → Meetings → Summary model**.
 
 | Choice | Model | Where the text goes |
 |---|---|---|
@@ -183,7 +183,7 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 
 The local model on llama.cpp `7e960f40` with the drafter ([LOCAL_GEMMA.md](LOCAL_GEMMA.md)), 21 Nov 2026, same meetings, one run: set A 4 and 4, set B 2 and 1. Before, on llama.cpp `06938ac1`: set A 4 and 4, set B 2 and 2. The summary of a 120-minute meeting takes 18 to 23 s, down from 51 to 58 s.
 
-- Templates: General, 1:1, Stand-up, Interview, and your own (**Settings → General → Meetings → Summary templates**).
+- Templates: General, 1:1, Stand-up, Interview, and your own (**Settings → Meetings → Summary templates**).
 - You can rename and edit a built-in template. **Reset to Default** brings back its shipped name and text.
 - When you delete the template that is the **Default template**, General is the default again.
 - A template's "## " headings are the sections of the summary. A section named Overview or Summary is a short paragraph; every other section is a list.
@@ -219,4 +219,4 @@ The local model on llama.cpp `7e960f40` with the drafter ([LOCAL_GEMMA.md](LOCAL
 | `summary.md` | The summary |
 | `you.wav`, `them.wav` | 16 kHz audio while the meeting records, and after the transcript as long as **Keep meeting audio** says |
 
-**Settings → General → Meetings** shows the space on disk and **Reveal in Finder**.
+**Settings → Meetings → Meeting files** shows the space on disk and **Show in Finder**.

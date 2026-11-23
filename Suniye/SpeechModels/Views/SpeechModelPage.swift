@@ -15,10 +15,11 @@ struct SpeechModelPage: View {
     }
 
     var body: some View {
-        DetailScrollContainer {
-            header
-
-            // Progress and failures stay at the top of the page — never behind
+        SettingsForm(
+            title: SettingsPane.speechModel.title,
+            subtitle: "Recognition happens on this Mac. Audio is never uploaded."
+        ) {
+            // Progress and failures stay at the top of the page, never behind
             // the row that opens the chooser.
             if let banner = appState.asrModelBanner {
                 InlineStatusBanner(
@@ -35,7 +36,39 @@ struct SpeechModelPage: View {
                 .transition(SettingsMotion.banner(reduceMotion: reduceMotion))
             }
 
-            settings
+            SettingsSection {
+                DisclosureSettingRow(.speechModel, value: entry.displayName) {
+                    showsModelChooser = true
+                }
+
+                if SettingsRowID.modelStatus.isAvailable(in: appState) {
+                    ControlSettingRow(.modelStatus) {
+                        HStack(spacing: 10) {
+                            Text(numbers: appState.modelStatusValue)
+                                .foregroundStyle(appState.modelStatusColor)
+
+                            Button(appState.modelPrimaryActionTitle) {
+                                appState.performPrimaryASRAction(for: entry.id)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!appState.asrModelCanPerformPrimaryAction(for: entry.id))
+                        }
+                    }
+                    .transition(SettingsMotion.notice)
+                }
+            }
+
+            SettingsSection {
+                ValueSettingRow(.modelLanguages, value: entry.languageSummary)
+                ValueSettingRow(.modelSpeed, value: entry.speedLabel)
+                ValueSettingRow(.modelOnDisk, value: diskText)
+
+                if SettingsRowID.revealModelInFinder.isAvailable(in: appState) {
+                    DisclosureSettingRow(.revealModelInFinder, value: "", opensOutside: true) {
+                        appState.openModelFolder(for: entry.id)
+                    }
+                }
+            }
         }
         // A download appearing or finishing rearranges the page; without this
         // the rows below jump.
@@ -43,61 +76,6 @@ struct SpeechModelPage: View {
         .animation(SettingsMotion.curve(reduceMotion: reduceMotion), value: appState.modelPrimaryActionTitle)
         .sheet(isPresented: $showsModelChooser) {
             SpeechModelSheet(appState: appState)
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            DetailPageTitle(title: "Speech Model")
-            Text("Recognition happens on this Mac. Audio is never uploaded.")
-                .font(AppTypography.body)
-                .foregroundStyle(MainWindowPalette.secondaryText)
-        }
-    }
-
-    private var settings: some View {
-        VStack(spacing: 0) {
-            DisclosureSettingRow(
-                title: "Model",
-                value: entry.displayName
-            ) {
-                showsModelChooser = true
-            }
-
-            RowSeparator()
-            ValueSettingRow(title: "Languages", value: entry.languageSummary)
-
-            RowSeparator()
-            ValueSettingRow(title: "Speed", value: entry.speedLabel)
-
-            RowSeparator()
-            ValueSettingRow(title: "On disk", value: diskText)
-
-            if appState.modelPrimaryActionTitle != "Current" {
-                RowSeparator()
-                ControlSettingRow(title: "Status") {
-                    HStack(spacing: 12) {
-                        Text(numbers: appState.modelStatusValue)
-                            .font(AppTypography.rowTitle)
-                            .foregroundStyle(appState.modelStatusColor)
-
-                        Button(appState.modelPrimaryActionTitle) {
-                            appState.performPrimaryASRAction(for: entry.id)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .disabled(!appState.asrModelCanPerformPrimaryAction(for: entry.id))
-                    }
-                }
-                .transition(SettingsMotion.notice)
-            }
-
-            if appState.asrModelSecondaryActionsEnabled(for: entry.id) {
-                RowSeparator()
-                DisclosureSettingRow(title: "Reveal in Finder", value: "") {
-                    appState.openModelFolder(for: entry.id)
-                }
-            }
         }
     }
 
@@ -166,7 +144,7 @@ struct SpeechModelSheet: View {
                     .buttonStyle(.bordered)
                     .keyboardShortcut(.cancelAction)
 
-                Button(isPendingDownloaded ? "Use this model" : "Download and use") {
+                Button(isPendingDownloaded ? "Use This Model" : "Download and Use") {
                     appState.performPrimaryASRAction(for: pending)
                     dismiss()
                 }

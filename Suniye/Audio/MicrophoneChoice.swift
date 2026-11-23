@@ -207,3 +207,35 @@ final class MicrophoneChoice {
         devices.first { $0.id == id && $0.availability != .notConnected }?.name
     }
 }
+
+/// One item of a microphone menu.
+struct InputDeviceMenuChoice: Hashable {
+    /// nil is System Default.
+    let id: String?
+    let title: String
+    let isSelectable: Bool
+}
+
+extension MicrophoneChoice {
+    /// System Default, then every device, for both microphone menus. A saved
+    /// microphone that is disconnected is listed but cannot be chosen again; a
+    /// built-in one that the closed lid switched off can, for use after
+    /// undocking.
+    var menuChoices: [InputDeviceMenuChoice] {
+        let devices = availableInputDevices.map { device in
+            var parts = [device.name, device.transport.title]
+            if device.isDefault {
+                parts.append("Default")
+            }
+            if !device.isAvailable {
+                parts.append("Unavailable")
+            }
+            return InputDeviceMenuChoice(
+                id: device.id,
+                title: parts.joined(separator: " - "),
+                isSelectable: device.availability != .notConnected
+            )
+        }
+        return [InputDeviceMenuChoice(id: nil, title: "System Default", isSelectable: true)] + devices
+    }
+}

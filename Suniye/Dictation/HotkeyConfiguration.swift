@@ -32,11 +32,16 @@ struct HotkeyConfiguration: Codable, Equatable {
     }
 
     var compactDisplayString: String {
+        keyCapLabels.joined()
+    }
+
+    /// One label per key, in the order macOS menus show them: ⌃ ⌥ ⇧ ⌘, then the key.
+    var keyCapLabels: [String] {
         switch kind {
         case .globe:
-            return "Globe"
+            return ["Globe"]
         case .keyCombo:
-            return compactModifierLabels.joined() + Self.keyName(for: keyCode)
+            return compactModifierLabels + [Self.keyName(for: keyCode)]
         }
     }
 
@@ -242,9 +247,36 @@ struct HotkeyConfiguration: Codable, Equatable {
             return "Y"
         case kVK_ANSI_Z:
             return "Z"
+        case kVK_LeftArrow:
+            return "←"
+        case kVK_RightArrow:
+            return "→"
+        case kVK_UpArrow:
+            return "↑"
+        case kVK_DownArrow:
+            return "↓"
+        case kVK_Home:
+            return "↖"
+        case kVK_End:
+            return "↘"
+        case kVK_PageUp:
+            return "⇞"
+        case kVK_PageDown:
+            return "⇟"
+        case kVK_ForwardDelete:
+            return "⌦"
         default:
-            return "Key \(keyCode)"
+            return functionKeyName(for: keyCode) ?? "Key \(keyCode)"
         }
+    }
+
+    /// F1 to F20. Their key codes are not in order, so they are listed.
+    private static func functionKeyName(for keyCode: UInt32) -> String? {
+        let functionKeys = [
+            kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8, kVK_F9, kVK_F10,
+            kVK_F11, kVK_F12, kVK_F13, kVK_F14, kVK_F15, kVK_F16, kVK_F17, kVK_F18, kVK_F19, kVK_F20,
+        ]
+        return functionKeys.firstIndex(of: Int(keyCode)).map { "F\($0 + 1)" }
     }
 }
 

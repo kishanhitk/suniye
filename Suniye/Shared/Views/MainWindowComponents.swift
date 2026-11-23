@@ -61,10 +61,13 @@ private enum MainWindowNSPalette {
             : NSColor.black.withAlphaComponent(appearance.usesIncreasedContrast ? 0.36 : 0.07)
     })
 
+    /// Increase Contrast raises the fill; at 5 to 8 percent the selected row
+    /// is hard to find with that setting on.
     static let selection = NSColor(name: nil, dynamicProvider: { appearance in
-        appearance.usesDarkMainWindowPalette
-            ? NSColor.white.withAlphaComponent(0.08)
-            : NSColor.black.withAlphaComponent(0.05)
+        let strong = appearance.usesIncreasedContrast
+        return appearance.usesDarkMainWindowPalette
+            ? NSColor.white.withAlphaComponent(strong ? 0.22 : 0.08)
+            : NSColor.black.withAlphaComponent(strong ? 0.16 : 0.05)
     })
 
     /// Text on an orange-tinted tag: dark brown on light, light orange on dark.
@@ -72,6 +75,72 @@ private enum MainWindowNSPalette {
         appearance.usesDarkMainWindowPalette
             ? NSColor(srgbRed: 1, green: 0.72, blue: 0.4, alpha: 1)
             : NSColor(srgbRed: 0.54, green: 0.29, blue: 0, alpha: 1)
+    })
+
+    // Settings: neutral grays with no tint, in the Vercel manner. Each text
+    // color keeps at least 4.5:1 against the card it sits on (WCAG AA for
+    // small text); the ratio is noted next to each value.
+
+    /// White on the light pane; #262626, one step above the dark pane.
+    static let settingsCard = NSColor(name: nil, dynamicProvider: { appearance in
+        appearance.usesDarkMainWindowPalette
+            ? NSColor(srgbRed: 0.149, green: 0.149, blue: 0.149, alpha: 1)
+            : NSColor.white
+    })
+
+    static let settingsCardBorder = NSColor(name: nil, dynamicProvider: { appearance in
+        let strong = appearance.usesIncreasedContrast
+        return appearance.usesDarkMainWindowPalette
+            ? NSColor.white.withAlphaComponent(strong ? 0.36 : 0.09)
+            : NSColor.black.withAlphaComponent(strong ? 0.34 : 0.09)
+    })
+
+    static let settingsDivider = NSColor(name: nil, dynamicProvider: { appearance in
+        let strong = appearance.usesIncreasedContrast
+        return appearance.usesDarkMainWindowPalette
+            ? NSColor.white.withAlphaComponent(strong ? 0.3 : 0.07)
+            : NSColor.black.withAlphaComponent(strong ? 0.28 : 0.06)
+    })
+
+    /// #171717, 17.9:1 on white; #EDEDED, 12.9:1 on the dark card.
+    static let settingsText = NSColor(name: nil, dynamicProvider: { appearance in
+        appearance.usesDarkMainWindowPalette
+            ? NSColor(srgbRed: 0.929, green: 0.929, blue: 0.929, alpha: 1)
+            : NSColor(srgbRed: 0.09, green: 0.09, blue: 0.09, alpha: 1)
+    })
+
+    /// Hints and values: #666666, 5.7:1 on white; #A1A1A1, 5.9:1 on the dark
+    /// card. The system secondary label is 4.0:1 on white. Increase Contrast
+    /// moves them toward the primary text.
+    static let settingsSecondaryText = NSColor(name: nil, dynamicProvider: { appearance in
+        let value: CGFloat
+        if appearance.usesDarkMainWindowPalette {
+            value = appearance.usesIncreasedContrast ? 0.78 : 0.631
+        } else {
+            value = appearance.usesIncreasedContrast ? 0.28 : 0.4
+        }
+        return NSColor(srgbRed: value, green: value, blue: value, alpha: 1)
+    })
+
+    /// 5.4:1 on white, 5.2:1 on the dark card. The system red is 3.6:1 on white.
+    static let errorText = NSColor(name: nil, dynamicProvider: { appearance in
+        appearance.usesDarkMainWindowPalette
+            ? NSColor(srgbRed: 1, green: 0.39, blue: 0.41, alpha: 1)
+            : NSColor(srgbRed: 0.8, green: 0.16, blue: 0.18, alpha: 1)
+    })
+
+    /// 5.3:1 on white, 6.7:1 on the dark card. The system green is 2.2:1 on white.
+    static let successText = NSColor(name: nil, dynamicProvider: { appearance in
+        appearance.usesDarkMainWindowPalette
+            ? NSColor(srgbRed: 0.38, green: 0.75, blue: 0.45, alpha: 1)
+            : NSColor(srgbRed: 0.16, green: 0.48, blue: 0.23, alpha: 1)
+    })
+
+    /// 5.5:1 on white, 6.1:1 on the dark card.
+    static let accentText = NSColor(name: nil, dynamicProvider: { appearance in
+        appearance.usesDarkMainWindowPalette
+            ? NSColor(srgbRed: 0.32, green: 0.66, blue: 1, alpha: 1)
+            : NSColor(srgbRed: 0, green: 0.4, blue: 0.83, alpha: 1)
     })
 }
 
@@ -92,6 +161,17 @@ enum MainWindowPalette {
     static let tertiaryText = Color.secondary.opacity(0.76)
     static let destructive = Color.red.opacity(0.78)
     static let warningTagText = Color(nsColor: MainWindowNSPalette.warningTagText)
+
+    static let settingsCard = Color(nsColor: MainWindowNSPalette.settingsCard)
+    static let settingsCardBorder = Color(nsColor: MainWindowNSPalette.settingsCardBorder)
+    static let settingsDivider = Color(nsColor: MainWindowNSPalette.settingsDivider)
+    static let settingsText = Color(nsColor: MainWindowNSPalette.settingsText)
+    static let settingsSecondaryText = Color(nsColor: MainWindowNSPalette.settingsSecondaryText)
+    /// Warning text. The system orange is 2.2:1 on white; this is 6.9:1.
+    static let warningText = Color(nsColor: MainWindowNSPalette.warningTagText)
+    static let errorText = Color(nsColor: MainWindowNSPalette.errorText)
+    static let successText = Color(nsColor: MainWindowNSPalette.successText)
+    static let accentText = Color(nsColor: MainWindowNSPalette.accentText)
 }
 
 enum AppTypography {
@@ -110,8 +190,6 @@ enum AppTypography {
     /// against body's 13pt on macOS, which put the pages' own content a step
     /// below the sidebar's navigation labels.
     static let rowTitle = Font.body
-    /// Group heading — sentence case at body weight, not an uppercase mono label.
-    static let groupHeading = Font.body.weight(.semibold)
     /// The Transcripts headline reads as a sentence, so it stays regular weight
     /// and leans on size alone.
     static let transcriptsHeadline = Font.system(.largeTitle, design: .default, weight: .regular)
@@ -119,6 +197,8 @@ enum AppTypography {
     /// negative tracking the same way the small caps below want positive.
     static let transcriptsHeadlineTracking: CGFloat = -0.5
     static let sectionHeading = Font.headline
+    /// A settings section heading: body size, semibold, sentence case.
+    static let settingsSectionTitle = Font.body.weight(.semibold)
     static let body = Font.body
     static let bodyMedium = Font.body.weight(.medium)
     static let subheadline = Font.subheadline
@@ -143,14 +223,21 @@ enum AppMetrics {
     static let sidebarBrandTop: CGFloat = 24
     static let sidebarBrandHorizontal: CGFloat = 24
     static let sidebarBrandBottom: CGFloat = 24
+    static let sidebarBrandIcon: CGFloat = 24
+    /// 24 + 24 + 10 = 58: the name starts on the rows' text edge
+    /// (sidebarPaddingHorizontal + sidebarTextInset = 14 + 44), and the icon's
+    /// center (24 + 12 = 36) is the center of the rows' icon column.
+    static let sidebarBrandSpacing: CGFloat = 10
     static let sidebarPaddingHorizontal: CGFloat = 14
     static let sidebarRowSpacing: CGFloat = 2
     static let sidebarRowHorizontalPadding: CGFloat = 12
+    static let sidebarIconColumn: CGFloat = 20
+    static let sidebarIconSpacing: CGFloat = 12
+    /// Where every sidebar label starts inside a row: the search text, the
+    /// results and the footer use it too, so all text shares one edge.
+    static let sidebarTextInset: CGFloat = sidebarRowHorizontalPadding + sidebarIconColumn + sidebarIconSpacing
     static let sidebarRowHeight: CGFloat = 32
     static let sidebarRowCornerRadius: CGFloat = 8
-    /// The footer sits in its own block rather than reading as one more
-    /// navigation row, so it is given more room than the rows above it.
-    static let sidebarFooterRowHeight: CGFloat = 36
     static let sidebarFooterPadding: CGFloat = 18
     static let detailSpacing: CGFloat = 20
     static let detailPaddingHorizontal: CGFloat = 28
@@ -158,6 +245,15 @@ enum AppMetrics {
     static let detailPaddingBottom: CGFloat = 24
     static let cardPadding: CGFloat = 12
     static let cardCornerRadius: CGFloat = 10
+    /// Settings pages: the column stops growing past this width so rows stay
+    /// readable when the window is wide.
+    static let settingsColumnMaxWidth: CGFloat = 680
+    static let settingsSectionSpacing: CGFloat = 28
+    /// Row text starts this far inside the card; section headings and
+    /// footers start at the same place.
+    static let settingsRowInset: CGFloat = 14
+    static let settingsRowVerticalPadding: CGFloat = 10
+    static let settingsRowMinHeight: CGFloat = 44
     static let metricPanelCornerRadius: CGFloat = 12
     static let cardSectionSpacing: CGFloat = 12
     static let listRowVerticalPadding: CGFloat = 10
@@ -175,31 +271,39 @@ enum SidebarRecordingDot {
     case paused
 }
 
+/// What a sidebar row shows at its trailing edge.
+enum SidebarRowAccessory: Equatable {
+    /// A meeting recording, visible from any page.
+    case recording(SidebarRecordingDot)
+    /// Something on that page needs the user.
+    case attention
+    /// A short status, such as a download percentage.
+    case status(String)
+}
+
 struct SidebarNavigationRow: View {
-    let section: MainWindowSection
+    let title: String
+    let icon: String
     let isSelected: Bool
-    /// A dot that shows a meeting recording from any page.
-    var recording: SidebarRecordingDot?
+    /// The row's list has the keyboard focus: an accent edge shows where the
+    /// arrow keys act.
+    var showsFocus = false
+    var accessory: SidebarRowAccessory?
     let action: () -> Void
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: section.icon)
+            HStack(spacing: AppMetrics.sidebarIconSpacing) {
+                Image(systemName: icon)
                     .font(AppTypography.sidebarIcon)
-                    .frame(width: 20)
+                    .frame(width: AppMetrics.sidebarIconColumn)
                     .foregroundStyle(isSelected ? Color.primary : MainWindowPalette.secondaryText)
-                Text(section.title)
+                Text(title)
                     .font(isSelected ? AppTypography.sidebarLabelSelected : AppTypography.sidebarLabel)
                     .foregroundStyle(Color.primary)
                 Spacer(minLength: 0)
-                if let recording {
-                    Circle()
-                        .fill(recording == .paused ? Color.secondary : Color.red)
-                        .frame(width: 7, height: 7)
-                        .accessibilityLabel(recording == .paused ? "Recording paused" : "Recording")
-                }
+                SidebarAccessoryView(accessory: accessory)
             }
             .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
             .padding(.vertical, 6)
@@ -209,12 +313,24 @@ struct SidebarNavigationRow: View {
                 RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
                     .fill(rowFill)
             )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(showsFocus ? 0.6 : 0), lineWidth: 1.5)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle(pressedScale: 0.985))
         // Every system sidebar highlights under the pointer; this one did not.
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var rowFill: Color {
+        if isSelected {
+            return MainWindowPalette.selectedFill
+        }
+        return isHovered ? MainWindowPalette.selectedFill.opacity(0.5) : .clear
     }
 }
 
@@ -256,12 +372,29 @@ struct PressableButtonStyle: ButtonStyle {
     }
 }
 
-private extension SidebarNavigationRow {
-    var rowFill: Color {
-        if isSelected {
-            return MainWindowPalette.selectedFill
+/// The dot or status at the end of a sidebar row.
+struct SidebarAccessoryView: View {
+    let accessory: SidebarRowAccessory?
+
+    var body: some View {
+        switch accessory {
+        case let .recording(state):
+            Circle()
+                .fill(state == .paused ? Color.secondary : Color.red)
+                .frame(width: 7, height: 7)
+                .accessibilityLabel(state == .paused ? "Recording paused" : "Recording")
+        case .attention:
+            Circle()
+                .fill(Color.orange)
+                .frame(width: 7, height: 7)
+                .accessibilityLabel("Needs attention")
+        case let .status(text):
+            Text(numbers: text)
+                .font(AppTypography.caption)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+        case nil:
+            EmptyView()
         }
-        return isHovered ? MainWindowPalette.selectedFill.opacity(0.5) : .clear
     }
 }
 
@@ -282,74 +415,6 @@ struct DetailScrollContainer<Content: View>: View {
             .padding(.bottom, AppMetrics.detailPaddingBottom)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .subtleEnclosingScroller()
-        }
-    }
-}
-
-struct NativePopupPicker<Item: Hashable>: NSViewRepresentable {
-    let items: [Item]
-    @Binding var selection: Item
-    let title: (Item) -> String
-    let isEnabled: (Item) -> Bool
-
-    init(
-        items: [Item],
-        selection: Binding<Item>,
-        title: @escaping (Item) -> String,
-        isEnabled: @escaping (Item) -> Bool = { _ in true }
-    ) {
-        self.items = items
-        _selection = selection
-        self.title = title
-        self.isEnabled = isEnabled
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(selection: $selection)
-    }
-
-    func makeNSView(context: Context) -> NSPopUpButton {
-        let button = NSPopUpButton(frame: .zero, pullsDown: false)
-        button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        button.target = context.coordinator
-        button.action = #selector(Coordinator.selectionDidChange(_:))
-        return button
-    }
-
-    func updateNSView(_ nsView: NSPopUpButton, context: Context) {
-        context.coordinator.items = items
-
-        let titles = items.map(title)
-        let needsReload = nsView.itemTitles != titles
-
-        if needsReload {
-            nsView.removeAllItems()
-            nsView.addItems(withTitles: titles)
-        }
-
-        for (index, item) in items.enumerated() {
-            nsView.item(at: index)?.isEnabled = isEnabled(item)
-        }
-
-        if let selectedIndex = items.firstIndex(of: selection), nsView.indexOfSelectedItem != selectedIndex {
-            nsView.selectItem(at: selectedIndex)
-        }
-    }
-
-    final class Coordinator: NSObject {
-        @Binding var selection: Item
-        var items: [Item] = []
-
-        init(selection: Binding<Item>) {
-            _selection = selection
-        }
-
-        @objc func selectionDidChange(_ sender: NSPopUpButton) {
-            let index = sender.indexOfSelectedItem
-            guard items.indices.contains(index) else {
-                return
-            }
-            selection = items[index]
         }
     }
 }
@@ -863,40 +928,34 @@ struct SidebarInputDeviceRow: View {
 
     var body: some View {
         Menu {
-            Button {
-                appState.microphone.selectedInputDeviceID = nil
-            } label: {
-                Label("System Default", systemImage: appState.microphone.selectedInputDeviceID == nil ? "checkmark" : "")
-            }
-
-            if !appState.microphone.availableInputDevices.isEmpty {
-                Divider()
-            }
-
-            ForEach(appState.microphone.availableInputDevices) { device in
-                Button {
-                    appState.microphone.selectedInputDeviceID = device.id
-                } label: {
-                    Text(device.availability == .notConnected ? "\(device.name) — Unavailable" : device.name)
+            // An inline picker, so the menu checks the chosen device. It lists
+            // the same devices, with the same names, as the Microphone pane.
+            Picker(
+                "Microphone",
+                selection: Binding(
+                    get: { appState.microphone.selectedInputDeviceID },
+                    set: { appState.microphone.selectedInputDeviceID = $0 }
+                )
+            ) {
+                ForEach(appState.microphone.menuChoices, id: \.self) { choice in
+                    Text(choice.title)
+                        .tag(choice.id)
+                        .disabled(!choice.isSelectable)
                 }
-                // A disconnected saved mic cannot be chosen again; a built-in mic
-                // that the closed lid switched off can, for use after undocking.
-                .disabled(device.availability == .notConnected)
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
         } label: {
-            HStack(alignment: .center, spacing: 14) {
-                // A smaller glyph than the navigation rows use, but kept in a
-                // box of the same width so the label still starts on their
-                // column instead of drifting left.
+            // The same grid as the navigation rows: the icon in their icon
+            // column, the name on their text edge.
+            HStack(spacing: AppMetrics.sidebarIconSpacing) {
                 Image(systemName: hasProblem ? "exclamationmark.triangle.fill" : "mic")
-                    .font(AppTypography.caption)
-                    .frame(width: 20, height: 14)
-                    .foregroundStyle(hasProblem ? Color.orange : MainWindowPalette.secondaryText)
+                    .font(AppTypography.sidebarIcon)
+                    .frame(width: AppMetrics.sidebarIconColumn)
+                    .foregroundStyle(hasProblem ? MainWindowPalette.warningText : MainWindowPalette.secondaryText)
 
-                // The device name gives up space first: a long name must not
-                // push the chevron off the edge and hide that this is a picker.
-                // A footer control, not a destination: it sits a step below the
-                // navigation rows above it.
+                // The name gives up space first, so a long one never pushes
+                // the chevron out and hides that this is a picker.
                 Text(appState.microphone.activeInputDeviceName)
                     .font(AppTypography.subheadline)
                     .foregroundStyle(Color.primary)
@@ -904,23 +963,23 @@ struct SidebarInputDeviceRow: View {
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(AppTypography.caption.weight(.semibold))
+                    .foregroundStyle(MainWindowPalette.secondaryText)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
+            .frame(minHeight: AppMetrics.sidebarRowHeight)
             .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
+                    .fill(isHovered ? MainWindowPalette.selectedFill.opacity(0.5) : .clear)
+            )
         }
-        // AppKit draws the popup indicator itself; a hand-rolled chevron got
-        // squeezed off the edge by long device names.
-        .menuStyle(.borderlessButton)
-        // Padding sits OUTSIDE the menu, not inside its label: a borderless
-        // Menu insets its own label, so padding applied within it left the row
-        // ~10pt to the left of the navigation column above.
-        .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
-        .padding(.vertical, 7)
-        .frame(minHeight: AppMetrics.sidebarFooterRowHeight)
-        .background(
-            RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
-                .fill(isHovered ? MainWindowPalette.selectedFill : .clear)
-        )
+        // A plain menu draws the label as given. The borderless style inset it
+        // by its own amount, which moved the icon and name off the row grid.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .help(appState.microphone.effectiveInputDeviceStatusText)
