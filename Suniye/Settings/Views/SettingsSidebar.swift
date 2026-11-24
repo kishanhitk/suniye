@@ -20,6 +20,7 @@ struct SettingsSidebar: View {
     @State private var selectedRow: SettingsRowID?
     @State private var focusRequest: SearchFocusRequest?
     @FocusState private var isPaneListFocused: Bool
+    @State private var isUsingKeyboard = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -66,6 +67,7 @@ struct SettingsSidebar: View {
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
+        .background(KeyboardUseMonitor(isUsingKeyboard: $isUsingKeyboard))
         .onChange(of: query) { _, _ in
             selectedRow = nil
         }
@@ -79,6 +81,8 @@ struct SettingsSidebar: View {
     }
 
     /// One keyboard stop: ↑ and ↓ move between panes, as in any Mac sidebar.
+    /// A click also gives the list the focus, so the arrow keys work after
+    /// it, but the focus edge waits for a key press.
     private var paneList: some View {
         VStack(alignment: .leading, spacing: AppMetrics.sidebarRowSpacing) {
             ForEach(panes) { pane in
@@ -86,7 +90,7 @@ struct SettingsSidebar: View {
                     title: pane.title,
                     icon: pane.icon,
                     isSelected: pane == selectedPane,
-                    showsFocus: isPaneListFocused && pane == selectedPane,
+                    showsFocus: isPaneListFocused && isUsingKeyboard && pane == selectedPane,
                     accessory: pane.sidebarAccessory(appState)
                 ) {
                     selectedPane = pane
