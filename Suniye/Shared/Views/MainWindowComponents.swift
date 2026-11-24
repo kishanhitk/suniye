@@ -280,8 +280,8 @@ struct SidebarNavigationRow: View {
     let title: String
     let icon: String
     let isSelected: Bool
-    /// The row's list has the keyboard focus: an accent edge shows where the
-    /// arrow keys act.
+    /// An accent edge that shows where the arrow keys act, for a user who
+    /// works by keyboard.
     var showsFocus = false
     var accessory: SidebarRowAccessory?
     let action: () -> Void
@@ -312,8 +312,8 @@ struct SidebarNavigationRow: View {
 }
 
 /// The background every sidebar row shares: a fill for the hover and the
-/// selection, and an accent edge while its list has the keyboard focus. A
-/// field rests one step up, so it reads as a box before the pointer is on it.
+/// selection, and an accent edge for the keyboard focus. A field rests one
+/// step up, so it reads as a box before the pointer is on it.
 private struct SidebarRowBackground: ViewModifier {
     let isSelected: Bool
     let showsFocus: Bool
