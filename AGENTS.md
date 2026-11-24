@@ -59,23 +59,11 @@ xcodebuild \
   -scheme Suniye \
   -destination 'platform=macOS' \
   -derivedDataPath .derivedData \
-  -enableCodeCoverage YES \
-  -resultBundlePath .derivedData/coverage.xcresult \
   test
-
-# Coverage report + gate (run after tests; CI fails below threshold)
-./scripts/coverage_report.sh
 ```
 
-## Coverage policy
-- CI enforces a 90% line-coverage floor on the app target via `scripts/coverage_report.sh`
-  (the floor is the script default). The residue is documented-unreachable code:
-  permission prompts, real-model decode, OS-state-dependent branches, race guards.
-- Files that genuinely cannot run headless in CI (live AppKit/window-server,
-  hardware audio, vendored code) are listed in `scripts/coverage_exclusions.txt`
-  with a reason comment. Do not add a file there to dodge writing tests;
-  prefer extracting logic into a testable unit.
-- New code must ship with tests that keep the gate green.
+## Test policy
+- No coverage target. Do not add a test to raise a number.
 
 ## Targeted E2E scripts
 - LLM forced success/fallback smoke tests run via launch args:
