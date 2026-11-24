@@ -60,6 +60,7 @@
 		3B79381DB8A5845E08F0E70B /* MeetingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56E59BDD897A666261E4B200 /* MeetingsPage.swift */; };
 		3C278A2864DB75569C991E3C /* libonnxruntime.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 1215194BCE451924E1C06FDD /* libonnxruntime.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		3DC99695B11FBB624A29CF16 /* TranscriptsSparkline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FFD092CE2CB5C4A26C16A6E /* TranscriptsSparkline.swift */; };
+		3E28C8A0A4D938FA8DEFBDC7 /* KeyboardUseMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0752F3160D623308CAB98425 /* KeyboardUseMonitor.swift */; };
 		40E1441377CF5855F7A1FCF8 /* MeetingPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84F30429A39F840703124772 /* MeetingPage.swift */; };
 		40E79B35358C31111F76A05C /* AudioRingDrain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC9556437BB9284E5B77B7 /* AudioRingDrain.swift */; };
 		4528CF55783D5AE8B04A99C0 /* SpeechModelPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1E8F156A43681676F677E4 /* SpeechModelPage.swift */; };
@@ -142,6 +143,7 @@
 		A3D3D4335FB5B5D52A2ECCB8 /* AudioResampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB227835A717081DA5C7133E /* AudioResampler.swift */; };
 		A79507A35D918ABA5113BA40 /* ChatGPTOAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9F66A50B99441E0D3F5363A /* ChatGPTOAuth.swift */; };
 		A801C220B8D2999EDB1AB589 /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68912427BD39E32164067123 /* TextInsertionService.swift */; };
+		A83E7616C6B87E89EE1ED6B6 /* KeyboardUseMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B739C7E73CA081BF1345E2F /* KeyboardUseMonitorTests.swift */; };
 		AAD111439F0F00767FB978CC /* TranscriptRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA73BA41B4C1D29882739D09 /* TranscriptRows.swift */; };
 		ABBE39ACCFDBB6ADD2342962 /* AppAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A15D7D20796CE98FF1612651 /* AppAnalytics.swift */; };
 		AD3FEEFC71CB4B5FDBC5BB40 /* MarkdownPlainText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DB69B8EB1406A11E2B610DB /* MarkdownPlainText.swift */; };
@@ -248,6 +250,7 @@
 		01DE926025E6275D49E5C880 /* GeneralSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsStore.swift; sourceTree = "<group>"; };
 		02AC4B1246BC17DF107F3059 /* ChatCompletionClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCompletionClient.swift; sourceTree = "<group>"; };
 		046F926226E346D7CA0D318F /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
+		0752F3160D623308CAB98425 /* KeyboardUseMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardUseMonitor.swift; sourceTree = "<group>"; };
 		07EE2587FA1A9B64552D866B /* SystemKeyboardAndFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemKeyboardAndFocus.swift; sourceTree = "<group>"; };
 		09900DB72F300BBB0FD974BA /* ASRModelComparisonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASRModelComparisonTests.swift; sourceTree = "<group>"; };
 		0D8A816470895160000BB7AD /* MicrophoneChoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophoneChoice.swift; sourceTree = "<group>"; };
@@ -353,6 +356,7 @@
 		778C3F4BA67F5BF8643B0057 /* PermisoPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermisoPanel.swift; sourceTree = "<group>"; };
 		7800616C5F659554DDE1F208 /* TestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestDoubles.swift; sourceTree = "<group>"; };
 		7AC4D5E428B67084450AD3ED /* MagicFormatSetupState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatSetupState.swift; sourceTree = "<group>"; };
+		7B739C7E73CA081BF1345E2F /* KeyboardUseMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardUseMonitorTests.swift; sourceTree = "<group>"; };
 		7CA10EB8C84897F696A908DF /* AppSupportDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSupportDirectory.swift; sourceTree = "<group>"; };
 		7E1E8F156A43681676F677E4 /* SpeechModelPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechModelPage.swift; sourceTree = "<group>"; };
 		7E364F608A86AF8E05A66582 /* SpeechDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechDetector.swift; sourceTree = "<group>"; };
@@ -568,6 +572,7 @@
 				09900DB72F300BBB0FD974BA /* ASRModelComparisonTests.swift */,
 				C67334A6B88F1804622886B9 /* ChatGPTFlowTests.swift */,
 				46827A76F2FD21D2011AF8EE /* DictationFlowTests.swift */,
+				7B739C7E73CA081BF1345E2F /* KeyboardUseMonitorTests.swift */,
 				46F2A2EF60D4C674DBC0CE04 /* MagicFormatFlowTests.swift */,
 				19482405959F3A9CEB559629 /* MeetingFlowTests.swift */,
 				7724E3E21E81F5F48274F641 /* ModelDownloadFlowTests.swift */,
@@ -983,6 +988,7 @@
 			isa = PBXGroup;
 			children = (
 				CB8F2926DC7DF9984CC9B4F8 /* BehindWindowBlur.swift */,
+				0752F3160D623308CAB98425 /* KeyboardUseMonitor.swift */,
 				CE09DDBA5737351A3653792F /* MainWindowComponents.swift */,
 				5D6D1BCE11FAE2A1E3DDCDA3 /* NumberText.swift */,
 				9F18E17958A33D5FE3072C7C /* SettingsRows.swift */,
@@ -1172,6 +1178,7 @@
 				7694B6F89D9CEC47010E3D04 /* IssueReportService.swift in Sources */,
 				9840E58357F352B218E9560E /* IssueReportView.swift in Sources */,
 				818B5A72C19132E340FABB00 /* IssueReportWindowController.swift in Sources */,
+				3E28C8A0A4D938FA8DEFBDC7 /* KeyboardUseMonitor.swift in Sources */,
 				6329C02CD614904D6633427B /* KeychainItem.swift in Sources */,
 				B41367E69D55F36D6503ACC9 /* KeychainService.swift in Sources */,
 				F51AB85283295FEEB0FA0866 /* LLMPostProcessor.swift in Sources */,
@@ -1312,6 +1319,7 @@
 				E42B9D9466C39190BE3E0F70 /* ChatGPTFlowTests.swift in Sources */,
 				31FC122C7A3CB060655EB972 /* DictationFlowTests.swift in Sources */,
 				7F64CC184D0F8983CE0D1E0D /* FlowApp.swift in Sources */,
+				A83E7616C6B87E89EE1ED6B6 /* KeyboardUseMonitorTests.swift in Sources */,
 				0826A9BA81847E988ADB57D3 /* MagicFormatFlowTests.swift in Sources */,
 				BA4C117126C93854737CA9FC /* MeetingFlowTests.swift in Sources */,
 				EC88BFE097FAF6AAF6F07C8E /* ModelDownloadFlowTests.swift in Sources */,
