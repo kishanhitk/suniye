@@ -9,7 +9,7 @@ protocol AppleFoundationModelsClient {
     func generate(instructions: String, prompt: String) async throws -> String
 }
 
-final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
+final class AppleFoundationModelsPostProcessor {
     private let client: AppleFoundationModelsClient
 
     init(client: AppleFoundationModelsClient = AppleFoundationModelsPostProcessor.makeDefaultClient()) {

@@ -61,8 +61,8 @@ enum MagicFormatPipeline {
         text: String,
         systemPrompt: String,
         keywords: [String],
-        singleTurn: Bool = false,
-        sanitize: (String) -> String = MagicFormatOutputSanitizer.sanitize,
+        singleTurn: Bool,
+        sanitize: (String) -> String,
         generate: (MagicFormatGenerationRequest) async throws -> String
     ) async throws -> String {
         let transcript = MagicFormatParagraphBreaks.applied(to: text)

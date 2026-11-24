@@ -4,41 +4,23 @@ import Foundation
 /// manages sessions, buffers to the durable queue, and uploads in batches with
 /// the conservative retry policy. Safe to call `track` from any thread.
 public final class AnalyticsClient: Analytics, @unchecked Sendable {
-    public struct Config: Sendable {
-        public var flushThreshold: Int
+    private enum Limits {
+        static let flushThreshold = 25
         /// Max events per upload request (also stays under AE's 250/invocation).
-        public var maxBatchSize: Int
-        public var flushInterval: TimeInterval
+        static let maxBatchSize = 25
+        static let flushInterval: TimeInterval = 60
         /// New session id after this much inactivity.
-        public var sessionGap: TimeInterval
-
-        public init(
-            flushThreshold: Int = 25,
-            maxBatchSize: Int = 25,
-            flushInterval: TimeInterval = 60,
-            sessionGap: TimeInterval = 5 * 60
-        ) {
-            self.flushThreshold = flushThreshold
-            self.maxBatchSize = maxBatchSize
-            self.flushInterval = flushInterval
-            self.sessionGap = sessionGap
-        }
+        static let sessionGap: TimeInterval = 5 * 60
     }
 
     private let identity: AnalyticsIdentity
     private let store: AnalyticsSettingsStore
     private let queue: EventQueue
-    private let uploader: AnalyticsUploading
-    private let config: Config
-    private let now: @Sendable () -> Date
-    private let makeID: @Sendable () -> String
-    private let sampler: @Sendable () -> Double
+    private let uploader: AnalyticsUploader
     /// Runs queue persistence (disk I/O) off the caller thread. `track` is called
     /// from the main actor during dictation, so the fsync'd append must not block
-    /// it. Injectable so tests can run it inline. Serial → FIFO event order.
-    private let persist: @Sendable (@escaping @Sendable () -> Void) -> Void
-
-    private static let defaultPersistQueue = DispatchQueue(
+    /// it. Serial → FIFO event order.
+    private static let persistQueue = DispatchQueue(
         label: "dev.suniye.analytics.persist", qos: .utility
     )
 
@@ -57,28 +39,18 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         identity: AnalyticsIdentity,
         store: AnalyticsSettingsStore,
         queue: EventQueue,
-        uploader: AnalyticsUploading,
-        config: Config = Config(),
-        now: @escaping @Sendable () -> Date = { Date() },
-        makeID: @escaping @Sendable () -> String = { UUID().uuidString },
-        sampler: @escaping @Sendable () -> Double = { Double.random(in: 0..<1) },
-        persist: (@Sendable (@escaping @Sendable () -> Void) -> Void)? = nil
+        uploader: AnalyticsUploader
     ) {
         self.identity = identity
         self.store = store
         self.queue = queue
         self.uploader = uploader
-        self.config = config
-        self.now = now
-        self.makeID = makeID
-        self.sampler = sampler
-        self.persist = persist ?? { work in AnalyticsClient.defaultPersistQueue.async(execute: work) }
 
-        let settings = store.loadOrCreate(makeInstallID: makeID, now: now)
+        let settings = store.loadOrCreate()
         self.enabled = settings.enabled
         self.directive = store.loadDirective()
-        let start = now()
-        self.sessionID = makeID()
+        let start = Date()
+        self.sessionID = UUID().uuidString
         self.lastActivityAt = start
         self.sessionStartedAt = start
     }
@@ -88,13 +60,13 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
     public func track(_ event: AnalyticsEvent) {
         lock.lock()
         guard emittingLocked() else { lock.unlock(); return }
-        if let rate = directive?.sampleRate, sampler() >= rate {
+        if let rate = directive?.sampleRate, Double.random(in: 0..<1) >= rate {
             lock.unlock(); return
         }
 
-        let current = now()
-        if current.timeIntervalSince(lastActivityAt) > config.sessionGap {
-            sessionID = makeID()
+        let current = Date()
+        if current.timeIntervalSince(lastActivityAt) > Limits.sessionGap {
+            sessionID = UUID().uuidString
             sessionStartedAt = current
             sessionEventCount = 0
         }
@@ -103,16 +75,16 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         let session = sessionID
         let encoded = EncodedEvent(
             event: event,
-            eventID: makeID(),
+            eventID: UUID().uuidString,
             eventTS: Int64(current.timeIntervalSince1970 * 1000),
             sessionID: session
         )
         lock.unlock()
 
         // The append fsyncs, and `track` runs on the main actor during dictation.
-        persist { [self] in
+        Self.persistQueue.async { [self] in
             queue.append(encoded, now: current)
-            if queue.count >= config.flushThreshold {
+            if queue.count >= Limits.flushThreshold {
                 Task { await self.flush() }
             }
         }
@@ -122,11 +94,11 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         lock.lock()
         self.enabled = enabled
         lock.unlock()
-        store.setEnabled(enabled, makeInstallID: makeID)
+        store.setEnabled(enabled)
         if !enabled {
             // Route through `persist` so the drop happens-after any queued
             // appends (FIFO) — an opt-out clears events still in flight too.
-            persist { [self] in queue.removeAll() }
+            Self.persistQueue.async { [self] in queue.removeAll() }
         }
     }
 
@@ -135,7 +107,7 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         defer { endFlush() }
 
         while true {
-            let events = queue.peek(max: config.maxBatchSize, now: now())
+            let events = queue.peek(max: Limits.maxBatchSize, now: Date())
             if events.isEmpty { break }
 
             let outcome = await uploader.upload(makeBatch(events))
@@ -162,7 +134,7 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         timerTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
-                let interval = self.config.flushInterval
+                let interval = Limits.flushInterval
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 if Task.isCancelled { break }
                 self.emitHealthIfNeeded()
@@ -210,7 +182,7 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
 
     private func sessionSummary() -> (durationMs: Int, eventCount: Int) {
         lock.lock(); defer { lock.unlock() }
-        return (Int(now().timeIntervalSince(sessionStartedAt) * 1000), sessionEventCount)
+        return (Int(Date().timeIntervalSince(sessionStartedAt) * 1000), sessionEventCount)
     }
 
     private func makeBatch(_ events: [EncodedEvent]) -> AnalyticsBatch {
@@ -221,7 +193,7 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
             build: identity.build,
             channel: identity.channel,
             isDebug: identity.isDebug,
-            sentAt: Int64(now().timeIntervalSince1970 * 1000),
+            sentAt: Int64(Date().timeIntervalSince1970 * 1000),
             device: identity.device?.batchProps,
             events: events
         )

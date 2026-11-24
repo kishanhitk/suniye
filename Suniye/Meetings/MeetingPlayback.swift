@@ -25,18 +25,16 @@ final class MeetingPlayback {
 
     @ObservationIgnored private let store: MeetingStore
     @ObservationIgnored private let makePlayer: @MainActor ([URL]) throws -> MeetingAudioPlayer
-    @ObservationIgnored private let tickInterval: Duration
+    @ObservationIgnored private let tickInterval = Duration.milliseconds(100)
     @ObservationIgnored private var player: MeetingAudioPlayer?
     @ObservationIgnored private var ticker: Task<Void, Never>?
 
     init(
         store: MeetingStore,
-        makePlayer: @escaping @MainActor ([URL]) throws -> MeetingAudioPlayer,
-        tickInterval: Duration = .milliseconds(100)
+        makePlayer: @escaping @MainActor ([URL]) throws -> MeetingAudioPlayer
     ) {
         self.store = store
         self.makePlayer = makePlayer
-        self.tickInterval = tickInterval
     }
 
     /// Opens the audio of `id`, and closes the audio of another meeting.

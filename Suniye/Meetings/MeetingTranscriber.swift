@@ -64,7 +64,7 @@ actor MeetingTranscriber {
     private let lines: MeetingStore.SegmentFile
     private let engine: TranscriptionServiceProtocol
     private let mayDecode: @Sendable () async -> Bool
-    private let retryDelay: Duration
+    private let retryDelay = Duration.seconds(1)
     private let onProgress: @Sendable (MeetingTranscriptProgress) -> Void
 
     private var segmenters: [MeetingTrack: MeetingSegmenter] = [:]
@@ -86,7 +86,6 @@ actor MeetingTranscriber {
         lines: MeetingStore.SegmentFile = .transcript,
         engine: TranscriptionServiceProtocol,
         mayDecode: @escaping @Sendable () async -> Bool,
-        retryDelay: Duration = .seconds(1),
         onProgress: @escaping @Sendable (MeetingTranscriptProgress) -> Void
     ) {
         self.meetingID = meetingID
@@ -95,7 +94,6 @@ actor MeetingTranscriber {
         self.lines = lines
         self.engine = engine
         self.mayDecode = mayDecode
-        self.retryDelay = retryDelay
         self.onProgress = onProgress
     }
 

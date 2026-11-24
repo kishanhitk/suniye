@@ -3,15 +3,6 @@ import ApplicationServices
 import Carbon.HIToolbox
 import Foundation
 
-protocol TextInsertionServiceProtocol {
-    func captureInsertionContext() -> TextInsertionContext?
-    @MainActor @discardableResult func insertText(_ text: String) async throws -> InsertionOutcome
-    func copyTextToClipboard(_ text: String) throws
-    func submitActiveInput() throws
-    func makeFocusedFieldValueProvider() -> (() -> String?)?
-    func warmTargetAppAccessibility()
-}
-
 /// How an insertion reached the target, which decides whether the caller may
 /// follow it with Return: only a paste we watched land in a known text element
 /// is safe to submit.
@@ -31,7 +22,7 @@ struct TextInsertionContext: Equatable {
     let nextCharacter: Character?
 }
 
-final class TextInsertionService: TextInsertionServiceProtocol {
+final class TextInsertionService {
     typealias ClipboardItemSnapshot = [NSPasteboard.PasteboardType: Data]
     typealias ClipboardSnapshot = [ClipboardItemSnapshot]
     typealias FocusedTextSnapshot = (value: String?, selectedText: String?, selectedRange: NSRange?)
@@ -68,7 +59,6 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     }
 
     var pasteboardProvider: () -> NSPasteboard = { .general }
-    var accessibilityTrustProvider: () -> Bool = { AXIsProcessTrusted() }
     var focusedElementLookupProvider: (() -> FocusedElementLookup)?
     var focusedTextSnapshotProvider: ((AXUIElement) -> FocusedTextSnapshot?)?
     var selectedTextSetter: ((AXUIElement, String) -> Bool)?
@@ -271,7 +261,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
             return focusedElementLookupProvider()
         }
 
-        guard accessibilityTrustProvider() else {
+        guard AXIsProcessTrusted() else {
             // Without the permission nothing can be read or posted, and the
             // caller surfaces its own permission prompt.
             return .notTextInput

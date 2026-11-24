@@ -10,17 +10,12 @@ import Foundation
 /// margin. An in-memory `cachedCount` keeps `count` O(1). Overflow drops the
 /// oldest and is surfaced as an eviction count (reported via `analytics_health`).
 public final class EventQueue: @unchecked Sendable {
-    public struct Config: Sendable {
-        public var maxEvents: Int
-        public var maxAgeSeconds: TimeInterval
-        public init(maxEvents: Int = 5_000, maxAgeSeconds: TimeInterval = 7 * 24 * 60 * 60) {
-            self.maxEvents = maxEvents
-            self.maxAgeSeconds = maxAgeSeconds
-        }
+    private enum Limits {
+        static let maxEvents = 5_000
+        static let maxAgeSeconds: TimeInterval = 7 * 24 * 60 * 60
     }
 
     private let fileURL: URL
-    private let config: Config
     private let lock = NSLock()
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -35,11 +30,10 @@ public final class EventQueue: @unchecked Sendable {
 
     /// Slack above `maxEvents` before an append triggers an O(n) size sweep, so
     /// the append hot path stays O(1) even at the cap (sweep is amortized).
-    private var pruneMargin: Int { max(1, config.maxEvents / 10) }
+    private var pruneMargin: Int { max(1, Limits.maxEvents / 10) }
 
-    public init(fileURL: URL, config: Config = Config()) {
+    public init(fileURL: URL) {
         self.fileURL = fileURL
-        self.config = config
         try? FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -53,7 +47,7 @@ public final class EventQueue: @unchecked Sendable {
         guard let line = try? encoder.encode(event) else { return }
         appendLineLocked(line)
         cachedCount += 1
-        if cachedCount > config.maxEvents + pruneMargin {
+        if cachedCount > Limits.maxEvents + pruneMargin {
             pruneLocked(now: now)
         }
     }
@@ -132,14 +126,14 @@ public final class EventQueue: @unchecked Sendable {
     private func pruneLocked(now: Date) -> [(Data, Int64)] {
         var entries = readAllLocked()
 
-        let cutoffMs = Int64((now.timeIntervalSince1970 - config.maxAgeSeconds) * 1000)
+        let cutoffMs = Int64((now.timeIntervalSince1970 - Limits.maxAgeSeconds) * 1000)
         let beforeTTL = entries.count
         entries.removeAll { $0.1 < cutoffMs }
         let ttlRemoved = beforeTTL - entries.count
 
         var sizeRemoved = 0
-        if entries.count > config.maxEvents {
-            sizeRemoved = entries.count - config.maxEvents
+        if entries.count > Limits.maxEvents {
+            sizeRemoved = entries.count - Limits.maxEvents
             entries.removeFirst(sizeRemoved)
         }
 

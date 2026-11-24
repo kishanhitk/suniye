@@ -43,28 +43,20 @@ public struct KillSwitchDirective: Codable, Equatable, Sendable {
 
 public final class AnalyticsSettingsStore: @unchecked Sendable {
     private let userDefaults: UserDefaults
-    private let settingsKey: String
-    private let directiveKey: String
+    private let settingsKey = "dev.suniye.analytics.settings"
+    private let directiveKey = "dev.suniye.analytics.settings.killswitch"
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(
-        userDefaults: UserDefaults = .standard,
-        storageKey: String = "dev.suniye.analytics.settings"
-    ) {
+    public init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
-        self.settingsKey = storageKey
-        self.directiveKey = storageKey + ".killswitch"
     }
 
     /// Returns existing settings, or creates + persists fresh ones (generating
     /// the frozen install id) on first call.
-    public func loadOrCreate(
-        makeInstallID: () -> String = { UUID().uuidString },
-        now: () -> Date = { Date() }
-    ) -> AnalyticsSettings {
+    public func loadOrCreate() -> AnalyticsSettings {
         if let existing = peek() { return existing }
-        let fresh = AnalyticsSettings(installID: makeInstallID(), enabled: true, firstLaunchAt: now())
+        let fresh = AnalyticsSettings(installID: UUID().uuidString, enabled: true, firstLaunchAt: Date())
         save(fresh)
         return fresh
     }
@@ -80,19 +72,10 @@ public final class AnalyticsSettingsStore: @unchecked Sendable {
         userDefaults.set(data, forKey: settingsKey)
     }
 
-    public func setEnabled(_ enabled: Bool, makeInstallID: () -> String = { UUID().uuidString }) {
-        var settings = loadOrCreate(makeInstallID: makeInstallID)
+    public func setEnabled(_ enabled: Bool) {
+        var settings = loadOrCreate()
         settings.enabled = enabled
         save(settings)
-    }
-
-    /// Rotates the install id (clears + regenerates). Used by "reset analytics".
-    @discardableResult
-    public func resetIdentity(makeInstallID: () -> String = { UUID().uuidString }) -> AnalyticsSettings {
-        var settings = loadOrCreate(makeInstallID: makeInstallID)
-        settings.installID = makeInstallID()
-        save(settings)
-        return settings
     }
 
     public func loadDirective() -> KillSwitchDirective? {

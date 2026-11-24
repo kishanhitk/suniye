@@ -7,23 +7,18 @@ import AppKit
 final class AppIconCache {
     static let shared = AppIconCache()
 
-    private let resolve: (String) -> NSImage?
     private var icons: [String: NSImage?] = [:]
-
-    init(resolve: @escaping (String) -> NSImage? = AppIconCache.launchServicesIcon) {
-        self.resolve = resolve
-    }
 
     func icon(for bundleID: String) -> NSImage? {
         if let cached = icons[bundleID] {
             return cached
         }
-        let icon = resolve(bundleID)
+        let icon = Self.launchServicesIcon(for: bundleID)
         icons[bundleID] = icon
         return icon
     }
 
-    static func launchServicesIcon(for bundleID: String) -> NSImage? {
+    private static func launchServicesIcon(for bundleID: String) -> NSImage? {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
             .map { NSWorkspace.shared.icon(forFile: $0.path) }
     }

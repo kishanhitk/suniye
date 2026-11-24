@@ -23,37 +23,6 @@ struct LocalGemmaMagicFormatConfig: Equatable {
     let idleTimeoutSeconds: Double
 }
 
-protocol LLMPostProcessor {
-    func polish(text: String, config: LLMConfig) async throws -> String
-    func testSetup(config: LLMConfig) async throws
-    /// Freeform generation used by Edit Mode; bypasses Magic Format's dictation
-    /// output policy (length/multiline validation). Provider sanitizers still run.
-    func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String
-}
-
-protocol AppleMagicFormatPostProcessor {
-    var availability: AppleFoundationModelsAvailability { get }
-    func polish(text: String, config: AppleMagicFormatConfig) async throws -> String
-    func testSetup(config: AppleMagicFormatConfig) async throws
-    func generate(instructions: String, userText: String, config: AppleMagicFormatConfig) async throws -> String
-}
-
-protocol LocalGemmaMagicFormatPostProcessor {
-    var availability: LocalGemmaAvailability { get }
-    func isRuntimeWarm() async -> Bool
-    func prewarm(config: LocalGemmaMagicFormatConfig) async
-    func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String
-    func testSetup(config: LocalGemmaMagicFormatConfig) async throws
-    func generate(instructions: String, userText: String, config: LocalGemmaMagicFormatConfig) async throws -> String
-    func stopRuntime() async
-}
-
-extension LocalGemmaMagicFormatPostProcessor {
-    func isRuntimeWarm() async -> Bool { false }
-    func prewarm(config: LocalGemmaMagicFormatConfig) async {}
-    func stopRuntime() async {}
-}
-
 enum AppleFoundationModelsAvailability: Equatable {
     case available
     case deviceNotEligible

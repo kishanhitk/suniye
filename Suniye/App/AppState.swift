@@ -36,7 +36,7 @@ final class AppState {
         case error
     }
 
-    var phase: Phase = .loading {
+    private(set) var phase: Phase = .loading {
         didSet {
             if oldValue != phase {
                 AppLogger.shared.log(.info, "phase changed: \(oldValue.rawValue) -> \(phase.rawValue)")
@@ -46,7 +46,7 @@ final class AppState {
             }
         }
     }
-    var lastError: String?
+    private(set) var lastError: String?
 
     /// Every change goes through `updateGeneralSettings`, which saves it and
     /// applies its effects in `generalSettingsDidChange(from:)`.
@@ -134,10 +134,10 @@ final class AppState {
     }
     var automaticallyChecksForUpdates = false
     var appVersionText: String {
-        currentAppVersionProvider()?.displayString ?? "Unknown"
+        AppVersion.fromBundle()?.displayString ?? "Unknown"
     }
 
-    var downloadProgress: Double = 0
+    private(set) var downloadProgress: Double = 0
     /// The model that downloads to become the meeting transcript model.
     private(set) var meetingTranscriptModelDownload: ASRModelID?
     /// Counts the transcript model choices, so an older one never wins.
@@ -145,24 +145,24 @@ final class AppState {
     /// Whether macOS has the asset of each system-managed speech model, as
     /// `refreshSystemManagedASRAssets()` last asked.
     private(set) var systemManagedASRAssetInstalled: [ASRModelID: Bool] = [:]
-    var modelDownloadStartedAt: Date?
+    private(set) var modelDownloadStartedAt: Date?
     /// One model operation at a time. Downloads and loads were split into
     /// separate slots so an installed model could be selected mid-download; the
     /// resulting concurrent phase/progress state proved to be a source of races
     /// (stranded captures, progress reset by unrelated operations, deferrals
     /// reported as failures), so operations are serialised again. Reintroducing
     /// concurrency needs a real per-operation model, not a second slot.
-    var activeASRModelOperationID: ASRModelID?
+    private(set) var activeASRModelOperationID: ASRModelID?
 
-    var loadedASRModelID: ASRModelID? {
+    private(set) var loadedASRModelID: ASRModelID? {
         didSet {
             if oldValue != loadedASRModelID {
                 meetings.speechModelChanged(loadedASRModelID)
             }
         }
     }
-    var lastFailedASRModelID: ASRModelID?
-    var lastFailedASRModelError: String?
+    private(set) var lastFailedASRModelID: ASRModelID?
+    private(set) var lastFailedASRModelError: String?
     let library: DictationLibrary
     var recentResults: [RecentResult] {
         get { library.results }
@@ -184,7 +184,7 @@ final class AppState {
     }
 
 
-    var activeOnboardingStep: OnboardingStep? {
+    private(set) var activeOnboardingStep: OnboardingStep? {
         didSet {
             guard oldValue != activeOnboardingStep else {
                 return
@@ -196,7 +196,7 @@ final class AppState {
         }
     }
     var onboardingPracticeText = ""
-    var onboardingPracticeResult: OnboardingPracticeResult?
+    private(set) var onboardingPracticeResult: OnboardingPracticeResult?
     private(set) var onboardingRun = OnboardingRun()
     /// User-facing reason the Get Started preflight refused to start (disk space).
     var onboardingDiskSpaceMessage: String?
@@ -224,19 +224,17 @@ final class AppState {
     private(set) var systemGlobeKeyAction: SystemGlobeKeyAction = .doNothing
     @ObservationIgnored private var hasTrackedMagicFormatNudgeShown = false
 
-    var hasMicPermission = false
+    private(set) var hasMicPermission = false
     /// True when the mic authorization is `.denied`/`.restricted` — the system
     /// prompt can never re-appear, so Enable buttons must become Open Settings.
-    var hasMicPermissionBeenDenied = false
-    var hasAccessibilityPermission = false
+    private(set) var hasMicPermissionBeenDenied = false
+    private(set) var hasAccessibilityPermission = false
 
     @ObservationIgnored private(set) lazy var issueReport = IssueReportForm(
         uploadService: issueReportUploadService,
-        diagnosticBundleService: diagnosticBundleService,
         context: { [unowned self] in issueReportContext() },
         nowProvider: nowProvider,
         fileOpener: fileOpener,
-        temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
         diagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker
     )
 
@@ -301,7 +299,7 @@ final class AppState {
         get { llmSettings.appPromptBindings }
         set { updateLLMSettings { $0.appPromptBindings = newValue } }
     }
-    var hasLLMAPIKey = false
+    private(set) var hasLLMAPIKey = false
     var llmKeyOperationError: String?
     /// One save or clear of the API key at a time: two that overlap could
     /// finish in either order and undo the user's last action.
@@ -330,7 +328,7 @@ final class AppState {
     /// Changes at each read, save and clear of the API key: a read that began
     /// before a save or a clear does not bring back the old key.
     private var llmKeyStateVersion = 0
-    var localGemmaInstallState: LocalLLMInstallState = .notInstalled {
+    private(set) var localGemmaInstallState: LocalLLMInstallState = .notInstalled {
         didSet {
             if oldValue != localGemmaInstallState {
                 meetings.summaries.availabilityChanged()
@@ -338,7 +336,7 @@ final class AppState {
         }
     }
 
-    var launchAtLoginStatus: LaunchAtLoginStatus = .disabled
+    private(set) var launchAtLoginStatus: LaunchAtLoginStatus = .disabled
     var launchAtLoginError: String?
 
     var asrModelCatalog: [ASRModelCatalogEntry] {
@@ -941,26 +939,23 @@ final class AppState {
         return items
     }
 
-    var floatingIndicatorState: FloatingIndicatorState = .idle
-    /// Tail of the in-progress transcript shown in the floating indicator while
-    /// recording. Cleared on stop, insert, and every error path.
-    private(set) var livePartialTranscript: String?
+    private(set) var floatingIndicatorState: FloatingIndicatorState = .idle
     /// Last full stabilized partial (pre-tail-truncation); the stabilizer anchors
     /// new decodes against it. Reset on preview start/stop so sessions never bleed.
     private var lastPublishedPartialTranscript = ""
 
-    private let modelManager: ModelManagerProtocol
+    private let modelManager: ModelManager
     private let transcriptionService: TranscriptionServiceProtocol
     private let audioCaptureService: AudioCaptureServiceProtocol
-    private let textInsertionService: TextInsertionServiceProtocol
-    private let editModeSelectionProvider: EditModeSelectionProviding
+    private let textInsertionService: TextInsertionService
+    private let editModeSelectionProvider: EditModeService
     private let hotkeyService: HotkeyServiceProtocol
     private let soundFeedbackService: SoundFeedbackServiceProtocol
-    private let partialTranscriptionScheduler: PartialTranscriptionScheduler
+    private let partialTranscriptionScheduler = PartialTranscriptionScheduler()
     private let floatingIndicatorController = FloatingIndicatorController()
-    private let llmPostProcessor: LLMPostProcessor
-    private let appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
-    private let localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor
+    private let llmPostProcessor: OpenRouterPostProcessor
+    private let appleMagicFormatPostProcessor: AppleFoundationModelsPostProcessor
+    private let localGemmaMagicFormatPostProcessor: LocalGemmaPostProcessor
     private let magicFormatCoordinator: MagicFormatCoordinator
     let meetings: MeetingCoordinator
     let chatGPTSetup: ChatGPTSummarySetup
@@ -969,25 +964,23 @@ final class AppState {
     /// shows it and clears the request.
     var requestedDestination: MainWindowDestination?
     @ObservationIgnored private var callCardPresenter: MeetingCallCardPresenter?
-    private let localLLMModelManager: LocalLLMModelManagerProtocol
-    private let llmSettingsStore: LLMSettingsStoreProtocol
-    private let magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol
-    private let generalSettingsStore: GeneralSettingsStoreProtocol
-    private let keychainService: KeychainServiceProtocol
+    private let localLLMModelManager: LocalLLMModelManager
+    private let llmSettingsStore: LLMSettingsStore
+    private let magicFormatPromptFileStore: MagicFormatPromptFileStore
+    private let generalSettingsStore: GeneralSettingsStore
+    private let keychainService: KeychainService
     private let appUpdateController: AppUpdateControllerProtocol
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
-    private let diagnosticBundleService: DiagnosticBundleServiceProtocol
-    private let issueReportUploadService: IssueReportUploadServiceProtocol
+    private let issueReportUploadService: IssueReportUploadService
     private let analytics: Analytics
-    private let editLearningService: EditLearningServiceProtocol
+    private let editLearningService: EditLearningService
     private let learningToastPresenter: LearningToastPresenting
-    private let currentAppVersionProvider: () -> AppVersion?
     private let nowProvider: () -> Date
     private let frontmostAppBundleIDProvider: () -> String?
     private let fileOpener: (URL) -> Bool
     private let accessibilityOnboarding: AccessibilityOnboardingPresenting
-    /// Injectable microphone TCC seams so denial/grant paths are unit-testable
-    /// (the real AVCaptureDevice statics cannot be driven headless in CI).
+    /// The microphone permission status and prompt. Tests replace them: the
+    /// real AVCaptureDevice prompt cannot run headless in CI.
     private let micAuthorizationStatusProvider: () -> AVAuthorizationStatus
     private let micAccessRequester: () async -> Bool
     /// Injectable Accessibility TCC seam for route selection after the user grants
@@ -1000,8 +993,6 @@ final class AppState {
     /// Injectable free-disk probe for the onboarding download preflight.
     private let availableDiskCapacityProvider: () async -> Int64?
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
-    private let temporaryFileCleanupScheduler: (URL) -> Void
-    private let magicFormatSlowWarningDelaySeconds: TimeInterval
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
 
@@ -1046,7 +1037,7 @@ final class AppState {
     private var localGemmaDrafterDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
     private var localGemmaDownloadStartedAt: Date?
-    private let llmE2EMode: LLME2EMode
+    private let llmE2EMode = AppState.detectLLME2EMode(arguments: CommandLine.arguments)
     private enum DictationDestination: Equatable {
         case systemInsertion
         case clipboardOnly
@@ -1075,33 +1066,28 @@ final class AppState {
     }
 
     init(
-        modelManager: ModelManagerProtocol = ModelManager(),
+        modelManager: ModelManager = ModelManager(),
         transcriptionService: TranscriptionServiceProtocol = RoutingTranscriptionService(),
         audioCaptureService: AudioCaptureServiceProtocol = AudioCaptureService(),
-        textInsertionService: TextInsertionServiceProtocol = TextInsertionService(),
-        editModeSelectionProvider: EditModeSelectionProviding? = nil,
+        textInsertionService: TextInsertionService = TextInsertionService(),
+        editModeSelectionProvider: EditModeService? = nil,
         hotkeyService: HotkeyServiceProtocol = HotkeyService(),
         soundFeedbackService: SoundFeedbackServiceProtocol = SoundFeedbackService(),
-        partialTranscriptionScheduler: PartialTranscriptionScheduler? = nil,
-        llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
-        appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor = AppleFoundationModelsPostProcessor(),
-        localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor? = nil,
-        localLLMModelManager: LocalLLMModelManagerProtocol = LocalLLMModelManager(),
-        llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
-        magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol = MagicFormatPromptFileStore(),
-        generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
-        historyStore: HistoryStoreProtocol = HistoryStore(),
-        statsStore: DictationStatsStoring = DictationStatsStore.makeDefault(),
-        keychainService: KeychainServiceProtocol = KeychainService(),
-        chatGPTCredentialStore: ChatGPTCredentialStore = KeychainChatGPTCredentialStore(),
+        llmPostProcessor: OpenRouterPostProcessor = OpenRouterPostProcessor(),
+        appleMagicFormatPostProcessor: AppleFoundationModelsPostProcessor = AppleFoundationModelsPostProcessor(),
+        localLLMModelManager: LocalLLMModelManager = LocalLLMModelManager(),
+        llmSettingsStore: LLMSettingsStore = LLMSettingsStore(),
+        magicFormatPromptFileStore: MagicFormatPromptFileStore = MagicFormatPromptFileStore(),
+        generalSettingsStore: GeneralSettingsStore = GeneralSettingsStore(),
+        historyStore: HistoryStore = HistoryStore(),
+        statsStore: DictationStatsStore = DictationStatsStore.makeDefault(),
+        keychainService: KeychainService = KeychainService(),
+        chatGPTCredentialStore: KeychainChatGPTCredentialStore = KeychainChatGPTCredentialStore(),
         appUpdateController: AppUpdateControllerProtocol? = nil,
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
-        diagnosticBundleService: DiagnosticBundleServiceProtocol = DiagnosticBundleService(),
-        issueReportUploadService: IssueReportUploadServiceProtocol = IssueReportUploadService(),
+        issueReportUploadService: IssueReportUploadService = IssueReportUploadService(),
         analytics: Analytics = AppAnalytics.makeDefault(),
-        editLearningService: EditLearningServiceProtocol? = nil,
         learningToastPresenter: LearningToastPresenting? = nil,
-        currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
         nowProvider: @escaping () -> Date = Date.init,
         frontmostAppBundleIDProvider: @escaping () -> String? = { NSWorkspace.shared.frontmostApplication?.bundleIdentifier },
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
@@ -1120,16 +1106,8 @@ final class AppState {
             panel.canCreateDirectories = true
             return panel.runModal() == .OK ? panel.url : nil
         },
-        temporaryFileCleanupScheduler: @escaping (URL) -> Void = { url in
-            Task.detached(priority: .utility) {
-                try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000)
-                try? FileManager.default.removeItem(at: url)
-            }
-        },
-        magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
         meetingCoordinator: MeetingCoordinator? = nil,
-        startServices: Bool = true,
-        llmE2EMode: LLME2EMode? = nil
+        startServices: Bool = true
     ) {
         self.modelManager = modelManager
         self.transcriptionService = transcriptionService
@@ -1138,7 +1116,6 @@ final class AppState {
         self.editModeSelectionProvider = editModeSelectionProvider ?? EditModeService()
         self.hotkeyService = hotkeyService
         self.soundFeedbackService = soundFeedbackService
-        self.partialTranscriptionScheduler = partialTranscriptionScheduler ?? PartialTranscriptionScheduler()
         self.llmPostProcessor = llmPostProcessor
         self.appleMagicFormatPostProcessor = appleMagicFormatPostProcessor
         self.localLLMModelManager = localLLMModelManager
@@ -1154,7 +1131,7 @@ final class AppState {
                 }
             )
         )
-        let resolvedLocalGemmaPostProcessor = localGemmaMagicFormatPostProcessor ?? LocalGemmaPostProcessor(
+        let localGemmaPostProcessor = LocalGemmaPostProcessor(
             client: localGemmaClient,
             onGeneration: { timings in
                 analytics.track(.llmGeneration(
@@ -1167,11 +1144,11 @@ final class AppState {
                 ))
             }
         )
-        self.localGemmaMagicFormatPostProcessor = resolvedLocalGemmaPostProcessor
+        self.localGemmaMagicFormatPostProcessor = localGemmaPostProcessor
         self.magicFormatCoordinator = MagicFormatCoordinator(
             apiPostProcessor: llmPostProcessor,
             applePostProcessor: appleMagicFormatPostProcessor,
-            localGemmaPostProcessor: resolvedLocalGemmaPostProcessor
+            localGemmaPostProcessor: localGemmaPostProcessor
         )
         let chatGPTConnection = ChatGPTConnection(store: chatGPTCredentialStore) { url in
             DispatchQueue.main.async { NSWorkspace.shared.open(url) }
@@ -1182,7 +1159,7 @@ final class AppState {
             transcriptionService: transcriptionService,
             modelManager: modelManager,
             appleSummaryAvailability: { appleMagicFormatPostProcessor.availability },
-            localSummaryAvailability: { resolvedLocalGemmaPostProcessor.availability },
+            localSummaryAvailability: { localGemmaPostProcessor.availability },
             localGemmaClient: localGemmaClient,
             chatGPTPlan: chatGPTPlan,
             llmSettingsStore: llmSettingsStore,
@@ -1198,12 +1175,10 @@ final class AppState {
         self.keychainService = keychainService
         self.appUpdateController = appUpdateController ?? AppUpdateControllerFactory.makeDefault()
         self.launchAtLoginService = launchAtLoginService
-        self.diagnosticBundleService = diagnosticBundleService
         self.issueReportUploadService = issueReportUploadService
         self.analytics = analytics
-        self.editLearningService = editLearningService ?? EditLearningService()
+        self.editLearningService = EditLearningService()
         self.learningToastPresenter = learningToastPresenter ?? LearningToastPresenter()
-        self.currentAppVersionProvider = currentAppVersionProvider
         self.nowProvider = nowProvider
         self.frontmostAppBundleIDProvider = frontmostAppBundleIDProvider
         self.fileOpener = fileOpener
@@ -1225,11 +1200,8 @@ final class AppState {
             }.value
         }
         self.issueReportDiagnosticsDestinationPicker = issueReportDiagnosticsDestinationPicker
-        self.temporaryFileCleanupScheduler = temporaryFileCleanupScheduler
-        self.magicFormatSlowWarningDelaySeconds = magicFormatSlowWarningDelaySeconds
         self.runtimeServicesEnabled = startServices
         self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
-        self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
         self.appUpdateController.onStateChange = { [weak self] in
             self?.refreshUpdateControllerState()
         }
@@ -3321,14 +3293,12 @@ final class AppState {
 
     /// Warm the local Gemma runtime iff Magic Format is enabled and will actually
     /// resolve to the local provider. Provider resolution + config assembly live in
-    /// the coordinator so this can never drift from the polish path. Returns the
-    /// spawned probe task (for tests); nil when ineligible.
-    @discardableResult
-    func prewarmLocalLLMIfEligible() -> Task<Void, Never>? {
+    /// the coordinator so this can never drift from the polish path.
+    private func prewarmLocalLLMIfEligible() {
         guard llmEnabled else {
-            return nil
+            return
         }
-        return magicFormatCoordinator.prewarmLocalIfEligible(
+        magicFormatCoordinator.prewarmLocalIfEligible(
             requestedProvider: llmProvider,
             settings: llmSettings,
             appleAvailability: appleMagicFormatAvailability,
@@ -3647,9 +3617,7 @@ final class AppState {
         analytics.track(Self.audioBackendUsedEvent(for: route))
     }
 
-    /// The `audio_backend_used` event for a resolved capture route. Pure, so the
-    /// rung / fallback derivation is unit-testable without driving live capture.
-    nonisolated static func audioBackendUsedEvent(for route: AudioRouteSnapshot) -> AnalyticsEvent {
+    private static func audioBackendUsedEvent(for route: AudioRouteSnapshot) -> AnalyticsEvent {
         .audioBackendUsed(
             backend: SafeLabel(route.backend.rawValue),
             // Only `.backendStartFailed` (→ standardEngine) is a real ladder
@@ -4053,7 +4021,7 @@ final class AppState {
     }
 
     private func issueReportContext() -> IssueReportContext {
-        let version = currentAppVersionProvider()
+        let version = AppVersion.fromBundle()
         return IssueReportContext(
             app: .init(
                 version: version?.displayString ?? "Unknown",
@@ -4170,9 +4138,7 @@ final class AppState {
 
     private func startMagicFormatSlowWarningTask() -> Task<Void, Never> {
         Task { @MainActor [weak self] in
-            guard let delaySeconds = self?.magicFormatSlowWarningDelaySeconds else { return }
-            let nanoseconds = UInt64(max(0, delaySeconds) * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanoseconds)
+            try? await Task.sleep(for: .seconds(5))
             guard let self, !Task.isCancelled else { return }
             guard case .processing = self.floatingIndicatorState else { return }
             self.setFloatingIndicatorState(.processing(message: "Magic Format is taking longer than usual."))
@@ -4345,7 +4311,6 @@ final class AppState {
 
     private func stopLivePreview() {
         partialTranscriptionScheduler.stop()
-        livePartialTranscript = nil
         lastPublishedPartialTranscript = ""
         // Strip a preview that is still visible (e.g. toggled off mid-recording);
         // level updates would otherwise keep carrying it forward.
@@ -4368,7 +4333,6 @@ final class AppState {
         )
         lastPublishedPartialTranscript = stabilized
         let preview = FloatingIndicatorMetrics.previewTail(stabilized)
-        livePartialTranscript = preview.isEmpty ? nil : preview
         if case let .listening(levels, source, _) = floatingIndicatorState {
             // An empty decode keeps `.pending` (space stays reserved), it does
             // not fall back to `.off`.
@@ -4708,13 +4672,13 @@ extension AppState: MeetingHost {
 
     fileprivate static func makeMeetingCoordinator(
         transcriptionService: TranscriptionServiceProtocol,
-        modelManager: ModelManagerProtocol,
+        modelManager: ModelManager,
         appleSummaryAvailability: @escaping () -> AppleFoundationModelsAvailability,
         localSummaryAvailability: @escaping () -> LocalGemmaAvailability,
-        localGemmaClient: LocalGemmaClient,
+        localGemmaClient: LocalGemmaLlamaCppClient,
         chatGPTPlan: ChatGPTPlanClient,
-        llmSettingsStore: LLMSettingsStoreProtocol,
-        keychainService: KeychainServiceProtocol,
+        llmSettingsStore: LLMSettingsStore,
+        keychainService: KeychainService,
         analytics: Analytics
     ) -> MeetingCoordinator {
         let settingsStore = MeetingSettingsStore()

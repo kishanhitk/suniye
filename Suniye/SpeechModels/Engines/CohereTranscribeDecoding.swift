@@ -14,12 +14,12 @@ enum CohereTranscribe {
 
     /// Picks the prompt language: an explicit supported hint wins, then the
     /// system language, then English. The model has no language detection.
-    static func resolveLanguage(hint: String, locale: Locale = .current) -> String {
+    static func resolveLanguage(hint: String) -> String {
         let trimmed = hint.trimmingCharacters(in: .whitespaces)
         if supportedLanguages.contains(trimmed) {
             return trimmed
         }
-        if let code = locale.language.languageCode?.identifier, supportedLanguages.contains(code) {
+        if let code = Locale.current.language.languageCode?.identifier, supportedLanguages.contains(code) {
             return code
         }
         return "en"
@@ -150,7 +150,7 @@ struct CohereVocabulary {
 /// model can fall into on noise; cheaper to cut than to run to the cap).
 struct CohereGreedyDecoder {
     let endOfTextID: Int64
-    var maxConsecutiveRepeats = 8
+    let maxConsecutiveRepeats = 8
     private var lastToken: Int64 = -1
     private var consecutive = 0
 

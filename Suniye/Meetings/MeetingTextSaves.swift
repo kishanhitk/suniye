@@ -29,13 +29,9 @@ final class MeetingTextSaves {
         let task: Task<Void, Never>
     }
 
-    private let pause: Duration
+    private let pause = Duration.milliseconds(750)
     private var waiting: [Key: Waiting] = [:]
     private var running: [Key: Running] = [:]
-
-    init(pause: Duration = .milliseconds(750)) {
-        self.pause = pause
-    }
 
     /// Nothing waits and nothing runs.
     var isIdle: Bool {

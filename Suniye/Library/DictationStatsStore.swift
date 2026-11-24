@@ -127,15 +127,14 @@ struct DictationStats: Codable, Equatable {
 
     // MARK: - Mutation
 
-    /// `now` anchors retention. It is deliberately separate from `date`: seeding
-    /// replays historical dictations, and trimming against the entry being
-    /// written would keep everything newer than the oldest one — i.e. trim nothing.
+    /// Retention is anchored on today, not on `date`: seeding replays
+    /// historical dictations, and trimming against the entry being written
+    /// would keep everything newer than the oldest one — i.e. trim nothing.
     mutating func record(
         words: Int,
         seconds: TimeInterval,
         on date: Date,
-        calendar: Calendar = .autoupdatingCurrent,
-        now: Date = Date()
+        calendar: Calendar = .autoupdatingCurrent
     ) {
         lifetimeSessions += 1
         lifetimeWords += words
@@ -148,7 +147,7 @@ struct DictationStats: Codable, Equatable {
         day.seconds += seconds
         days[key] = day
 
-        trimDays(endingOn: now, calendar: calendar)
+        trimDays(endingOn: Date(), calendar: calendar)
     }
 
     private mutating func trimDays(endingOn date: Date, calendar: Calendar) {
@@ -181,21 +180,13 @@ struct DailyWordCount: Identifiable, Equatable {
     }
 }
 
-protocol DictationStatsStoring: AnyObject {
-    var stats: DictationStats { get }
-    func record(words: Int, seconds: TimeInterval, at date: Date)
-    func seedFromHistoryIfNeeded(_ results: [RecentResult])
-    /// Blocks until pending writes have landed. Called on termination.
-    func flush()
-}
-
 /// Durable, bounded, and cheap to update: the in-memory snapshot is authoritative
 /// for the UI and the write is pushed off the calling (main) actor, because every
 /// `record` happens on the latency-sensitive dictation-completion path.
-final class DictationStatsStore: DictationStatsStoring {
+final class DictationStatsStore {
     private let fileURL: URL
     private let queue = DispatchQueue(label: "dev.suniye.stats", qos: .utility)
-    private let calendar: Calendar
+    private let calendar = Calendar.autoupdatingCurrent
     private var snapshot: DictationStats
 
     var stats: DictationStats {
@@ -208,11 +199,9 @@ final class DictationStatsStore: DictationStatsStoring {
     /// silently inherit the shared file.
     init(
         fileURL: URL = DictationStatsStore.defaultFileURL(),
-        legacyFileURL: URL? = nil,
-        calendar: Calendar = .autoupdatingCurrent
+        legacyFileURL: URL? = nil
     ) {
         self.fileURL = fileURL
-        self.calendar = calendar
         let own = Self.read(from: fileURL)
         if own == .empty, let legacyFileURL, legacyFileURL != fileURL {
             self.snapshot = Self.read(from: legacyFileURL)

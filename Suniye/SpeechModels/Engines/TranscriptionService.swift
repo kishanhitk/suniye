@@ -349,7 +349,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         loadedConfig = nil
     }
 
-    func makeRecognizerConfig(for config: RecognizerConfig) throws -> SherpaOnnxOfflineRecognizerConfig {
+    private func makeRecognizerConfig(for config: RecognizerConfig) throws -> SherpaOnnxOfflineRecognizerConfig {
         let modelConfig: SherpaOnnxOfflineModelConfig
 
         switch config.family {

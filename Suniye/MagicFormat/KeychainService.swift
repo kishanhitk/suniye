@@ -1,19 +1,13 @@
 import Foundation
 
-/// The API endpoint key. Magic Format and meeting summaries share it.
-protocol KeychainServiceProtocol {
-    func setLLMKey(_ key: String) async throws
-    func getLLMKey() async throws -> String?
-    func deleteLLMKey() async throws
-}
-
 enum KeychainServiceError: Error {
     case invalidData
 }
 
+/// The API endpoint key. Magic Format and meeting summaries share it.
 /// Each call runs off the main actor: a SecItem call blocks its thread, also
 /// while the user answers a Keychain prompt.
-struct KeychainService: KeychainServiceProtocol {
+struct KeychainService {
     private let item: SecretItem
 
     init(item: SecretItem = KeychainItem(name: "api-endpoint", account: "api-key", label: "Suniye API key")) {
@@ -48,10 +42,9 @@ struct KeychainService: KeychainServiceProtocol {
     /// Suniye kept the key in these files before it used the Keychain.
     static let plainTextKeyFilenames = ["llm_api_key.txt", "openrouter_api_key.txt"]
 
-    static func removePlainTextKeyFiles(
-        from directory: URL = AppSupportDirectory.urlOrHomeLibrary().appendingPathComponent("config", isDirectory: true),
-        fileManager: FileManager = .default
-    ) {
+    static func removePlainTextKeyFiles() {
+        let directory = AppSupportDirectory.urlOrHomeLibrary().appendingPathComponent("config", isDirectory: true)
+        let fileManager = FileManager.default
         for filename in plainTextKeyFilenames {
             let url = directory.appendingPathComponent(filename, isDirectory: false)
             guard fileManager.fileExists(atPath: url.path) else { continue }

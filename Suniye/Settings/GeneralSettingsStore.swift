@@ -1,11 +1,6 @@
 import Foundation
 
-protocol GeneralSettingsStoreProtocol {
-    func load() -> GeneralSettings
-    func save(_ settings: GeneralSettings)
-}
-
-final class GeneralSettingsStore: GeneralSettingsStoreProtocol {
+final class GeneralSettingsStore {
     private let userDefaults: UserDefaults
     private let storageKey = "dev.suniye.general.settings"
     private let encoder = JSONEncoder()

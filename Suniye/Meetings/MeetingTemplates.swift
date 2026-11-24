@@ -100,8 +100,8 @@ actor MeetingTemplateStore {
         self.fileURL = fileURL
     }
 
-    static func defaultFileURL(identity: AppIdentity = .current) -> URL {
-        MeetingStore.supportDirectory.appendingPathComponent(identity.isPreview ? "meeting-templates-preview.json" : "meeting-templates.json")
+    static func defaultFileURL() -> URL {
+        MeetingStore.supportDirectory.appendingPathComponent(AppIdentity.current.isPreview ? "meeting-templates-preview.json" : "meeting-templates.json")
     }
 
     func templates() -> [MeetingTemplate] {

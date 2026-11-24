@@ -47,8 +47,7 @@ final class MeetingRecorder: @unchecked Sendable {
     private let queue = DispatchQueue(label: "dev.suniye.meeting.recorder", qos: .userInitiated)
     private let sources: [MeetingTrack: MeetingAudioSource]
     private let audioURL: (MeetingTrack) -> URL
-    private let uptime: () -> TimeInterval
-    private let silenceCheckInterval: DispatchTimeInterval
+    private let silenceCheckInterval = DispatchTimeInterval.seconds(1)
     private var writers: [MeetingTrack: MeetingAudioFileWriter] = [:]
     private var samplesWritten: [MeetingTrack: Int] = [:]
     private var lastLevel: [MeetingTrack: Float] = [:]
@@ -67,16 +66,16 @@ final class MeetingRecorder: @unchecked Sendable {
     private var silenceTimer: DispatchSourceTimer?
 
     /// `sources` without `.them` records the microphone only.
+    private static func uptime() -> TimeInterval {
+        ProcessInfo.processInfo.systemUptime
+    }
+
     init(
         sources: [MeetingTrack: MeetingAudioSource],
-        audioURL: @escaping (MeetingTrack) -> URL,
-        uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
-        silenceCheckInterval: DispatchTimeInterval = .seconds(1)
+        audioURL: @escaping (MeetingTrack) -> URL
     ) {
         self.sources = sources
         self.audioURL = audioURL
-        self.uptime = uptime
-        self.silenceCheckInterval = silenceCheckInterval
     }
 
     var tracks: [MeetingTrack] {
@@ -96,7 +95,7 @@ final class MeetingRecorder: @unchecked Sendable {
                 closeWriters()
                 throw error
             }
-            startedAt = uptime()
+            startedAt = Self.uptime()
             running = true
         }
         do {
@@ -127,14 +126,14 @@ final class MeetingRecorder: @unchecked Sendable {
         let isRecording: Bool = queue.sync { running && pausedSince == nil }
         guard isRecording else { return }
         stopSources()
-        queue.sync { pausedSince = uptime() }
+        queue.sync { pausedSince = Self.uptime() }
     }
 
     /// Stays paused and throws when no track starts again.
     func resume() throws {
         let shouldStart: Bool = queue.sync {
             guard running, let since = pausedSince else { return false }
-            pausedTotal += uptime() - since
+            pausedTotal += Self.uptime() - since
             pausedSince = nil
             return true
         }
@@ -142,7 +141,7 @@ final class MeetingRecorder: @unchecked Sendable {
         do {
             try startSources()
         } catch {
-            queue.sync { pausedSince = uptime() }
+            queue.sync { pausedSince = Self.uptime() }
             throw error
         }
     }
@@ -185,7 +184,7 @@ final class MeetingRecorder: @unchecked Sendable {
             guard let source = sources[track] else { continue }
             source.onSamples = { [weak self] samples in
                 guard let self else { return }
-                let arrival = self.uptime()
+                let arrival = Self.uptime()
                 self.queue.async { self.receive(samples, track: track, arrival: arrival) }
             }
             source.onEvent = { [weak self] event in
@@ -270,7 +269,7 @@ final class MeetingRecorder: @unchecked Sendable {
     private func sourceStarted(_ track: MeetingTrack) {
         if track == .them {
             callSourceRunning = true
-            lastCallSound = uptime()
+            lastCallSound = Self.uptime()
             reportedCallSilence = false
         }
         onEvent?(.trackStarted(track))
@@ -294,7 +293,7 @@ final class MeetingRecorder: @unchecked Sendable {
 
     private func checkCallSilence() {
         guard running, pausedSince == nil, callSourceRunning, !reportedCallSilence else { return }
-        if uptime() - lastCallSound >= Self.callSilenceLimit {
+        if Self.uptime() - lastCallSound >= Self.callSilenceLimit {
             reportedCallSilence = true
             onEvent?(.callAudioSilent(heardBefore: callTrackHeardSound, since: max(0, lastCallSound - startedAt - pausedTotal)))
         }

@@ -52,30 +52,22 @@ Run from repo root.
 ./scripts/e2e_preflight.sh
 ./scripts/e2e_smoke.sh
 
-# Unit tests (matches CI)
+# Flow tests (matches CI; the dictation flow needs ./scripts/setup_model.sh)
 xcodegen generate --spec project.yml
 xcodebuild \
   -project Suniye.xcodeproj \
   -scheme Suniye \
   -destination 'platform=macOS' \
   -derivedDataPath .derivedData \
-  -enableCodeCoverage YES \
-  -resultBundlePath .derivedData/coverage.xcresult \
   test
-
-# Coverage report + gate (run after tests; CI fails below threshold)
-./scripts/coverage_report.sh
 ```
 
-## Coverage policy
-- CI enforces a 90% line-coverage floor on the app target via `scripts/coverage_report.sh`
-  (the floor is the script default). The residue is documented-unreachable code:
-  permission prompts, real-model decode, OS-state-dependent branches, race guards.
-- Files that genuinely cannot run headless in CI (live AppKit/window-server,
-  hardware audio, vendored code) are listed in `scripts/coverage_exclusions.txt`
-  with a reason comment. Do not add a file there to dodge writing tests;
-  prefer extracting logic into a testable unit.
-- New code must ship with tests that keep the gate green.
+## Test policy
+- No coverage target. Do not add a test to raise a number.
+- Tests are flow tests in the XCTest host. A flow test starts at a user entry point (hotkey, menu or settings action), runs the real app code, and stubs only the outside world: network, OS permission prompts, hardware (microphone, accessibility and key events, hotkey taps), the login Keychain, Sparkle.
+- Do not add unit tests for helpers, formatters or single services. Add a flow test for a new user flow, or for a bug that a flow test can reproduce.
+- A test must never touch real user data: no default stores, no real App Support folder, no `UserDefaults.standard`, no login Keychain. Start the app with `FlowApp` in `SuniyeTests/Support`.
+- A seam exists only at the outside world or at a storage location: the audio capture, hotkey, sound and speech engine services, `MeetingEnvironment`, the accessibility and key event closures of `TextInsertionService` and `EditModeService`, `SecretItem`, `URLSession` parameters, the Sparkle controller, the permission and clock providers of `AppState`, and the folder, file or `UserDefaults` of each store. Do not add a protocol or a parameter only so a test can replace app code.
 
 ## Targeted E2E scripts
 - LLM forced success/fallback smoke tests run via launch args:
@@ -93,8 +85,7 @@ xcodebuild \
 - Prefer minimal, surgical edits.
 - Preserve actor/MainActor boundaries; do not introduce UI-thread blocking work.
 - Keep service boundaries intact (do not collapse logic into views).
-- Keep dependency-injected seams used by tests (`LLMPostProcessor`, settings store, keychain service).
-- When behavior changes, update tests and relevant docs (`README.md`, `docs/*`).
+- When behavior changes, update the flow tests and relevant docs (`README.md`, `docs/*`).
 
 ## Commit messages
 - Commit messages should follow commit lint conventions.

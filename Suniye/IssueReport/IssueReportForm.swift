@@ -28,29 +28,24 @@ final class IssueReportForm {
     /// with an empty form once that report has ended.
     private var resetsWhenReopened = false
 
-    @ObservationIgnored private let uploadService: IssueReportUploadServiceProtocol
-    @ObservationIgnored private let diagnosticBundleService: DiagnosticBundleServiceProtocol
+    @ObservationIgnored private let uploadService: IssueReportUploadService
+    @ObservationIgnored private let diagnosticBundleService = DiagnosticBundleService()
     @ObservationIgnored private let context: @MainActor () -> IssueReportContext
     @ObservationIgnored private let nowProvider: () -> Date
     @ObservationIgnored private let fileOpener: (URL) -> Bool
-    @ObservationIgnored private let temporaryFileCleanupScheduler: (URL) -> Void
     @ObservationIgnored private let diagnosticsDestinationPicker: @MainActor (String) -> URL?
 
     init(
-        uploadService: IssueReportUploadServiceProtocol,
-        diagnosticBundleService: DiagnosticBundleServiceProtocol,
+        uploadService: IssueReportUploadService,
         context: @escaping @MainActor () -> IssueReportContext,
         nowProvider: @escaping () -> Date,
         fileOpener: @escaping (URL) -> Bool,
-        temporaryFileCleanupScheduler: @escaping (URL) -> Void,
         diagnosticsDestinationPicker: @escaping @MainActor (String) -> URL?
     ) {
         self.uploadService = uploadService
-        self.diagnosticBundleService = diagnosticBundleService
         self.context = context
         self.nowProvider = nowProvider
         self.fileOpener = fileOpener
-        self.temporaryFileCleanupScheduler = temporaryFileCleanupScheduler
         self.diagnosticsDestinationPicker = diagnosticsDestinationPicker
     }
 
@@ -162,7 +157,7 @@ final class IssueReportForm {
             )
             let diagnosticsURL = try await makeDiagnosticBundle(payload: payload)
             if fileOpener(diagnosticsURL) {
-                temporaryFileCleanupScheduler(diagnosticsURL)
+                Self.removeAfterReview(diagnosticsURL)
                 status = .idle
                 diagnosticsMessage = "Diagnostics opened for review."
             } else {
@@ -239,6 +234,14 @@ final class IssueReportForm {
             model: context.model,
             settings: context.settings
         )
+    }
+
+    /// The app that shows the archive reads it after the open call returns.
+    private static func removeAfterReview(_ url: URL) {
+        Task.detached(priority: .utility) {
+            try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000)
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     private func makeDiagnosticBundle(payload: IssueReportPayload) async throws -> URL {

@@ -14,9 +14,8 @@ final class PartialTranscriptionScheduler {
     /// per-tick decode cost bounded for arbitrarily long dictations; the indicator
     /// shows the transcript tail, so older audio adds nothing visible.
     nonisolated static let maxWindowSeconds: Double = 30
-    nonisolated static let defaultTickInterval: TimeInterval = 0.7
+    nonisolated static let tickInterval: TimeInterval = 0.7
 
-    private let tickInterval: TimeInterval
     private var snapshotProvider: (() async -> AudioSampleSnapshot?)?
     private var decode: (([Float], Int) async throws -> String)?
     private var onPartial: ((String) -> Void)?
@@ -26,19 +25,6 @@ final class PartialTranscriptionScheduler {
     /// so a decode left over from a stopped session never blocks the first ticks of
     /// a quickly restarted one.
     private var inFlightGeneration: Int?
-
-    init(tickInterval: TimeInterval = PartialTranscriptionScheduler.defaultTickInterval) {
-        // Floor prevents a zero/negative interval from busy-spinning the main actor.
-        self.tickInterval = max(0.01, tickInterval)
-    }
-
-    var isActive: Bool {
-        tickTask != nil
-    }
-
-    var isDecodeInFlight: Bool {
-        inFlightGeneration != nil
-    }
 
     func start(
         snapshotProvider: @escaping () async -> AudioSampleSnapshot?,
@@ -50,7 +36,7 @@ final class PartialTranscriptionScheduler {
         self.decode = decode
         self.onPartial = onPartial
         let startedGeneration = generation
-        let interval = tickInterval
+        let interval = Self.tickInterval
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
@@ -67,12 +53,6 @@ final class PartialTranscriptionScheduler {
         snapshotProvider = nil
         decode = nil
         onPartial = nil
-    }
-
-    /// Runs a single tick immediately. Exposed for deterministic tests; the interval
-    /// loop started by `start` goes through the same path.
-    func tickNow() async {
-        await performTick(generation: generation)
     }
 
     private func performTick(generation: Int) async {

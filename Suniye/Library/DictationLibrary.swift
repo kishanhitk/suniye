@@ -12,10 +12,10 @@ final class DictationLibrary {
     /// Where dictation lands most. Rebuilt when the history changes, not per read.
     private(set) var topApps: [DictationAppUsage] = []
 
-    @ObservationIgnored private let historyStore: HistoryStoreProtocol
-    @ObservationIgnored private let statsStore: DictationStatsStoring
+    @ObservationIgnored private let historyStore: HistoryStore
+    @ObservationIgnored private let statsStore: DictationStatsStore
 
-    init(historyStore: HistoryStoreProtocol, statsStore: DictationStatsStoring) {
+    init(historyStore: HistoryStore, statsStore: DictationStatsStore) {
         self.historyStore = historyStore
         self.statsStore = statsStore
         let results = historyStore.load()

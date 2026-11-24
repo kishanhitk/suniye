@@ -102,14 +102,6 @@ struct DiagnosticBundleRequest: Equatable, Sendable {
     let rotatedLogFileURL: URL?
 }
 
-protocol DiagnosticBundleServiceProtocol {
-    func makeBundle(request: DiagnosticBundleRequest) async throws -> URL
-}
-
-protocol IssueReportUploadServiceProtocol {
-    func submit(payload: IssueReportPayload, diagnosticsURL: URL?) async throws -> IssueReportSubmissionResponse
-}
-
 struct IssueReportSubmissionResponse: Decodable, Equatable, Sendable {
     let reportId: String
     let issueId: String
@@ -147,11 +139,7 @@ enum IssueReportError: LocalizedError, Equatable, Sendable {
 }
 
 struct DiagnosticRedactor: Sendable {
-    private let homeDirectory: String
-
-    init(homeDirectory: String = NSHomeDirectory()) {
-        self.homeDirectory = homeDirectory
-    }
+    private let homeDirectory = NSHomeDirectory()
 
     func redact(_ input: String) -> String {
         var output = input
@@ -177,14 +165,12 @@ struct DiagnosticRedactor: Sendable {
     }
 }
 
-final class DiagnosticBundleService: DiagnosticBundleServiceProtocol {
-    private let fileManager: FileManager
-    private let redactor: DiagnosticRedactor
+final class DiagnosticBundleService {
+    private let fileManager = FileManager.default
+    private let redactor = DiagnosticRedactor()
     private let encoder: JSONEncoder
 
-    init(fileManager: FileManager = .default, redactor: DiagnosticRedactor = DiagnosticRedactor()) {
-        self.fileManager = fileManager
-        self.redactor = redactor
+    init() {
         self.encoder = JSONEncoder()
         self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         self.encoder.dateEncodingStrategy = .iso8601
@@ -305,18 +291,14 @@ final class DiagnosticBundleService: DiagnosticBundleServiceProtocol {
     }
 }
 
-final class IssueReportUploadService: IssueReportUploadServiceProtocol {
+final class IssueReportUploadService {
     private let session: URLSession
     private let endpointURL: URL?
     private let decoder = JSONDecoder()
 
-    init(
-        session: URLSession = .shared,
-        bundle: Bundle = .main,
-        endpointURL: URL? = nil
-    ) {
+    init(session: URLSession = .shared, endpointURL: URL? = nil) {
         self.session = session
-        self.endpointURL = endpointURL ?? Self.endpointURL(from: bundle)
+        self.endpointURL = endpointURL ?? Self.endpointURL(from: .main)
     }
 
     func submit(payload: IssueReportPayload, diagnosticsURL: URL?) async throws -> IssueReportSubmissionResponse {

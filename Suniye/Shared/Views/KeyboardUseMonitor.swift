@@ -42,7 +42,7 @@ struct KeyboardUseMonitor: NSViewRepresentable {
 
         /// True after a key press, false after a click, and nil for an event
         /// that says nothing about it: a shortcut, or an event in another window.
-        func usesKeyboard(after event: NSEvent) -> Bool? {
+        private func usesKeyboard(after event: NSEvent) -> Bool? {
             guard let window, event.window === window else { return nil }
             switch event.type {
             case .keyDown:

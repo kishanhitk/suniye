@@ -132,37 +132,7 @@ enum LocalLLMInstallState: Equatable {
     }
 }
 
-protocol LocalLLMModelManagerProtocol: AnyObject {
-    var catalog: [LocalLLMModelCatalogEntry] { get }
-    var preferredModelID: LocalLLMModelID { get }
-    var isHardwareSupported: Bool { get }
-    func modelsRootDirectoryURL() throws -> URL
-    func modelFileURL(for modelID: LocalLLMModelID) throws -> URL
-    /// The drafter of an installed model, or nil when the model has none or
-    /// its file is not on disk.
-    func drafterFileURL(for modelID: LocalLLMModelID) -> URL?
-    func isInstalled(_ modelID: LocalLLMModelID) -> Bool
-    func installedByteCount(for modelID: LocalLLMModelID) -> Int64
-    func installState(for modelID: LocalLLMModelID) -> LocalLLMInstallState
-    func downloadModel(_ modelID: LocalLLMModelID, progress: @escaping @Sendable (LocalLLMDownloadProgress) -> Void) async throws
-    /// Fetches the drafter of an installed model. Does nothing when the model
-    /// has no drafter, is not installed, or already has the file.
-    func downloadDrafter(for modelID: LocalLLMModelID) async throws
-    func cancelDownload()
-    func deleteModel(_ modelID: LocalLLMModelID) throws
-}
-
-protocol LocalLLMDownloading: AnyObject {
-    func download(
-        from url: URL,
-        fallbackExpectedSizeBytes: Int64,
-        temporaryFileBasename: String,
-        progress: @escaping @Sendable (LocalLLMDownloadProgress) -> Void
-    ) async throws -> (URL, URLResponse)
-    func cancel()
-}
-
-final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
+final class LocalLLMModelManager {
     enum ModelError: LocalizedError, Equatable {
         case appSupportUnavailable
         case unsupportedHardware
@@ -200,29 +170,17 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
         preferred
     }
 
-    let isHardwareSupported: Bool
+    let isHardwareSupported = LlamaServer.isSupportedHardware
 
-    private let catalogEntries: [LocalLLMModelCatalogEntry]
-    private let preferred: LocalLLMModelID
-    private let fileManager: FileManager
+    private let catalogEntries = LocalLLMModelCatalog.entries
+    private let preferred = LocalLLMModelCatalog.preferredModelID
+    private let fileManager = FileManager.default
     private let rootDirectoryProvider: () throws -> URL
-    private let downloader: LocalLLMDownloading
+    private let downloader = URLSessionLocalLLMDownloader()
 
-    init(
-        catalog: [LocalLLMModelCatalogEntry] = LocalLLMModelCatalog.entries,
-        preferredModelID: LocalLLMModelID = LocalLLMModelCatalog.preferredModelID,
-        fileManager: FileManager = .default,
-        isHardwareSupported: Bool = LlamaServer.isSupportedHardware,
-        rootDirectoryProvider: (() throws -> URL)? = nil,
-        downloader: LocalLLMDownloading = URLSessionLocalLLMDownloader()
-    ) {
-        catalogEntries = catalog
-        preferred = preferredModelID
-        self.fileManager = fileManager
-        self.isHardwareSupported = isHardwareSupported
-        self.downloader = downloader
+    init(rootDirectoryProvider: (() throws -> URL)? = nil) {
         self.rootDirectoryProvider = rootDirectoryProvider ?? {
-            guard let appSupport = AppSupportDirectory.url(fileManager: fileManager) else {
+            guard let appSupport = AppSupportDirectory.url(fileManager: .default) else {
                 throw ModelError.appSupportUnavailable
             }
             return appSupport.appendingPathComponent("llm", isDirectory: true)
@@ -243,6 +201,8 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
         try modelsRootDirectoryURL().appendingPathComponent(file.filename)
     }
 
+    /// The drafter of an installed model, or nil when the model has none or
+    /// its file is not on disk.
     func drafterFileURL(for modelID: LocalLLMModelID) -> URL? {
         guard isInstalled(modelID),
               let drafter = catalogEntry(for: modelID).drafter,
@@ -288,6 +248,8 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
         try await download(catalogEntry(for: modelID).modelFile, progress: progress)
     }
 
+    /// Fetches the drafter of an installed model. Does nothing when the model
+    /// has no drafter, is not installed, or already has the file.
     func downloadDrafter(for modelID: LocalLLMModelID) async throws {
         guard isInstalled(modelID),
               let drafter = catalogEntry(for: modelID).drafter,
@@ -370,7 +332,7 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
         }
     }
 
-    static func replaceInstalledModel(at liveURL: URL, with stagedURL: URL, fileManager: FileManager = .default) throws {
+    private static func replaceInstalledModel(at liveURL: URL, with stagedURL: URL, fileManager: FileManager) throws {
         let backupURL = liveURL
             .deletingLastPathComponent()
             .appendingPathComponent(".\(liveURL.lastPathComponent)-backup-\(UUID().uuidString)", isDirectory: false)
@@ -408,7 +370,7 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
 
 }
 
-final class URLSessionLocalLLMDownloader: NSObject, LocalLLMDownloading, URLSessionDownloadDelegate {
+final class URLSessionLocalLLMDownloader: NSObject, URLSessionDownloadDelegate {
     private let lock = NSLock()
     private var activeTask: URLSessionDownloadTask?
     private var continuation: CheckedContinuation<(URL, URLResponse), Error>?
