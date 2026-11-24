@@ -96,7 +96,7 @@ jobs:
       - name: Smoke checks
         run: ./scripts/e2e_smoke.sh
 
-      - name: Unit tests
+      - name: Flow tests
         timeout-minutes: 25
         run: |
           xcodegen generate --spec project.yml

@@ -52,7 +52,7 @@ Run from repo root.
 ./scripts/e2e_preflight.sh
 ./scripts/e2e_smoke.sh
 
-# Unit tests (matches CI)
+# Flow tests (matches CI; the dictation flow needs ./scripts/setup_model.sh)
 xcodegen generate --spec project.yml
 xcodebuild \
   -project Suniye.xcodeproj \
@@ -64,6 +64,9 @@ xcodebuild \
 
 ## Test policy
 - No coverage target. Do not add a test to raise a number.
+- Tests are flow tests in the XCTest host. A flow test starts at a user entry point (hotkey, menu or settings action), runs the real app code, and stubs only the outside world: network, OS permission prompts, hardware (microphone, accessibility and key events, hotkey taps), the login Keychain, Sparkle.
+- Do not add unit tests for helpers, formatters or single services. Add a flow test for a new user flow, or for a bug that a flow test can reproduce.
+- A test must never touch real user data: no default stores, no real App Support folder, no `UserDefaults.standard`, no login Keychain. Start the app with `FlowApp` in `SuniyeTests/Support`.
 
 ## Targeted E2E scripts
 - LLM forced success/fallback smoke tests run via launch args:
@@ -82,7 +85,7 @@ xcodebuild \
 - Preserve actor/MainActor boundaries; do not introduce UI-thread blocking work.
 - Keep service boundaries intact (do not collapse logic into views).
 - Keep dependency-injected seams used by tests (`LLMPostProcessor`, settings store, keychain service).
-- When behavior changes, update tests and relevant docs (`README.md`, `docs/*`).
+- When behavior changes, update the flow tests and relevant docs (`README.md`, `docs/*`).
 
 ## Commit messages
 - Commit messages should follow commit lint conventions.

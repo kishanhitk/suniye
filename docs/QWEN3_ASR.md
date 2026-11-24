@@ -40,14 +40,4 @@ The model writes numbers as words ("four thirty p.m."). Magic Format can rewrite
 
 ## Tests
 
-`Qwen3ASRTranscriptionServiceTests` runs the engine against a fake helper in CI. The opt-in real-model tests need the model and the helper:
-
-```bash
-TEST_RUNNER_SUNIYE_RUN_QWEN3_ASR_TESTS=1 \
-TEST_RUNNER_SUNIYE_QWEN3_ASR_MODEL_DIR=/path/to/gguf-dir \
-TEST_RUNNER_SUNIYE_LLAMA_SERVER_PATH=/path/to/llama-server \
-xcodebuild test -project Suniye.xcodeproj -scheme Suniye \
-  -destination 'platform=macOS,arch=arm64' -derivedDataPath .derivedData \
-  -only-testing:SuniyeTests/Qwen3ASRTranscriptionServiceRealModelTests \
-  ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
-```
+No automated test runs this engine. Compare it with the other installed models in `evals/asr-compare` (see `evals/README.md`).
