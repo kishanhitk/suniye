@@ -30,8 +30,7 @@ public protocol Analytics: Sendable {
     func endSession(cleanExit: Bool) async
 }
 
-/// A no-op analytics sink for tests and for builds where analytics is compiled
-/// out entirely.
+/// A no-op analytics sink for builds where analytics is compiled out entirely.
 public struct NoopAnalytics: Analytics {
     public init() {}
     public func track(_ event: AnalyticsEvent) {}

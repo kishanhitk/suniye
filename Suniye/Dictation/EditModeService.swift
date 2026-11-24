@@ -2,16 +2,11 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-@MainActor
-protocol EditModeSelectionProviding: AnyObject {
-    func captureSelectedText() async -> String?
-}
-
 /// Captures the text currently selected in the frontmost app for Edit Mode.
 /// Tries the Accessibility API first, then falls back to a clipboard round-trip
 /// (Cmd+C) that always restores the previous clipboard contents.
 @MainActor
-final class EditModeService: EditModeSelectionProviding {
+final class EditModeService {
     enum CaptureError: LocalizedError {
         case cannotCreateEvent
 
@@ -28,25 +23,21 @@ final class EditModeService: EditModeSelectionProviding {
     private let selectedTextReader: (AXUIElement) -> String?
     private let pasteboardProvider: () -> NSPasteboard
     private let keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)?
-    private let copyWaitPollNanoseconds: UInt64
-    private let copyWaitMaxPolls: Int
+    private let copyWaitPollNanoseconds: UInt64 = 30_000_000
+    private let copyWaitMaxPolls = 10
 
     init(
         accessibilityTrustProvider: @escaping () -> Bool = { AXIsProcessTrusted() },
         focusedElementProvider: @escaping () -> AXUIElement? = EditModeService.systemFocusedElement,
         selectedTextReader: @escaping (AXUIElement) -> String? = EditModeService.selectedTextAttribute,
         pasteboardProvider: @escaping () -> NSPasteboard = { .general },
-        keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)? = nil,
-        copyWaitPollNanoseconds: UInt64 = 30_000_000,
-        copyWaitMaxPolls: Int = 10
+        keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)? = nil
     ) {
         self.accessibilityTrustProvider = accessibilityTrustProvider
         self.focusedElementProvider = focusedElementProvider
         self.selectedTextReader = selectedTextReader
         self.pasteboardProvider = pasteboardProvider
         self.keyPoster = keyPoster
-        self.copyWaitPollNanoseconds = copyWaitPollNanoseconds
-        self.copyWaitMaxPolls = copyWaitMaxPolls
     }
 
     func captureSelectedText() async -> String? {

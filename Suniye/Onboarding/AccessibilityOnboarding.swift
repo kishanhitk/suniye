@@ -13,7 +13,7 @@ enum AccessibilityOnboardingEnd: Equatable {
 
 /// Seam that isolates the (vendored, reverse-engineered) Permiso drag-to-grant
 /// overlay from `AppState` and the views. Everything Permiso-specific lives behind
-/// this protocol so the kill switch, the unit tests, and a future rip-out each touch
+/// this protocol so the kill switch, the flow tests, and a future rip-out each touch
 /// exactly one file.
 @MainActor
 protocol AccessibilityOnboardingPresenting: AnyObject {

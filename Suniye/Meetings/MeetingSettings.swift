@@ -93,11 +93,10 @@ enum MeetingTranscriptModelError: LocalizedError, Equatable {
 
 final class MeetingSettingsStore {
     private let userDefaults: UserDefaults
-    private let key: String
+    private let key = "dev.suniye.meeting.settings"
 
-    init(userDefaults: UserDefaults = .standard, key: String = "dev.suniye.meeting.settings") {
+    init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
-        self.key = key
     }
 
     func load() -> MeetingSettings {

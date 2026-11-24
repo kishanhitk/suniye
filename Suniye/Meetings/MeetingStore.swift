@@ -29,8 +29,8 @@ actor MeetingStore {
 
     /// One folder per app: Stable and Preview run side by side, and each one
     /// recovers the recordings that it finds at launch.
-    static func defaultRootDirectory(identity: AppIdentity = .current) -> URL {
-        supportDirectory.appendingPathComponent(identity.isPreview ? "meetings-preview" : "meetings", isDirectory: true)
+    static func defaultRootDirectory() -> URL {
+        supportDirectory.appendingPathComponent(AppIdentity.current.isPreview ? "meetings-preview" : "meetings", isDirectory: true)
     }
 
     nonisolated let rootDirectory: URL

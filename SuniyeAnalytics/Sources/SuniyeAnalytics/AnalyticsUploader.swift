@@ -12,19 +12,14 @@ public enum UploadOutcome: Sendable, Equatable {
     case ambiguous                        // timeout — drop to avoid double count
 }
 
-public protocol AnalyticsUploading: Sendable {
-    func upload(_ batch: AnalyticsBatch) async -> UploadOutcome
-}
-
-public struct AnalyticsUploader: AnalyticsUploading {
+public struct AnalyticsUploader: Sendable {
     private let endpoint: URL
     private let session: URLSession
-    private let timeout: TimeInterval
+    private let timeout: TimeInterval = 15
 
-    public init(endpoint: URL, session: URLSession = .shared, timeout: TimeInterval = 15) {
+    public init(endpoint: URL, session: URLSession = .shared) {
         self.endpoint = endpoint
         self.session = session
-        self.timeout = timeout
     }
 
     public func upload(_ batch: AnalyticsBatch) async -> UploadOutcome {

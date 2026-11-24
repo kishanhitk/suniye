@@ -80,14 +80,14 @@ final class MagicFormatCoordinator {
         var analyticsModelOverride: String? = nil
     }
 
-    private let apiPostProcessor: LLMPostProcessor
-    private let applePostProcessor: AppleMagicFormatPostProcessor
-    private let localGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor
+    private let apiPostProcessor: OpenRouterPostProcessor
+    private let applePostProcessor: AppleFoundationModelsPostProcessor
+    private let localGemmaPostProcessor: LocalGemmaPostProcessor
 
     init(
-        apiPostProcessor: LLMPostProcessor,
-        applePostProcessor: AppleMagicFormatPostProcessor,
-        localGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor
+        apiPostProcessor: OpenRouterPostProcessor,
+        applePostProcessor: AppleFoundationModelsPostProcessor,
+        localGemmaPostProcessor: LocalGemmaPostProcessor
     ) {
         self.apiPostProcessor = apiPostProcessor
         self.applePostProcessor = applePostProcessor
@@ -118,30 +118,27 @@ final class MagicFormatCoordinator {
     /// Speculatively warm the local runtime iff the request will actually resolve to
     /// the local Gemma provider. No-op for every other provider or when unavailable.
     /// Owns provider resolution + config assembly so it can never drift from `polish`.
-    /// Fire-and-forget by design: returns the spawned task (for tests) without
-    /// awaiting it, and cancels any prior probe so at most one is ever in flight.
-    @discardableResult
+    /// Fire-and-forget by design: it does not await the probe, and cancels any
+    /// prior probe so at most one is ever in flight.
     func prewarmLocalIfEligible(
         requestedProvider: MagicFormatProvider,
         settings: LLMSettings,
         appleAvailability: AppleFoundationModelsAvailability,
         localGemmaAvailability: LocalGemmaAvailability
-    ) -> Task<Void, Never>? {
+    ) {
         let resolved = Self.resolvedProvider(
             requestedProvider: requestedProvider,
             appleAvailability: appleAvailability,
             localGemmaAvailability: localGemmaAvailability
         )
         guard case .localGemma = resolved else {
-            return nil
+            return
         }
         let config = Self.makeLocalGemmaConfig(settings: settings)
         prewarmTask?.cancel()
-        let task = Task { [localGemmaPostProcessor] in
+        prewarmTask = Task { [localGemmaPostProcessor] in
             await localGemmaPostProcessor.prewarm(config: config)
         }
-        prewarmTask = task
-        return task
     }
 
     func polish(input: String, rawText: String, request: PolishRequest) async -> MagicFormatPolishOutcome {

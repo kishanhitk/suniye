@@ -1,12 +1,12 @@
 import Foundation
 
-final class LocalGemmaLlamaCppClient: LocalGemmaClient {
+final class LocalGemmaLlamaCppClient {
     private let locator: LocalGemmaRuntimeLocator
     private let server: LlamaServer
 
     init(
-        locator: LocalGemmaRuntimeLocator = LocalGemmaRuntimeLocator(),
-        server: LlamaServer = LlamaServer()
+        locator: LocalGemmaRuntimeLocator,
+        server: LlamaServer
     ) {
         self.locator = locator
         self.server = server
@@ -28,6 +28,8 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         return await server.isWarm(for: runtime.launch)
     }
 
+    /// `maxTokens` nil lets the model run to its end-of-turn or the context
+    /// window.
     func generate(
         instructions: String,
         prompt: String,

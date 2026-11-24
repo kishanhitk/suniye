@@ -1,11 +1,6 @@
 import Foundation
 
-protocol HistoryStoreProtocol {
-    func load() -> [RecentResult]
-    func save(_ results: [RecentResult])
-}
-
-final class HistoryStore: HistoryStoreProtocol {
+final class HistoryStore {
     private let userDefaults: UserDefaults
     private let storageKey = "dev.suniye.history"
     private let encoder = JSONEncoder()

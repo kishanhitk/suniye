@@ -1,11 +1,6 @@
 import Foundation
 
-protocol LLMSettingsStoreProtocol {
-    func load() -> LLMSettings
-    func save(_ settings: LLMSettings)
-}
-
-final class LLMSettingsStore: LLMSettingsStoreProtocol {
+final class LLMSettingsStore {
     private let userDefaults: UserDefaults
     private let storageKey = "dev.suniye.llm.settings"
     private let encoder = JSONEncoder()

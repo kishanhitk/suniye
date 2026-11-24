@@ -43,17 +43,8 @@ actor Qwen3ASRTranscriptionService: TranscriptionServiceProtocol {
         let speechDetector: SpeechDetecting
     }
 
-    private let server: LlamaServer
-    private let makeSpeechDetector: () throws -> SpeechDetecting
+    private let server = LlamaServer()
     private var model: LoadedModel?
-
-    init(
-        server: LlamaServer = LlamaServer(),
-        makeSpeechDetector: @escaping () throws -> SpeechDetecting = { try SpeechDetector.bundled() }
-    ) {
-        self.server = server
-        self.makeSpeechDetector = makeSpeechDetector
-    }
 
     func loadModel(config: RecognizerConfig) async throws {
         guard let modelPath = config.modelPath, let projectorPath = config.encoderPath else {
@@ -72,7 +63,7 @@ actor Qwen3ASRTranscriptionService: TranscriptionServiceProtocol {
                 arguments: Qwen3ASR.serverArguments(modelPath: modelPath, projectorPath: projectorPath),
                 modelName: ASRModelCatalog.entry(for: config.modelID).displayName
             ),
-            speechDetector: try makeSpeechDetector()
+            speechDetector: try SpeechDetector.bundled()
         )
 
         // Starting the helper loads the weights; the first request also compiles

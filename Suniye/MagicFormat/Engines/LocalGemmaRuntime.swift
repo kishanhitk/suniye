@@ -24,16 +24,7 @@ enum LocalGemmaRuntimeResolution {
 }
 
 struct LocalGemmaRuntimeLocator {
-    let modelManager: LocalLLMModelManagerProtocol
-    let fileManager: FileManager
-
-    init(
-        modelManager: LocalLLMModelManagerProtocol = LocalLLMModelManager(),
-        fileManager: FileManager = .default
-    ) {
-        self.modelManager = modelManager
-        self.fileManager = fileManager
-    }
+    let modelManager: LocalLLMModelManager
 
     func resolve() -> LocalGemmaRuntimeResolution {
         guard modelManager.isHardwareSupported else {
@@ -43,7 +34,7 @@ struct LocalGemmaRuntimeLocator {
               let modelURL = try? modelManager.modelFileURL(for: LocalGemmaDefaults.modelID) else {
             return .failure(.modelNotInstalled)
         }
-        guard let serverURL = LlamaServer.locateExecutable(fileManager: fileManager) else {
+        guard let serverURL = LlamaServer.locateExecutable() else {
             return .failure(.runtimeUnavailable)
         }
         return .success(LocalGemmaRuntime(

@@ -25,15 +25,9 @@ struct ChatGPTCredentials: Codable, Equatable, Sendable {
     }
 }
 
-protocol ChatGPTCredentialStore: Sendable {
-    func load() -> ChatGPTCredentials?
-    func save(_ credentials: ChatGPTCredentials) throws
-    func delete()
-}
-
 /// Suniye and Suniye Preview must not share this item: a refresh token works
 /// once, and two apps with one token would end each other's sign-in.
-struct KeychainChatGPTCredentialStore: ChatGPTCredentialStore {
+struct KeychainChatGPTCredentialStore: Sendable {
     private let item: SecretItem
 
     init(item: SecretItem = KeychainItem(name: "chatgpt", account: "connection", label: "\(ChatGPTOAuth.appName) ChatGPT sign-in")) {

@@ -1,26 +1,6 @@
 import Foundation
 import SuniyeAnalytics
 
-protocol ModelManagerProtocol {
-    var catalog: [ASRModelCatalogEntry] { get }
-    var fallbackOrder: [ASRModelID] { get }
-    func modelsRootDirectoryURL() throws -> URL
-    func modelDirectoryURL(for modelID: ASRModelID) throws -> URL
-    func isInstalled(_ modelID: ASRModelID) -> Bool
-    /// Whether a system-managed model's actual on-device asset is present (async, since it
-    /// queries the OS). For file-based models this mirrors `isInstalled`.
-    func isSystemManagedAssetInstalled(_ modelID: ASRModelID) async -> Bool
-    func installedModels() -> [ASRModelID]
-    func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig
-    func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws
-    func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64
-    func installedByteCount(for modelID: ASRModelID) -> Int64
-    func deleteModel(_ modelID: ASRModelID) throws
-    /// The model a fresh install can start on without a download. Checks that the
-    /// OS can run it here (support, language, asset); the caller still loads it.
-    func systemDefaultModelCheck() async -> SystemDefaultModelCheck
-}
-
 /// Outcome of asking whether a built-in, download-free model can be the default.
 enum SystemDefaultModelCheck: Equatable {
     case ready(ASRModelID)
@@ -28,19 +8,7 @@ enum SystemDefaultModelCheck: Equatable {
     case unavailable(reason: SystemDefaultModelReason, detail: String)
 }
 
-extension ModelManagerProtocol {
-    /// Default: file-based conformers have no async asset, so mirror `isInstalled`.
-    func isSystemManagedAssetInstalled(_ modelID: ASRModelID) async -> Bool {
-        isInstalled(modelID)
-    }
-
-    /// Default: no built-in model, so a fresh install downloads one.
-    func systemDefaultModelCheck() async -> SystemDefaultModelCheck {
-        .unavailable(reason: .transcriberUnavailable, detail: "no built-in model")
-    }
-}
-
-final class ModelManager: ModelManagerProtocol {
+final class ModelManager {
     enum ModelError: LocalizedError {
         case appSupportUnavailable
         case invalidResponse
@@ -122,6 +90,8 @@ final class ModelManager: ModelManagerProtocol {
         }
     }
 
+    /// Whether a system-managed model's actual on-device asset is present (async, since it
+    /// queries the OS). For file-based models this mirrors `isInstalled`.
     func isSystemManagedAssetInstalled(_ modelID: ASRModelID) async -> Bool {
         guard catalogEntry(for: modelID).isSystemManaged else {
             return isInstalled(modelID)
@@ -327,7 +297,7 @@ final class ModelManager: ModelManagerProtocol {
         }
     }
 
-    func downloadRemoteFiles(
+    private func downloadRemoteFiles(
         _ files: [ASRModelRemoteFile],
         into modelDirectory: URL,
         progress: @escaping @Sendable (Double) -> Void
@@ -409,7 +379,7 @@ final class ModelManager: ModelManagerProtocol {
         }
     }
 
-    static func replaceInstalledModel(at liveModelDirectory: URL, with stagedModelDirectory: URL) throws {
+    private static func replaceInstalledModel(at liveModelDirectory: URL, with stagedModelDirectory: URL) throws {
         let fileManager = FileManager.default
         let backupDirectory = liveModelDirectory
             .deletingLastPathComponent()

@@ -45,43 +45,16 @@ enum LocalGemmaSampling {
     case greedyWithoutRepeats
 }
 
-protocol LocalGemmaClient {
-    var availability: LocalGemmaAvailability { get }
-    func isRuntimeWarm() async -> Bool
-    /// `maxTokens` nil lets the model run to its end-of-turn or the context
-    /// window.
-    func generate(
-        instructions: String,
-        prompt: String,
-        maxTokens: Int?,
-        sampling: LocalGemmaSampling,
-        startupTimeoutSeconds: Double,
-        idleTimeoutSeconds: Double,
-        timeoutSeconds: Double
-    ) async throws -> ChatCompletionResult
-    func tokenCount(_ text: String, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> Int
-    func stopRuntime() async
-}
-
-extension LocalGemmaClient {
-    func isRuntimeWarm() async -> Bool { false }
-    func stopRuntime() async {}
-
-    func tokenCount(_ text: String, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> Int {
-        throw LLMPostProcessorError.invalidConfiguration("token_count_unsupported")
-    }
-}
-
-final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
-    private let client: LocalGemmaClient
+final class LocalGemmaPostProcessor {
+    private let client: LocalGemmaLlamaCppClient
     /// Fired with llama-server's counters after every user-facing generation
     /// (polish / Edit Mode rewrite) — never for the warm-up probe, whose full
-    /// prefill is expected and would read as a cache miss. Analytics-only; may be nil.
-    private let onGeneration: (@Sendable (ChatCompletionTimings) -> Void)?
+    /// prefill is expected and would read as a cache miss. Analytics only.
+    private let onGeneration: @Sendable (ChatCompletionTimings) -> Void
 
     init(
-        client: LocalGemmaClient = LocalGemmaLlamaCppClient(),
-        onGeneration: (@Sendable (ChatCompletionTimings) -> Void)? = nil
+        client: LocalGemmaLlamaCppClient,
+        onGeneration: @escaping @Sendable (ChatCompletionTimings) -> Void
     ) {
         self.client = client
         self.onGeneration = onGeneration
@@ -184,9 +157,9 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
     /// A user-facing generation: uncapped, and it reports llama-server's
     /// counters. Turns a cancel into `.provider`.
     private struct Generator: MagicFormatGenerator {
-        let client: LocalGemmaClient
+        let client: LocalGemmaLlamaCppClient
         let config: LocalGemmaMagicFormatConfig
-        let onGeneration: (@Sendable (ChatCompletionTimings) -> Void)?
+        let onGeneration: @Sendable (ChatCompletionTimings) -> Void
 
         var usesSingleTurnPrompt: Bool { false }
 
@@ -213,7 +186,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
                     timeoutSeconds: timeoutSeconds
                 )
                 if let timings = generation.timings {
-                    onGeneration?(timings)
+                    onGeneration(timings)
                 }
                 return generation
             } catch {

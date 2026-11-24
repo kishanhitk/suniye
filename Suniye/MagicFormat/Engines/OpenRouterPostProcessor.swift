@@ -1,6 +1,6 @@
 import Foundation
 
-final class OpenRouterPostProcessor: LLMPostProcessor {
+final class OpenRouterPostProcessor {
     private let client: ChatCompletionClient
 
     init(session: URLSession = .shared) {
@@ -16,6 +16,8 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
         )
     }
 
+    /// Freeform generation used by Edit Mode; bypasses Magic Format's dictation
+    /// output policy (length/multiline validation). Provider sanitizers still run.
     func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String {
         try await Generator(client: client, config: config).rewrite(
             instructions: instructions,

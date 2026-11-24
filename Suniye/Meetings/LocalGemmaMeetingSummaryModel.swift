@@ -7,7 +7,7 @@ struct LocalGemmaMeetingSummaryModel: MeetingSummaryModel {
     /// up to `MeetingSummaryWriter.summaryOutputTokens` of output.
     static let generationFloorSeconds = 120.0
 
-    let client: LocalGemmaClient
+    let client: LocalGemmaLlamaCppClient
 
     func contextTokens() async -> Int {
         LocalGemmaDefaults.contextSize

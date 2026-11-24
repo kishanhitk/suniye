@@ -46,7 +46,7 @@ actor ChatGPTConnection {
         }
     }
 
-    private let store: ChatGPTCredentialStore
+    private let store: KeychainChatGPTCredentialStore
     private let session: URLSession
     private let defaults: UserDefaults
     private let openURL: @Sendable (URL) -> Void
@@ -65,7 +65,7 @@ actor ChatGPTConnection {
     private var discovery: Discovery?
 
     init(
-        store: ChatGPTCredentialStore,
+        store: KeychainChatGPTCredentialStore,
         session: URLSession = .shared,
         defaults: UserDefaults = .standard,
         openURL: @escaping @Sendable (URL) -> Void,

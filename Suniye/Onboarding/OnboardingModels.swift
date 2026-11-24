@@ -141,7 +141,7 @@ enum OnboardingProgress: String, Codable, Equatable, CaseIterable {
     /// Maps the legacy two-Bool persistence onto the enum, including installs
     /// that predate the flags entirely (`legacyUserShowsUsage` is the old
     /// auto-complete heuristic). A wrong mapping here re-shows onboarding to
-    /// existing users, so the truth table is exhaustively unit-tested.
+    /// existing users.
     static func migrating(
         hasSeenOnboardingWelcome: Bool?,
         hasCompletedCoreOnboarding: Bool?,

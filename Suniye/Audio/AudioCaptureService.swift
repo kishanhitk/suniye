@@ -85,10 +85,9 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     private let deviceMonitor: AudioDeviceMonitorProtocol
     private let hardwareCatalog: AudioCaptureHardwareCatalogProtocol
     private let driverFactory: AudioCaptureDriverFactoryProtocol
-    private let maximumDurationSeconds: Double
-    private let firstFrameDeadline: DispatchTimeInterval
+    private let maximumDurationSeconds: Double = 10 * 60
+    private let firstFrameDeadline = DispatchTimeInterval.milliseconds(1_500)
     private let maximumEngineRestarts = 2
-    private let scheduleReleaseTail: (@escaping () -> Void) -> Void
 
     private var activeCapture: ActiveCapture?
 
@@ -97,19 +96,11 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     init(
         deviceMonitor: AudioDeviceMonitorProtocol = CoreAudioDeviceMonitor(),
         hardwareCatalog: AudioCaptureHardwareCatalogProtocol = CoreAudioCaptureHardwareCatalog(),
-        driverFactory: AudioCaptureDriverFactoryProtocol = DefaultAudioCaptureDriverFactory(),
-        maximumDurationSeconds: Double = 10 * 60,
-        firstFrameDeadlineSeconds: Double = 1.5,
-        scheduleReleaseTail: @escaping (@escaping () -> Void) -> Void = { endOfTail in
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + AudioCaptureService.releaseTail, execute: endOfTail)
-        }
+        driverFactory: AudioCaptureDriverFactoryProtocol = DefaultAudioCaptureDriverFactory()
     ) {
         self.deviceMonitor = deviceMonitor
         self.hardwareCatalog = hardwareCatalog
         self.driverFactory = driverFactory
-        self.maximumDurationSeconds = maximumDurationSeconds
-        firstFrameDeadline = .nanoseconds(Int(firstFrameDeadlineSeconds * 1_000_000_000))
-        self.scheduleReleaseTail = scheduleReleaseTail
         controlQueue.setSpecific(key: controlQueueKey, value: ())
 
         deviceMonitor.onChange = { [weak self] reason in
@@ -189,7 +180,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                 }
                 active.pendingStop = continuation
                 active.stream.stopWatchingFirstFrame()
-                self.scheduleReleaseTail { [weak self, weak active] in
+                DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + Self.releaseTail) { [weak self, weak active] in
                     self?.controlQueue.async {
                         guard let self, let active, self.activeCapture === active else { return }
                         _ = self.finalize(active: active, discard: false)

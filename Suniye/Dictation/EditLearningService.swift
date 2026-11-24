@@ -8,31 +8,21 @@ struct EditLearningSession {
     let readCurrentFieldValue: () -> String?
 }
 
-@MainActor
-protocol EditLearningServiceProtocol: AnyObject {
-    var onLearnedTerms: (([String]) -> Void)? { get set }
-    /// Reports, once per finalized session, how much of the inserted dictation
-    /// the user corrected — a coarse 0...100 bucket (content-free), used as an
-    /// ASR/cleanup accuracy signal.
-    var onEditRate: ((Int) -> Void)? { get set }
-    func beginTracking(_ session: EditLearningSession)
-    func finalizeActiveSession()
-}
-
 /// Watches the text field a dictation was inserted into and learns vocabulary
 /// from the user's manual corrections. Re-reads the field at fixed checkpoints
 /// and on terminal events (app switch, next dictation) instead of observing
 /// live AX notifications, which are unreliable in Chromium/Electron apps.
 @MainActor
-final class EditLearningService: EditLearningServiceProtocol {
+final class EditLearningService {
     static let checkpointDelays: [TimeInterval] = [10, 30, 60]
 
     var onLearnedTerms: (([String]) -> Void)?
+    /// Reports, once per finalized session, how much of the inserted dictation
+    /// the user corrected — a coarse 0...100 bucket (content-free), used as an
+    /// ASR/cleanup accuracy signal.
     var onEditRate: ((Int) -> Void)?
 
-    private let isKnownWord: (String) -> Bool
-    private let scheduleTimer: (TimeInterval, @escaping @MainActor () -> Void) -> () -> Void
-    private let workspaceNotificationCenter: NotificationCenter
+    private let workspaceNotificationCenter = NSWorkspace.shared.notificationCenter
 
     private struct ActiveSession {
         let session: EditLearningSession
@@ -43,16 +33,6 @@ final class EditLearningService: EditLearningServiceProtocol {
     }
 
     private var activeSession: ActiveSession?
-
-    nonisolated init(
-        isKnownWord: @escaping (String) -> Bool = EditLearningService.spellCheckerKnowsWord,
-        scheduleTimer: @escaping (TimeInterval, @escaping @MainActor () -> Void) -> () -> Void = EditLearningService.scheduleMainRunLoopTimer,
-        workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
-    ) {
-        self.isKnownWord = isKnownWord
-        self.scheduleTimer = scheduleTimer
-        self.workspaceNotificationCenter = workspaceNotificationCenter
-    }
 
     func beginTracking(_ session: EditLearningSession) {
         finalizeActiveSession()
@@ -74,7 +54,7 @@ final class EditLearningService: EditLearningServiceProtocol {
         }
         for (index, delay) in Self.checkpointDelays.enumerated() {
             let isTerminal = index == Self.checkpointDelays.count - 1
-            active.cancelTimers.append(scheduleTimer(delay) { [weak self] in
+            active.cancelTimers.append(Self.scheduleMainRunLoopTimer(after: delay) { [weak self] in
                 self?.processRead(terminal: isTerminal)
             })
         }
@@ -151,7 +131,7 @@ final class EditLearningService: EditLearningServiceProtocol {
         return CorrectionClassifier.learnableTerms(
             from: substitutions,
             existingVocabulary: active.session.existingVocabulary + active.learnedTerms,
-            isKnownWord: isKnownWord,
+            isKnownWord: Self.spellCheckerKnowsWord,
             maxTerms: remainingCapacity
         )
     }
@@ -165,15 +145,15 @@ final class EditLearningService: EditLearningServiceProtocol {
         }
     }
 
-    /// NSSpellChecker is main-thread-only. This is nonisolated solely so it can
-    /// serve as a default argument; all callers run on the main actor.
-    nonisolated static func spellCheckerKnowsWord(_ word: String) -> Bool {
+    /// NSSpellChecker is main-thread-only. This is nonisolated so it fits the
+    /// classifier's plain closure; all callers run on the main actor.
+    private nonisolated static func spellCheckerKnowsWord(_ word: String) -> Bool {
         let checker = NSSpellChecker.shared
         let missRange = checker.checkSpelling(of: word, startingAt: 0)
         return missRange.location == NSNotFound
     }
 
-    nonisolated static func scheduleMainRunLoopTimer(
+    private static func scheduleMainRunLoopTimer(
         after delay: TimeInterval,
         _ handler: @escaping @MainActor () -> Void
     ) -> () -> Void {

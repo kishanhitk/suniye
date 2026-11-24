@@ -7,8 +7,7 @@ import Foundation
 /// `qwen3ASR`.
 ///
 /// `AppState` talks to this as a single service, so OS-gating and engine selection stay
-/// localized here rather than spreading through the app. Injectable children keep the
-/// service mockable in tests.
+/// localized here rather than spreading through the app.
 ///
 /// A clip without speech never reaches an engine: engines write text for noise.
 /// A final clip then throws `NoSpeechDetected`; a partial or meeting one gives
@@ -33,26 +32,11 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         case qwen3
     }
 
-    private let sherpaService: TranscriptionServiceProtocol
-    private let appleService: TranscriptionServiceProtocol?
-    private let cohereService: TranscriptionServiceProtocol
-    private let qwen3Service: TranscriptionServiceProtocol
-    private let makeSpeechDetector: () throws -> SpeechDetecting
+    private let sherpaService = TranscriptionService()
+    private let appleService = RoutingTranscriptionService.makeAppleServiceIfSupported()
+    private let cohereService = CohereTranscriptionService()
+    private let qwen3Service = Qwen3ASRTranscriptionService()
     private var active: (engine: Engine, speechDetector: SpeechDetecting)?
-
-    init(
-        sherpaService: TranscriptionServiceProtocol = TranscriptionService(),
-        appleService: TranscriptionServiceProtocol? = RoutingTranscriptionService.makeAppleServiceIfSupported(),
-        cohereService: TranscriptionServiceProtocol = CohereTranscriptionService(),
-        qwen3Service: TranscriptionServiceProtocol = Qwen3ASRTranscriptionService(),
-        makeSpeechDetector: @escaping () throws -> SpeechDetecting = { try SpeechDetector.bundled() }
-    ) {
-        self.sherpaService = sherpaService
-        self.appleService = appleService
-        self.cohereService = cohereService
-        self.qwen3Service = qwen3Service
-        self.makeSpeechDetector = makeSpeechDetector
-    }
 
     static func makeAppleServiceIfSupported() -> TranscriptionServiceProtocol? {
         if #available(macOS 26, *), AppleSpeechSupport.isAvailable {
@@ -66,7 +50,7 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         guard let target = service(for: engine) else {
             throw RoutingError.appleSpeechUnavailable
         }
-        let speechDetector = try active?.speechDetector ?? makeSpeechDetector()
+        let speechDetector = try active?.speechDetector ?? SpeechDetector.bundled()
 
         // Load the target first; only after it succeeds do we release the previously
         // active engine. Unloading first would destroy a working recognizer even when

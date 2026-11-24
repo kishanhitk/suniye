@@ -67,6 +67,7 @@ xcodebuild \
 - Tests are flow tests in the XCTest host. A flow test starts at a user entry point (hotkey, menu or settings action), runs the real app code, and stubs only the outside world: network, OS permission prompts, hardware (microphone, accessibility and key events, hotkey taps), the login Keychain, Sparkle.
 - Do not add unit tests for helpers, formatters or single services. Add a flow test for a new user flow, or for a bug that a flow test can reproduce.
 - A test must never touch real user data: no default stores, no real App Support folder, no `UserDefaults.standard`, no login Keychain. Start the app with `FlowApp` in `SuniyeTests/Support`.
+- A seam exists only at the outside world or at a storage location: the audio capture, hotkey, sound and speech engine services, `MeetingEnvironment`, the accessibility and key event closures of `TextInsertionService` and `EditModeService`, `SecretItem`, `URLSession` parameters, the Sparkle controller, the permission and clock providers of `AppState`, and the folder, file or `UserDefaults` of each store. Do not add a protocol or a parameter only so a test can replace app code.
 
 ## Targeted E2E scripts
 - LLM forced success/fallback smoke tests run via launch args:
@@ -84,7 +85,6 @@ xcodebuild \
 - Prefer minimal, surgical edits.
 - Preserve actor/MainActor boundaries; do not introduce UI-thread blocking work.
 - Keep service boundaries intact (do not collapse logic into views).
-- Keep dependency-injected seams used by tests (`LLMPostProcessor`, settings store, keychain service).
 - When behavior changes, update the flow tests and relevant docs (`README.md`, `docs/*`).
 
 ## Commit messages

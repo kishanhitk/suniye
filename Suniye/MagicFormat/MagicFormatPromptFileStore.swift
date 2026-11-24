@@ -1,15 +1,6 @@
 import Foundation
 
-protocol MagicFormatPromptFileStoreProtocol {
-    func syncPrompts(settings: LLMSettings) -> LLMSettings
-    func syncAppPrompt(bundleID: String, fallback: String) -> String
-    func saveProviderPrompt(_ prompt: MagicFormatEngine, content: String)
-    func saveAppPrompt(bundleID: String, content: String)
-    func providerPromptURL(_ prompt: MagicFormatEngine) -> URL
-    func appPromptURL(bundleID: String) -> URL?
-}
-
-final class MagicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol {
+final class MagicFormatPromptFileStore {
     private let fileManager: FileManager
     private let promptsDirectoryURL: URL
 

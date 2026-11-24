@@ -78,8 +78,8 @@ actor LlamaServer {
         let task: Task<LlamaServerEndpoint, Error>
     }
 
-    private let session: URLSession
-    private let completionClient: ChatCompletionClient
+    private let session = URLSession.shared
+    private let completionClient = ChatCompletionClient(session: .shared)
     /// Fired (model name, cold-start load ms) once per real process start, from
     /// `start()`'s success path. Analytics-only; may be nil.
     private let onModelLoad: (@Sendable (String, Int) -> Void)?
@@ -94,22 +94,19 @@ actor LlamaServer {
     private var stoppingTask: Task<Void, Never>?
 
     init(
-        session: URLSession = .shared,
         onModelLoad: (@Sendable (String, Int) -> Void)? = nil,
         onKeepAliveEvicted: (@Sendable (String) -> Void)? = nil
     ) {
-        self.session = session
-        self.completionClient = ChatCompletionClient(session: session)
         self.onModelLoad = onModelLoad
         self.onKeepAliveEvicted = onKeepAliveEvicted
     }
 
     /// The bundled helper, or the `SUNIYE_LLAMA_SERVER_PATH` override.
-    static func locateExecutable(fileManager: FileManager = .default) -> URL? {
+    static func locateExecutable() -> URL? {
         let name = "llama-server"
         if let override = ProcessInfo.processInfo.environment["SUNIYE_LLAMA_SERVER_PATH"], !override.isEmpty {
             let url = URL(fileURLWithPath: override)
-            if fileManager.isExecutableFile(atPath: url.path) {
+            if FileManager.default.isExecutableFile(atPath: url.path) {
                 return url
             }
         }
@@ -135,7 +132,7 @@ actor LlamaServer {
 
         return bundleCandidates
             .lazy
-            .first { fileManager.isExecutableFile(atPath: $0.path) }
+            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 
     static func arguments(for launch: LlamaServerLaunch, port: Int, apiKey: String) -> [String] {
@@ -333,7 +330,7 @@ actor LlamaServer {
         await Self.terminateAndWait(processToStop, timeoutSeconds: Self.shutdownTimeoutSeconds)
     }
 
-    func scheduleIdleShutdown(after idleTimeoutSeconds: Double) {
+    private func scheduleIdleShutdown(after idleTimeoutSeconds: Double) {
         idleShutdownTask?.cancel()
         guard idleTimeoutSeconds > 0 else {
             return
