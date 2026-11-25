@@ -228,7 +228,9 @@ struct AudioSampleSnapshot: Equatable, Sendable {
 }
 
 enum AudioCaptureEvent: Equatable, Sendable {
-    case levelsUpdated(sessionID: UUID, levels: [Float])
+    /// The loudness of the audio since the last report in dBFS, for the
+    /// listening dots.
+    case loudnessUpdated(sessionID: UUID, loudness: Float)
     case devicesChanged([AudioInputDevice])
     case routeChanged(sessionID: UUID, route: AudioRouteSnapshot)
     case interrupted(sessionID: UUID, reason: AudioCaptureInterruption)

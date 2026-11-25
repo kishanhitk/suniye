@@ -21,7 +21,10 @@ struct BehindWindowBlur: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.state = state
+    }
 }
 
 private extension NSImage {

@@ -1,57 +1,58 @@
 import AppKit
 import Observation
-import QuartzCore
 import SwiftUI
 
 enum FloatingIndicatorLayout {
-    static func frame(
-        for size: NSSize,
+    /// How close the widest content may come to a screen edge before the pill
+    /// grows away from that edge instead of from its center.
+    static let edgeMargin: CGFloat = 8
+
+    /// The anchor for a placement on a screen: the saved spot, or the bottom
+    /// center above `bottomMargin` when the user never moved the pill.
+    static func anchor(
         in visibleFrame: NSRect,
         placement: FloatingIndicatorPlacement?,
         bottomMargin: CGFloat
-    ) -> NSRect {
+    ) -> FloatingIndicatorAnchor {
         guard let placement else {
-            return defaultFrame(for: size, in: visibleFrame, bottomMargin: bottomMargin)
+            return anchor(at: CGPoint(x: visibleFrame.midX, y: visibleFrame.minY + bottomMargin), in: visibleFrame)
         }
-
-        let centerX = visibleFrame.minX + visibleFrame.width * placement.centerXRatio.clampedToUnitInterval()
-        let bottomY = visibleFrame.minY + visibleFrame.height * placement.bottomYRatio.clampedToUnitInterval()
-        let frame = NSRect(
-            x: centerX - size.width / 2,
-            y: bottomY,
-            width: size.width,
-            height: size.height
+        let point = CGPoint(
+            x: visibleFrame.minX + visibleFrame.width * placement.centerXRatio.clampedToUnitInterval(),
+            y: visibleFrame.minY + visibleFrame.height * placement.bottomYRatio.clampedToUnitInterval()
         )
-        return clampedFrame(frame, within: visibleFrame)
+        return anchor(at: point, in: visibleFrame)
     }
 
-    static func defaultFrame(for size: NSSize, in visibleFrame: NSRect, bottomMargin: CGFloat) -> NSRect {
-        let x = visibleFrame.midX - size.width / 2
-        let y = visibleFrame.minY + bottomMargin
-        return NSRect(x: x, y: y, width: size.width, height: size.height)
+    /// The anchor whose idle bar has its bottom center at `point`, kept on the
+    /// screen, and growing away from any edge the widest content would cross.
+    static func anchor(at point: CGPoint, in visibleFrame: NSRect) -> FloatingIndicatorAnchor {
+        let idle = FloatingIndicatorMetrics.idlePillSize
+        let x = min(max(point.x, visibleFrame.minX + idle.width / 2), visibleFrame.maxX - idle.width / 2)
+        let y = min(max(point.y, visibleFrame.minY), visibleFrame.maxY - idle.height)
+        let reach = FloatingIndicatorMetrics.widestContent / 2 + edgeMargin
+        let horizontal: FloatingIndicatorAnchor.Horizontal
+        if x - reach < visibleFrame.minX {
+            horizontal = .leading
+        } else if x + reach > visibleFrame.maxX {
+            horizontal = .trailing
+        } else {
+            horizontal = .center
+        }
+        let vertical: FloatingIndicatorAnchor.Vertical = y + FloatingIndicatorMetrics.tallestContent + edgeMargin > visibleFrame.maxY
+            ? .top
+            : .bottom
+        return FloatingIndicatorAnchor(point: CGPoint(x: x, y: y), horizontal: horizontal, vertical: vertical)
     }
 
-    static func placement(for frame: NSRect, in visibleFrame: NSRect) -> FloatingIndicatorPlacement {
-        let clampedFrame = clampedFrame(frame, within: visibleFrame)
-        let centerXRatio = visibleFrame.width > 0
-            ? (clampedFrame.midX - visibleFrame.minX) / visibleFrame.width
-            : 0.5
-        let bottomYRatio = visibleFrame.height > 0
-            ? (clampedFrame.minY - visibleFrame.minY) / visibleFrame.height
-            : 0
-
+    /// The saved placement for an idle bar whose bottom center is `point`.
+    static func placement(for point: CGPoint, in visibleFrame: NSRect) -> FloatingIndicatorPlacement {
+        let centerXRatio = visibleFrame.width > 0 ? (point.x - visibleFrame.minX) / visibleFrame.width : 0.5
+        let bottomYRatio = visibleFrame.height > 0 ? (point.y - visibleFrame.minY) / visibleFrame.height : 0
         return FloatingIndicatorPlacement(
             centerXRatio: Double(centerXRatio).clampedToUnitInterval(),
             bottomYRatio: Double(bottomYRatio).clampedToUnitInterval()
         )
-    }
-
-    static func clampedFrame(_ frame: NSRect, within visibleFrame: NSRect) -> NSRect {
-        let maxX = max(visibleFrame.maxX - frame.width, visibleFrame.minX)
-        let maxY = max(visibleFrame.maxY - frame.height, visibleFrame.minY)
-        let x = min(max(frame.minX, visibleFrame.minX), maxX)
-        let y = min(max(frame.minY, visibleFrame.minY), maxY)
-        return NSRect(x: x, y: y, width: frame.width, height: frame.height)
     }
 }
 
@@ -62,7 +63,6 @@ final class FloatingIndicatorController {
     var onPlacementChanged: ((FloatingIndicatorPlacement?) -> Void)?
 
     private var panel: NSPanel?
-    private var hostingView: NSHostingView<FloatingIndicatorView>?
     private let model = FloatingIndicatorModel()
     private var pointerTrackingTimer: Timer?
     private var hoverExitTask: Task<Void, Never>?
@@ -72,30 +72,29 @@ final class FloatingIndicatorController {
     private var customPlacement: FloatingIndicatorPlacement?
     private var hideWhenIdle = false
     private var lastLoggedStateValue: String?
-    private var dragStartPanelFrame: NSRect?
+    private var anchor: FloatingIndicatorAnchor?
+    private var dragStartAnchor: FloatingIndicatorAnchor?
     private var dragStartMouseLocation: NSPoint?
     private var isDragging = false
     private var isStarted = false
-    private var settleTask: Task<Void, Never>?
-    private var resizeGeneration = 0
+    private var reduceMotionObserver: NSObjectProtocol?
     private let bottomMargin: CGFloat = 28
-    /// Only the cross-screen follow animates the window frame. Apple's "move"
-    /// response is 0.4s; the old 0.11 read as a teleport.
+    /// Only a move to another screen animates the window. Apple's "move"
+    /// response is 0.4 s.
     private let crossScreenMoveDuration: TimeInterval = 0.4
-    /// Slightly longer than the view's layout spring so the window trims to its
-    /// exact size only after the SwiftUI content has finished animating.
-    private let panelSettleDelay: UInt64 = 400_000_000
 
     deinit {
         pointerTrackingTimer?.invalidate()
         hoverExitTask?.cancel()
-        settleTask?.cancel()
-        lastLoggedStateValue = nil
+        if let reduceMotionObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(reduceMotionObserver)
+        }
     }
 
     func start() {
         isStarted = true
         ensurePanel()
+        followReduceMotion()
         startPointerTracking()
         render()
         AppLogger.shared.log(.info, "floating indicator started")
@@ -107,22 +106,23 @@ final class FloatingIndicatorController {
         pointerTrackingTimer = nil
         hoverExitTask?.cancel()
         hoverExitTask = nil
-        settleTask?.cancel()
-        settleTask = nil
+        if let reduceMotionObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(reduceMotionObserver)
+            self.reduceMotionObserver = nil
+        }
         guard let panel, panel.isVisible else { return }
         panel.orderOut(nil)
         AppLogger.shared.log(.info, "floating indicator stopped")
     }
 
     func configure(hideWhenIdle: Bool, showsMeetingTime: Bool, placement: FloatingIndicatorPlacement?) {
-        let didChangeVisibility = self.hideWhenIdle != hideWhenIdle
-        let didChangeMeetingTime = model.showsMeetingTime != showsMeetingTime
-        let didChangePlacement = customPlacement != placement
+        let didChange = self.hideWhenIdle != hideWhenIdle
+            || model.showsMeetingTime != showsMeetingTime
+            || customPlacement != placement
         self.hideWhenIdle = hideWhenIdle
         model.showsMeetingTime = showsMeetingTime
         customPlacement = placement
-        guard didChangeVisibility || didChangeMeetingTime || didChangePlacement else { return }
-        guard isStarted else { return }
+        guard didChange, isStarted else { return }
         render()
     }
 
@@ -130,29 +130,15 @@ final class FloatingIndicatorController {
     /// it, even when the pill would hide while idle.
     func updateMeeting(_ session: MeetingSession?) {
         model.meeting = session
-        followMeetingPill()
         guard isStarted else { return }
         render()
     }
 
-    /// The pill's size follows the meeting: a pause or a track problem
-    /// changes what it shows, so the panel resizes then.
-    private func followMeetingPill() {
-        guard let session = model.meeting else { return }
-        withObservationTracking {
-            _ = FloatingIndicatorMetrics.meetingPillSize(for: session, expanded: false, showsTime: model.showsMeetingTime)
-        } onChange: { [weak self, weak session] in
-            Task { @MainActor [weak self, weak session] in
-                guard let self, let session, self.model.meeting === session else { return }
-                if self.isStarted {
-                    self.render()
-                }
-                self.followMeetingPill()
-            }
-        }
-    }
-
     func update(_ state: FloatingIndicatorState) {
+        if state.isListening, !baseState.isListening {
+            // A new recording starts from silence, not from the last one's voice.
+            model.voice.loudness = AudioLevelMeter.silentLoudness
+        }
         baseState = state
         if state.isAtRest {
             anchoredScreenID = currentMouseScreen()?.displayID
@@ -168,6 +154,12 @@ final class FloatingIndicatorController {
         render()
     }
 
+    /// The microphone's loudness while listening, in dBFS. The dots read it
+    /// once a frame; it changes no observed state.
+    func updateLoudness(_ loudness: Float) {
+        model.voice.loudness = loudness
+    }
+
     private var effectiveState: FloatingIndicatorState {
         if case .idle = baseState, isHovered {
             return .hover
@@ -175,26 +167,21 @@ final class FloatingIndicatorController {
         return baseState
     }
 
-    private var shouldShowPanel: Bool {
-        if model.meeting != nil {
-            return true
-        }
-        if hideWhenIdle, case .idle = effectiveState {
-            return false
-        }
-        return true
+    /// The idle bar is the only shape whose place does not depend on the
+    /// anchor's edges, so the edges may change in place only while it shows.
+    private var showsOnlyTheIdleBar: Bool {
+        effectiveState == .idle && model.meeting == nil
     }
 
-    private var panelShouldCaptureMouseEvents: Bool {
-        effectiveState.isAtRest || effectiveState.acceptsClicks
+    private var showsPill: Bool {
+        !(hideWhenIdle && effectiveState == .idle && model.meeting == nil)
     }
 
     private func ensurePanel() {
         guard panel == nil else { return }
 
-        let initialSize = size(for: .idle)
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: initialSize),
+            contentRect: NSRect(origin: .zero, size: FloatingIndicatorMetrics.panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -205,7 +192,11 @@ final class FloatingIndicatorController {
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.hasShadow = false
-        panel.ignoresMouseEvents = false
+        // `ignoresMouseEvents` stays unset on purpose: then the window server
+        // routes each click by what the panel draws, so the pill and its
+        // accessories take clicks and every transparent point of the fixed
+        // panel passes them to the app below. Setting it, even to false once,
+        // makes the whole panel rectangle take clicks or none.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.animationBehavior = .none
 
@@ -229,18 +220,31 @@ final class FloatingIndicatorController {
                 }
             )
         )
-        host.frame = NSRect(origin: .zero, size: initialSize)
+        host.sizingOptions = []
+        host.frame = NSRect(origin: .zero, size: FloatingIndicatorMetrics.panelSize)
         host.autoresizingMask = [.width, .height]
         panel.contentView = host
         panel.orderOut(nil)
 
         self.panel = panel
-        hostingView = host
+    }
+
+    private func followReduceMotion() {
+        model.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        guard reduceMotionObserver == nil else { return }
+        reduceMotionObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.model.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            }
+        }
     }
 
     private func setHovered(_ hovered: Bool) {
-        guard baseState.isAtRest else { return }
-        guard shouldShowPanel else { return }
+        guard baseState.isAtRest, showsPill else { return }
         if hovered {
             hoverExitTask?.cancel()
             hoverExitTask = nil
@@ -250,17 +254,13 @@ final class FloatingIndicatorController {
             return
         }
 
-        guard isHovered else { return }
-        hoverExitTask?.cancel()
+        guard isHovered, hoverExitTask == nil else { return }
+        // A short grace keeps the hint up while the pointer crosses the gap
+        // between the pill and the hint.
         hoverExitTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 140_000_000)
             guard let self, !Task.isCancelled else { return }
-            defer { self.hoverExitTask = nil }
-
-            if let panel = self.panel, panel.frame.contains(NSEvent.mouseLocation) {
-                return
-            }
-
+            self.hoverExitTask = nil
             self.isHovered = false
             self.render()
         }
@@ -268,34 +268,14 @@ final class FloatingIndicatorController {
 
     private func render() {
         ensurePanel()
-
-        guard let panel, hostingView != nil else { return }
+        guard let panel else { return }
         let state = effectiveState
-        let size = size(for: state)
-        let targetFrame = frame(for: size)
-
-        // Mutate the observed model in place — SwiftUI diffs and animates the
-        // content itself. (Rebuilding rootView here would discard the animation
-        // and make every transition snap.)
         model.state = state
-
-        panel.ignoresMouseEvents = !panelShouldCaptureMouseEvents
+        model.hidesWhenIdle = hideWhenIdle
         if !isDragging {
-            if shouldShowPanel {
-                resizePanel(to: targetFrame)
-            } else {
-                settleTask?.cancel()
-                settleTask = nil
-                panel.setFrame(targetFrame, display: false)
-            }
+            place(animated: false)
         }
-        panel.alphaValue = 1
-        if shouldShowPanel {
-            panel.orderFrontRegardless()
-        } else {
-            isHovered = false
-            panel.orderOut(nil)
-        }
+        panel.orderFrontRegardless()
         if lastLoggedStateValue != state.logValue {
             lastLoggedStateValue = state.logValue
             AppLogger.shared.log(.info, "floating indicator update state=\(state.logValue)")
@@ -306,150 +286,104 @@ final class FloatingIndicatorController {
         guard pointerTrackingTimer == nil else { return }
         pointerTrackingTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.tickPointerTracking()
+                self?.followPointerScreen()
             }
         }
     }
 
-    private func tickPointerTracking() {
-        guard !isDragging else { return }
-        guard effectiveState.isAtRest else { return }
-        guard let screen = currentMouseScreen() else { return }
-
+    /// At rest the pill moves to the screen with the pointer.
+    private func followPointerScreen() {
+        guard !isDragging, effectiveState.isAtRest, let screen = currentMouseScreen() else { return }
         if anchoredScreenID != screen.displayID {
             anchoredScreenID = screen.displayID
-            positionPanel(targetFrame: frame(for: size(for: effectiveState)), animated: true)
+            place(animated: true)
         }
     }
 
-    private func frame(for size: NSSize) -> NSRect {
+    /// Puts the panel where the anchor for the current screen and placement
+    /// wants it. The panel only ever moves; it never changes size. A state
+    /// change at the same place keeps the edges unless the idle bar shows; a
+    /// move to another place takes the edges that fit there.
+    private func place(animated: Bool) {
         let screen = resolvedScreen() ?? currentMouseScreen() ?? NSScreen.main ?? NSScreen.screens.first
-        guard let screen else { return .zero }
-
+        guard let screen else { return }
         anchoredScreenID = screen.displayID
-        return FloatingIndicatorLayout.frame(
-            for: size,
-            in: screen.visibleFrame,
-            placement: customPlacement,
-            bottomMargin: bottomMargin
-        )
-    }
-
-    /// Resizes the panel for a state change without animating the window frame.
-    /// The window is snapped instantly to a box containing both the current and
-    /// target content so the SwiftUI content spring can grow/shrink without
-    /// being clipped; because the panel is transparent and bottom-anchored, this
-    /// interim size is invisible. Once the content animation has settled, the
-    /// window is trimmed to its exact target. Removing the AppKit frame
-    /// animation eliminates the window-vs-content race (and the per-frame
-    /// re-blur of the vibrancy/glass content) that made transitions stutter.
-    private func resizePanel(to targetFrame: NSRect) {
-        guard let panel, targetFrame != .zero else { return }
-        resizeGeneration &+= 1
-        let generation = resizeGeneration
-
-        let current = panel.frame
-        if current.equalTo(targetFrame) {
-            settleTask?.cancel()
-            settleTask = nil
-            return
+        var target = FloatingIndicatorLayout.anchor(in: screen.visibleFrame, placement: customPlacement, bottomMargin: bottomMargin)
+        if let anchor, anchor.point == target.point, !showsOnlyTheIdleBar {
+            target.horizontal = anchor.horizontal
+            target.vertical = anchor.vertical
         }
+        apply(target, animated: animated)
+    }
 
-        // Only union when the old and new frames overlap (a same-place resize);
-        // a relocation across screens must not stretch a window between them.
-        let interim = (panel.isVisible && current.intersects(targetFrame))
-            ? current.union(targetFrame)
-            : targetFrame
-        setPanelFrameInstantly(interim)
-
-        settleTask?.cancel()
-        settleTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: self?.panelSettleDelay ?? 400_000_000)
-            guard let self, !Task.isCancelled, self.resizeGeneration == generation else { return }
-            guard !self.isDragging, self.shouldShowPanel else { return }
-            self.setPanelFrameInstantly(targetFrame)
-            self.settleTask = nil
+    private func apply(_ target: FloatingIndicatorAnchor, animated: Bool) {
+        guard let panel else { return }
+        anchor = target
+        if model.horizontal != target.horizontal {
+            model.horizontal = target.horizontal
         }
-    }
-
-    /// Sets the panel frame with no animation at all — including suppressing the
-    /// implicit CoreAnimation on the layer-backed hosting view, which would
-    /// otherwise animate its bounds from a corner and make the SwiftUI content
-    /// look like it expands from the top-left instead of growing in place.
-    private func setPanelFrameInstantly(_ frame: NSRect) {
-        guard let panel else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        panel.setFrame(frame, display: true)
-        CATransaction.commit()
-    }
-
-    private func positionPanel(targetFrame: NSRect, animated: Bool) {
-        guard let panel else { return }
-        guard targetFrame != .zero else { return }
+        if model.vertical != target.vertical {
+            model.vertical = target.vertical
+        }
+        let frame = target.panelFrame
+        guard panel.frame != frame else { return }
         // A full-width jump across displays is exactly the vestibular motion
-        // Reduce Motion exists to stop, and this path is AppKit's, so it does
-        // not inherit the SwiftUI environment the rest of the indicator reads.
-        let shouldAnimate = animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        if shouldAnimate {
+        // Reduce Motion exists to stop.
+        if animated, panel.isVisible, !model.reduceMotion {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = crossScreenMoveDuration
                 // Decelerating rather than ease-in-ease-out: AppKit's window
                 // animator cannot host a real spring, so this approximates the
                 // critically damped move the HIG asks for.
                 context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0, 0, 1)
-                panel.animator().setFrame(targetFrame, display: true)
+                panel.animator().setFrameOrigin(frame.origin)
             }
         } else {
-            panel.setFrame(targetFrame, display: true)
+            panel.setFrameOrigin(frame.origin)
         }
     }
 
     private func handleDragChanged() {
-        guard effectiveState.isAtRest else { return }
-        guard let panel else { return }
-        let screen = resolvedScreen() ?? currentMouseScreen() ?? NSScreen.main ?? NSScreen.screens.first
-        guard let screen else { return }
-
+        guard effectiveState.isAtRest, let anchor else { return }
         if !isDragging {
-            dragStartPanelFrame = panel.frame
+            dragStartAnchor = anchor
             dragStartMouseLocation = NSEvent.mouseLocation
             isDragging = true
         }
 
-        guard let dragStartPanelFrame, let dragStartMouseLocation else { return }
+        guard let dragStartAnchor, let dragStartMouseLocation else { return }
         let mouseLocation = NSEvent.mouseLocation
-        let deltaX = mouseLocation.x - dragStartMouseLocation.x
-        let deltaY = mouseLocation.y - dragStartMouseLocation.y
-        let targetFrame = FloatingIndicatorLayout.clampedFrame(
-            NSRect(
-                x: dragStartPanelFrame.minX + deltaX,
-                y: dragStartPanelFrame.minY + deltaY,
-                width: dragStartPanelFrame.width,
-                height: dragStartPanelFrame.height
-            ),
-            within: screen.visibleFrame
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) ?? resolvedScreen() ?? NSScreen.main
+        guard let screen else { return }
+        let point = CGPoint(
+            x: dragStartAnchor.point.x + mouseLocation.x - dragStartMouseLocation.x,
+            y: dragStartAnchor.point.y + mouseLocation.y - dragStartMouseLocation.y
         )
+        // The pill under the pointer is not the idle bar, so the drag keeps
+        // the edges it started with and only translates the panel.
+        var target = FloatingIndicatorLayout.anchor(at: point, in: screen.visibleFrame)
+        target.horizontal = dragStartAnchor.horizontal
+        target.vertical = dragStartAnchor.vertical
         anchoredScreenID = screen.displayID
-        positionPanel(targetFrame: targetFrame, animated: false)
+        apply(target, animated: false)
     }
 
+    /// Ends a drag however the gesture ended: released, cancelled, or cut
+    /// off by a state change. Safe to call more than once.
     private func handleDragEnded() {
-        defer {
-            dragStartPanelFrame = nil
-            dragStartMouseLocation = nil
-            isDragging = false
-            render()
+        guard isDragging else { return }
+        isDragging = false
+        dragStartAnchor = nil
+        dragStartMouseLocation = nil
+        if let anchor, let screen = resolvedScreen() {
+            // Dropping is the user's own move, so the pill takes the edges
+            // that fit its new place now, even while a meeting pill shows.
+            let placement = FloatingIndicatorLayout.placement(for: anchor.point, in: screen.visibleFrame)
+            customPlacement = placement
+            apply(FloatingIndicatorLayout.anchor(in: screen.visibleFrame, placement: placement, bottomMargin: bottomMargin), animated: false)
+            onPlacementChanged?(placement)
         }
-
-        guard effectiveState.isAtRest else { return }
-        guard let panel else { return }
-        let screen = resolvedScreen() ?? currentMouseScreen() ?? NSScreen.main ?? NSScreen.screens.first
-        guard let screen else { return }
-
-        let placement = FloatingIndicatorLayout.placement(for: panel.frame, in: screen.visibleFrame)
-        customPlacement = placement
-        onPlacementChanged?(placement)
+        render()
     }
 
     private func resolvedScreen() -> NSScreen? {
@@ -459,38 +393,6 @@ final class FloatingIndicatorController {
 
     private func currentMouseScreen() -> NSScreen? {
         NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main ?? NSScreen.screens.first
-    }
-
-    private func size(for state: FloatingIndicatorState) -> NSSize {
-        let hasMeeting = model.meeting != nil
-        switch state {
-        case .idle:
-            if let meeting = model.meeting {
-                return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: false, showsTime: model.showsMeetingTime)
-            }
-            return NSSize(width: 74, height: 7)
-        case .hover:
-            if let meeting = model.meeting {
-                return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: true, showsTime: model.showsMeetingTime)
-            }
-            return NSSize(width: 272, height: 84)
-        case let .listening(_, source, preview):
-            let panelSize = FloatingIndicatorMetrics.listeningPanelSize(
-                preview: preview,
-                source: source,
-                meetingLeadWidth: hasMeeting ? FloatingIndicatorMetrics.meetingLeadWidth(showsTime: model.showsMeetingTime) : 0
-            )
-            return NSSize(width: panelSize.width, height: panelSize.height)
-        case let .processing(message):
-            guard let message else {
-                return NSSize(width: 128, height: 40)
-            }
-            let width = min(max(CGFloat(message.count) * 6.5 + 86, 292), 392)
-            return NSSize(width: width, height: 40)
-        case let .error(message):
-            let width = min(max(CGFloat(message.count) * 6.2, 170), 240) + 32
-            return NSSize(width: width, height: 52)
-        }
     }
 }
 

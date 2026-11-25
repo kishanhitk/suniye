@@ -1217,9 +1217,9 @@ final class AppState {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 switch event {
-                case let .levelsUpdated(sessionID, levels):
+                case let .loudnessUpdated(sessionID, loudness):
                     guard activeAudioCaptureSessionID == sessionID else { return }
-                    handleAudioLevelsUpdate(levels)
+                    handleLoudnessUpdate(loudness)
                 case let .devicesChanged(devices):
                     microphone.applyInputDevices(devices)
                     microphone.refreshAudioRouteSnapshot()
@@ -2885,14 +2885,14 @@ final class AppState {
             startSlowWarning: { [weak self] in
                 self?.startMagicFormatSlowWarningTask() ?? Task {}
             },
-            setStage: { [weak self] text in
+            setStage: { [weak self] stage in
                 guard let self else {
                     return
                 }
                 guard case .processing = self.floatingIndicatorState else {
                     return
                 }
-                self.setFloatingIndicatorState(.processing(message: text))
+                self.setFloatingIndicatorState(.processing(step: .formatting, message: stage.pillMessage))
             },
             // The custom preset's model id is user free text: masked here (at
             // request build, pre-suspension) so neither analytics nor app.log
@@ -2908,7 +2908,7 @@ final class AppState {
             try? await Task.sleep(nanoseconds: 220_000_000)
             setFloatingIndicatorState(.hover)
             try? await Task.sleep(nanoseconds: 220_000_000)
-            setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0.72), source: .manual))
+            setFloatingIndicatorState(.listening(source: .manual))
             try? await Task.sleep(nanoseconds: 220_000_000)
             setFloatingIndicatorState(.processing())
             try? await Task.sleep(nanoseconds: 220_000_000)
@@ -3184,8 +3184,8 @@ final class AppState {
     private func lockDictationRecording() {
         AppLogger.shared.log(.info, "recording locked by double tap")
         activeDictationSession?.lockedByDoubleTap = true
-        if case let .listening(levels, _, preview) = floatingIndicatorState {
-            setFloatingIndicatorState(.listening(levels: levels, source: .manual, preview: preview))
+        if case let .listening(_, preview) = floatingIndicatorState {
+            setFloatingIndicatorState(.listening(source: .manual, preview: preview))
         }
     }
 
@@ -3369,7 +3369,7 @@ final class AppState {
             onboardingPracticeText = ""
             onboardingPracticeResult = nil
         }
-        setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0), source: trigger))
+        setFloatingIndicatorState(.listening(source: trigger))
 
         do {
             let capture = try await audioCaptureService.startCapture(
@@ -3798,7 +3798,7 @@ final class AppState {
             return
         }
 
-        setFloatingIndicatorState(.processing(message: "Rewriting..."))
+        setFloatingIndicatorState(.processing(step: .formatting))
 
         do {
             let rewritten = try await magicFormatCoordinator.rewrite(
@@ -4177,7 +4177,7 @@ final class AppState {
             try? await Task.sleep(for: .seconds(5))
             guard let self, !Task.isCancelled else { return }
             guard case .processing = self.floatingIndicatorState else { return }
-            self.setFloatingIndicatorState(.processing(message: "Magic Format is taking longer than usual."))
+            self.setFloatingIndicatorState(.processing(step: .formatting, message: "Magic Format is taking longer than usual"))
         }
     }
 
@@ -4266,17 +4266,13 @@ final class AppState {
     private func blockedStartRestoreIndicatorState() -> FloatingIndicatorState {
         switch phase {
         case .recording:
-            if case let .listening(levels, source, preview) = floatingIndicatorState {
-                return .listening(levels: levels, source: source, preview: preview)
+            if case .listening = floatingIndicatorState {
+                return floatingIndicatorState
             }
-            return .listening(
-                levels: Self.defaultIndicatorLevels(level: 0.72),
-                source: activeRecordingSource ?? .manual
-            )
+            return .listening(source: activeRecordingSource ?? .manual)
         case .transcribing:
-            // Preserve whatever processing stage the pill has advanced to
-            // ("Starting local model...", "Polishing..."); the phase stays
-            // .transcribing through the whole post-stop pipeline.
+            // Keep the step and message the pill has advanced to; the phase
+            // stays .transcribing through the whole post-stop pipeline.
             if case .processing = floatingIndicatorState {
                 return floatingIndicatorState
             }
@@ -4317,11 +4313,6 @@ final class AppState {
         let audioCaptureService = audioCaptureService
         let transcriptionService = transcriptionService
         lastPublishedPartialTranscript = ""
-        // Reserve the bubble's panel space now (`.pending`), before the first
-        // partial lands — the panel must never resize mid-recording.
-        if case let .listening(levels, source, _) = floatingIndicatorState {
-            setFloatingIndicatorState(.listening(levels: levels, source: source, preview: .pending))
-        }
         partialTranscriptionScheduler.start(
             snapshotProvider: {
                 await audioCaptureService.snapshotSamples(
@@ -4348,10 +4339,9 @@ final class AppState {
     private func stopLivePreview() {
         partialTranscriptionScheduler.stop()
         lastPublishedPartialTranscript = ""
-        // Strip a preview that is still visible (e.g. toggled off mid-recording);
-        // level updates would otherwise keep carrying it forward.
-        if case let .listening(levels, source, preview) = floatingIndicatorState, preview != .off {
-            setFloatingIndicatorState(.listening(levels: levels, source: source, preview: .off))
+        // Strip a preview that is still visible (e.g. toggled off mid-recording).
+        if case let .listening(source, preview) = floatingIndicatorState, preview != nil {
+            setFloatingIndicatorState(.listening(source: source, preview: nil))
         }
     }
 
@@ -4369,14 +4359,8 @@ final class AppState {
         )
         lastPublishedPartialTranscript = stabilized
         let preview = FloatingIndicatorMetrics.previewTail(stabilized)
-        if case let .listening(levels, source, _) = floatingIndicatorState {
-            // An empty decode keeps `.pending` (space stays reserved), it does
-            // not fall back to `.off`.
-            setFloatingIndicatorState(.listening(
-                levels: levels,
-                source: source,
-                preview: preview.isEmpty ? .pending : .text(preview)
-            ))
+        if case let .listening(source, _) = floatingIndicatorState {
+            setFloatingIndicatorState(.listening(source: source, preview: preview.isEmpty ? nil : preview))
         }
     }
 
@@ -4418,20 +4402,19 @@ final class AppState {
         return "About \(formatted) left"
     }
 
-    private func handleAudioLevelsUpdate(_ levels: [Float]) {
-        guard case let .listening(_, source, preview) = floatingIndicatorState else {
+    /// The voice drives the listening dots directly: it is not indicator state,
+    /// so it never re-renders the pill.
+    private func handleLoudnessUpdate(_ loudness: Float) {
+        guard floatingIndicatorEnabled, case .listening = floatingIndicatorState else {
             return
         }
-        setFloatingIndicatorState(.listening(levels: levels, source: source, preview: preview))
-    }
-
-    private static func defaultIndicatorLevels(level: Float, count: Int = AudioLevelMeter.bandCount) -> [Float] {
-        Array(repeating: max(0, min(level, 1)), count: count)
+        floatingIndicatorController.updateLoudness(loudness)
     }
 
     /// Single source for the pill's transcribing state so the transcribe transition
-    /// and the blocked-start restore path can never render it differently.
-    private static let transcribingIndicatorState: FloatingIndicatorState = .processing(message: "Transcribing...")
+    /// and the blocked-start restore path can never render it differently. The
+    /// working dots say it; a message shows only for stages worth a word.
+    private static let transcribingIndicatorState: FloatingIndicatorState = .processing()
 
     /// Long dictations on a chunked engine (Cohere) take seconds per chunk, so
     /// the pill counts chunks instead of sitting on a bare spinner.
@@ -4441,7 +4424,7 @@ final class AppState {
               activeDictationSession?.id == sessionID else {
             return
         }
-        let message = "Transcribing \(progress.chunk) of \(progress.totalChunks)..."
+        let message = "Transcribing \(progress.chunk) of \(progress.totalChunks)"
         setFloatingIndicatorState(.processing(message: message))
     }
 
