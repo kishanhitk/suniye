@@ -109,14 +109,7 @@ struct MainWindowView: View {
             // results scrolls in the whole sidebar, not in half of it.
             .frame(maxHeight: .infinity, alignment: .top)
 
-            // Full bleed: it separates the footer from the pane, so it runs the
-            // sidebar's whole width rather than lining up with the rows.
-            Rectangle()
-                .fill(MainWindowPalette.divider)
-                .frame(height: 1)
-                .padding(.bottom, AppMetrics.sidebarFooterPadding)
-
-            SidebarInputDeviceRow(appState: appState)
+            SidebarUpdateRow(appState: appState)
                 .padding(.horizontal, AppMetrics.sidebarPaddingHorizontal)
                 .padding(.bottom, AppMetrics.sidebarFooterPadding)
         }

@@ -106,7 +106,6 @@ final class FlowApp {
             },
             systemGlobeKeyActionProvider: { .doNothing },
             availableDiskCapacityProvider: { 100_000_000_000 },
-            issueReportDiagnosticsDestinationPicker: { [root] name in root.appendingPathComponent(name) },
             meetingCoordinator: makeTestMeetingCoordinator(engine: engine, root: root, defaults: defaults)
         )
         await waitUntil(timeout: 30, file: file, line: line) { self.appState.phase == .ready }

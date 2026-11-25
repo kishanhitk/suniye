@@ -144,7 +144,11 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        sharedAppState.terminateReplyForMeeting()
+        let reply = sharedAppState.terminateReplyForMeeting()
+        if reply == .terminateCancel {
+            sharedAppState.quitWasCancelled()
+        }
+        return reply
     }
 
     func applicationWillTerminate(_ notification: Notification) {

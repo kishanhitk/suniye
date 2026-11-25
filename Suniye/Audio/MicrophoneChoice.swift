@@ -112,19 +112,6 @@ final class MicrophoneChoice {
         select(recommendedInputDevice.id)
     }
 
-    /// The microphone Suniye records from, which can be a stand-in for the saved one.
-    var activeInputDeviceName: String {
-        if let route = audioRouteSnapshot {
-            return route.effectiveInputName
-        }
-        if let selectedInputDeviceID {
-            return availableInputDevices.first(where: { $0.id == selectedInputDeviceID })?.name
-                ?? preferredInputDeviceName
-                ?? "Selected Microphone"
-        }
-        return availableInputDevices.first(where: \.isDefault)?.name ?? "System Default"
-    }
-
     var effectiveInputDeviceStatusText: String {
         guard let route = audioRouteSnapshot else {
             return audioRouteErrorText ?? AudioCaptureServiceError.noInputDevice.localizedDescription
@@ -218,12 +205,12 @@ struct InputDeviceMenuChoice: Hashable {
 
 extension MicrophoneChoice {
     /// No microphone can record: the one state that stops dictation, so the
-    /// sidebar marks it and the footer shows a warning.
+    /// sidebar marks it.
     var hasNoInput: Bool {
         audioRouteSnapshot == nil
     }
 
-    /// System Default, then every device, for both microphone menus. A saved
+    /// System Default, then every device, for the microphone menu. A saved
     /// microphone that is disconnected is listed but cannot be chosen again; a
     /// built-in one that the closed lid switched off can, for use after
     /// undocking.
