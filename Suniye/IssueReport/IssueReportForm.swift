@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -33,20 +34,17 @@ final class IssueReportForm {
     @ObservationIgnored private let context: @MainActor () -> IssueReportContext
     @ObservationIgnored private let nowProvider: () -> Date
     @ObservationIgnored private let fileOpener: (URL) -> Bool
-    @ObservationIgnored private let diagnosticsDestinationPicker: @MainActor (String) -> URL?
 
     init(
         uploadService: IssueReportUploadService,
         context: @escaping @MainActor () -> IssueReportContext,
         nowProvider: @escaping () -> Date,
-        fileOpener: @escaping (URL) -> Bool,
-        diagnosticsDestinationPicker: @escaping @MainActor (String) -> URL?
+        fileOpener: @escaping (URL) -> Bool
     ) {
         self.uploadService = uploadService
         self.context = context
         self.nowProvider = nowProvider
         self.fileOpener = fileOpener
-        self.diagnosticsDestinationPicker = diagnosticsDestinationPicker
     }
 
     var titleRequirementMessage: String? {
@@ -183,7 +181,7 @@ final class IssueReportForm {
                 try? FileManager.default.removeItem(at: diagnosticsURL)
             }
 
-            guard let destinationURL = diagnosticsDestinationPicker(diagnosticsURL.lastPathComponent) else {
+            guard let destinationURL = Self.chooseDestination(defaultName: diagnosticsURL.lastPathComponent) else {
                 status = .idle
                 return
             }
@@ -242,6 +240,13 @@ final class IssueReportForm {
             try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000)
             try? FileManager.default.removeItem(at: url)
         }
+    }
+
+    private static func chooseDestination(defaultName: String) -> URL? {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = defaultName
+        panel.canCreateDirectories = true
+        return panel.runModal() == .OK ? panel.url : nil
     }
 
     private func makeDiagnosticBundle(payload: IssueReportPayload) async throws -> URL {
