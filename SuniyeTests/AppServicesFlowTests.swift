@@ -1,26 +1,81 @@
 import XCTest
 @testable import Suniye
 
-/// Restart to Update with Sparkle stubbed: an update never cuts a dictation short.
+/// The update row in the sidebar footer, with Sparkle stubbed.
 @MainActor
 final class UpdateFlowTests: XCTestCase {
+    func testTheFooterChecksForUpdatesWithoutAWindow() async throws {
+        let app = try FlowApp(self)
+        await app.launch()
+        let version = try XCTUnwrap(AppVersion.fromBundle())
+        XCTAssertEqual(app.appState.updateRow.title, version.shortDisplayString)
+
+        app.updates.report(.finished(.failed(UpdateFailure(kind: .other, message: "Feed error"))))
+        XCTAssertEqual(app.appState.updateRow.title, version.shortDisplayString, "a scheduled check fails quietly")
+
+        app.appState.performUpdateRowAction()
+        XCTAssertEqual(app.appState.updateRow.title, "Checking…")
+        app.updates.report(.finished(.failed(UpdateFailure(kind: .offline, message: "Feed error"))))
+        XCTAssertEqual(app.appState.updateRow.title, "Offline")
+        XCTAssertEqual(app.appState.updateRow.actionTitle, "Try again")
+
+        app.appState.performUpdateRowAction()
+        app.updates.report(.finished(.notFound(.upToDate)))
+        XCTAssertEqual(app.appState.updateRow.title, "Up to date")
+        XCTAssertEqual(app.updates.quietCheckCount, 2)
+        XCTAssertEqual(app.updates.windowCheckCount, 0, "a check from the footer opens no window")
+    }
+
+    func testAnUpdateFoundFromTheFooterOpensInSparklesWindow() async throws {
+        let app = try FlowApp(self)
+        await app.launch()
+
+        app.appState.performUpdateRowAction()
+        app.updates.report(.available(version: "0.0.84"), .finished(.ended))
+        XCTAssertEqual(app.appState.updateRow.title, "Update available")
+        XCTAssertEqual(app.appState.updateRow.help, "Version 0.0.84 is available.")
+        app.appState.performUpdateRowAction()
+        XCTAssertEqual(app.updates.windowCheckCount, 1)
+
+        app.updates.report(.downloading(version: "0.0.84"), .preparing(version: "0.0.84"), .readyInSparkleWindow(version: "0.0.84"))
+        XCTAssertEqual(app.appState.updateRow.title, "Update available", "Sparkle's window asks for the restart")
+        app.appState.performUpdateRowAction()
+        XCTAssertEqual(app.updates.windowCheckCount, 2, "the click brings Sparkle's window forward")
+
+        let extractError = "An error occurred while extracting the archive. Please try again later."
+        app.updates.report(.finished(.failed(UpdateFailure(kind: .other, message: extractError))))
+        XCTAssertEqual(app.appState.updateRow.title, "Update failed")
+        XCTAssertEqual(app.appState.updateRow.help, extractError)
+        app.appState.performUpdateRowAction()
+        XCTAssertEqual(app.updates.windowCheckCount, 3, "Sparkle's window downloads it again")
+    }
+
     func testRestartToUpdateWaitsUntilTheDictationIsDone() async throws {
         let app = try FlowApp(self)
         await app.launch()
-        app.updates.isUpdateReadyToInstall = true
-        app.updates.notifyStateChanged()
+        app.updates.report(
+            .available(version: "0.0.84"),
+            .downloading(version: "0.0.84"),
+            .preparing(version: "0.0.84"),
+            .readyToInstall(version: "0.0.84")
+        )
+        XCTAssertEqual(app.appState.updateRow.title, "Restart to update")
 
         await app.pressShortcut()
-        XCTAssertFalse(app.appState.canRestartToUpdate)
-        app.appState.restartToUpdate()
+        XCTAssertFalse(app.appState.updateRow.isEnabled)
+        app.appState.performUpdateRowAction()
         XCTAssertEqual(app.updates.installUpdateAndRelaunchCallCount, 0, "a restart would lose the recording")
 
         app.stubEngine.transcribeResult = .success("Before the update.")
         await app.releaseShortcut()
-        app.appState.restartToUpdate()
+        app.appState.performUpdateRowAction()
 
         XCTAssertEqual(app.focusedApp.text, "Before the update.")
         XCTAssertEqual(app.updates.installUpdateAndRelaunchCallCount, 1)
+        XCTAssertEqual(app.appState.updateRow.title, "Restarting…")
+
+        app.appState.quitWasCancelled()
+        XCTAssertEqual(app.appState.updateRow.title, "Restart to update", "the update still waits for a restart")
     }
 }
 

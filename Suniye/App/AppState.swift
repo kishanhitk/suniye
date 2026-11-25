@@ -128,9 +128,16 @@ final class AppState {
     var hasCompletedCoreOnboarding: Bool { onboardingProgress.isFinished }
 
     var canCheckForUpdates = false
-    var isUpdateReadyToInstall = false
+    private(set) var updateStatus: UpdateStatus = .idle
+    @ObservationIgnored private var upToDateReset: Task<Void, Never>?
+    var isUpdateReadyToInstall: Bool {
+        updateStatus.isReadyToInstall
+    }
     var canRestartToUpdate: Bool {
-        isUpdateReadyToInstall && !isCapturing
+        guard case .readyToInstall = updateStatus else {
+            return false
+        }
+        return !isCapturing
     }
     var automaticallyChecksForUpdates = false
     var appVersionText: String {
@@ -1195,6 +1202,9 @@ final class AppState {
         self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         self.appUpdateController.onStateChange = { [weak self] in
             self?.refreshUpdateControllerState()
+        }
+        self.appUpdateController.onEvent = { [weak self] event in
+            self?.applyUpdateEvent(event)
         }
         self.meetings.host = self
         self.meetings.onNotice = { [weak self] notice in
@@ -2744,14 +2754,53 @@ final class AppState {
         refreshUpdateControllerState()
     }
 
+    /// The sidebar footer's check: no window, and the answer shows in the footer.
+    func checkForUpdatesQuietly() {
+        guard appUpdateController.checkForUpdateInformation() else {
+            AppLogger.shared.log(.info, "sparkle quiet check refused")
+            return
+        }
+        AppLogger.shared.log(.info, "sparkle quiet check")
+        upToDateReset?.cancel()
+        updateStatus = .checking
+    }
+
     func restartToUpdate() {
-        guard canRestartToUpdate else {
-            AppLogger.shared.log(.info, "sparkle restart to update refused ready=\(isUpdateReadyToInstall) phase=\(phase.rawValue)")
+        guard case let .readyToInstall(version) = updateStatus, canRestartToUpdate else {
+            AppLogger.shared.log(.info, "sparkle restart to update refused status=\(updateStatus) phase=\(phase.rawValue)")
             return
         }
         AppLogger.shared.log(.info, "sparkle restart to update")
         analytics.track(.updateAction(kind: .restartToUpdate, fromVersion: nil, toVersion: nil))
+        updateStatus = .restarting(version: version)
         appUpdateController.installUpdateAndRelaunch()
+    }
+
+    /// A quit that the app cancels, such as Keep Recording during a meeting,
+    /// leaves the downloaded update waiting for the next restart.
+    func quitWasCancelled() {
+        if case let .restarting(version) = updateStatus {
+            updateStatus = .readyToInstall(version: version)
+        }
+    }
+
+    private func applyUpdateEvent(_ event: AppUpdateEvent) {
+        let status = updateStatus.applying(event)
+        guard status != updateStatus else {
+            return
+        }
+        AppLogger.shared.log(.info, "update status=\(status)")
+        updateStatus = status
+        upToDateReset?.cancel()
+        if status == .upToDate {
+            upToDateReset = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(4))
+                guard !Task.isCancelled, let self, updateStatus == .upToDate else {
+                    return
+                }
+                updateStatus = .idle
+            }
+        }
     }
 
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
@@ -2769,7 +2818,6 @@ final class AppState {
 
     private func refreshUpdateControllerState() {
         canCheckForUpdates = appUpdateController.canCheckForUpdates
-        isUpdateReadyToInstall = appUpdateController.isUpdateReadyToInstall
         automaticallyChecksForUpdates = appUpdateController.automaticallyChecksForUpdates
     }
 

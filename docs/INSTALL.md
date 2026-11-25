@@ -72,6 +72,6 @@ Suniye checks for updates in the background. The default update channel is `Stab
 
 To test the latest `main` branch build, open `General` settings and switch `Update Channel` to `Tip`. Switching back to `Stable` changes future checks, but Sparkle will not downgrade an installed tip build.
 
-Suniye downloads a newer version in the background. When it is ready to install, the menu bar menu shows `Restart to Update` in place of `Check for Updates...`. Click it to install the update and open the new version. The item is unavailable while you record or while a transcription runs. If you quit Suniye instead, the update installs when it quits.
+Suniye downloads a newer version in the background. When it is ready to install, the bottom of the main window's sidebar shows `Restart to update`, and the menu bar menu shows `Restart to Update` in place of `Check for Updates...`. Click either one to install the update and open the new version. Both are unavailable while you record or while a transcription runs. If you quit Suniye instead, the update installs when it quits.
 
-To check manually, click `Check for Updates...` in the menu bar menu and follow the native updater prompt.
+The bottom of the sidebar shows the version. Click it to check for updates with no window: the row shows the result. To check in the native updater window, click `Check for Updates...` in the menu bar menu.

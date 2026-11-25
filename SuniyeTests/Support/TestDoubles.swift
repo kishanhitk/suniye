@@ -38,26 +38,36 @@ final class MemorySecretItem: SecretItem, @unchecked Sendable {
     }
 }
 
-/// Sparkle: an update is staged when a test says so.
+/// Sparkle: it reports the update steps that a test gives it.
 @MainActor
 final class StubAppUpdateController: AppUpdateControllerProtocol {
     let isEnabled = true
     let canCheckForUpdates = true
-    var isUpdateReadyToInstall = false
     var automaticallyChecksForUpdates = false
     var updateChannel: UpdateChannel = .stable
     var onStateChange: (() -> Void)?
+    var onEvent: ((AppUpdateEvent) -> Void)?
+    private(set) var quietCheckCount = 0
+    private(set) var windowCheckCount = 0
     private(set) var installUpdateAndRelaunchCallCount = 0
 
     func start() {}
-    func checkForUpdates() {}
+
+    func checkForUpdates() {
+        windowCheckCount += 1
+    }
+
+    func checkForUpdateInformation() -> Bool {
+        quietCheckCount += 1
+        return true
+    }
 
     func installUpdateAndRelaunch() {
         installUpdateAndRelaunchCallCount += 1
     }
 
-    func notifyStateChanged() {
-        onStateChange?()
+    func report(_ events: AppUpdateEvent...) {
+        events.forEach { onEvent?($0) }
     }
 }
 

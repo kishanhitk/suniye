@@ -279,7 +279,7 @@ private struct SettingsSearchBox: View {
                     focusRequest = SearchFocusRequest(selectsAll: false)
                 }
         }
-        .sidebarRowBackground(isSelected: isFocused, showsFocus: isFocused, isField: true)
+        .sidebarRowBackground(isSelected: isFocused, showsFocus: isFocused, isRaised: true)
         .animation(.easeOut(duration: 0.12), value: isFocused)
     }
 }
