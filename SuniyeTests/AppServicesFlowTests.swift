@@ -10,12 +10,12 @@ final class UpdateFlowTests: XCTestCase {
         let version = try XCTUnwrap(AppVersion.fromBundle())
         XCTAssertEqual(app.appState.updateRow.title, version.shortDisplayString)
 
-        app.updates.report(.finished(.failed(UpdateFailure(kind: .other, message: "Feed error"))))
+        app.updates.report(.finished(.failed(.other)))
         XCTAssertEqual(app.appState.updateRow.title, version.shortDisplayString, "a scheduled check fails quietly")
 
         app.appState.performUpdateRowAction()
         XCTAssertEqual(app.appState.updateRow.title, "Checking…")
-        app.updates.report(.finished(.failed(UpdateFailure(kind: .offline, message: "Feed error"))))
+        app.updates.report(.finished(.failed(.offline)))
         XCTAssertEqual(app.appState.updateRow.title, "Offline")
         XCTAssertEqual(app.appState.updateRow.actionTitle, "Try again")
 
@@ -31,21 +31,18 @@ final class UpdateFlowTests: XCTestCase {
         await app.launch()
 
         app.appState.performUpdateRowAction()
-        app.updates.report(.available(version: "0.0.84"), .finished(.ended))
+        app.updates.report(.available, .finished(.ended))
         XCTAssertEqual(app.appState.updateRow.title, "Update available")
-        XCTAssertEqual(app.appState.updateRow.help, "Version 0.0.84 is available.")
         app.appState.performUpdateRowAction()
         XCTAssertEqual(app.updates.windowCheckCount, 1)
 
-        app.updates.report(.downloading(version: "0.0.84"), .preparing(version: "0.0.84"), .readyInSparkleWindow(version: "0.0.84"))
+        app.updates.report(.downloading, .preparing, .readyInSparkleWindow)
         XCTAssertEqual(app.appState.updateRow.title, "Update available", "Sparkle's window asks for the restart")
         app.appState.performUpdateRowAction()
         XCTAssertEqual(app.updates.windowCheckCount, 2, "the click brings Sparkle's window forward")
 
-        let extractError = "An error occurred while extracting the archive. Please try again later."
-        app.updates.report(.finished(.failed(UpdateFailure(kind: .other, message: extractError))))
-        XCTAssertEqual(app.appState.updateRow.title, "Update failed")
-        XCTAssertEqual(app.appState.updateRow.help, extractError)
+        app.updates.report(.finished(.failed(.other)))
+        XCTAssertEqual(app.appState.updateRow.title, "Update failed", "the extraction failed")
         app.appState.performUpdateRowAction()
         XCTAssertEqual(app.updates.windowCheckCount, 3, "Sparkle's window downloads it again")
     }
@@ -53,12 +50,7 @@ final class UpdateFlowTests: XCTestCase {
     func testRestartToUpdateWaitsUntilTheDictationIsDone() async throws {
         let app = try FlowApp(self)
         await app.launch()
-        app.updates.report(
-            .available(version: "0.0.84"),
-            .downloading(version: "0.0.84"),
-            .preparing(version: "0.0.84"),
-            .readyToInstall(version: "0.0.84")
-        )
+        app.updates.report(.available, .downloading, .preparing, .readyToInstall)
         XCTAssertEqual(app.appState.updateRow.title, "Restart to update")
 
         await app.pressShortcut()
