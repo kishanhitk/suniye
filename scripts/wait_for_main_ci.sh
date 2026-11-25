@@ -11,7 +11,7 @@ usage() {
 Usage: scripts/wait_for_main_ci.sh --sha <commit> [--repo owner/name] [--timeout-minutes <n>] [--poll-seconds <n>]
 
 Waits for the build-test job of the ci.yml push run on main for <commit>.
-Exits 0 when that job passed, or was skipped because the commit has no app changes.
+Exits 0 when that job passed, or was skipped after the changes job found no app changes.
 Exits 1 when it failed, or when it did not pass before the timeout.
 USAGE
 }
@@ -60,9 +60,11 @@ build_test_states() {
     echo "Main CI run: https://github.com/${REPO}/actions/runs/${run_id}" >&2
     gh api "repos/${REPO}/actions/runs/${run_id}/jobs" --jq '
       [.jobs[] | select(.name == "build-test")] as $jobs
+      | [.jobs[] | select(.name == "changes")] as $changes
       | if ($jobs | length) == 0 then "pending"
         elif $jobs[0].status != "completed" then "pending"
-        elif ($jobs[0].conclusion == "success" or $jobs[0].conclusion == "skipped") then "passed"
+        elif $jobs[0].conclusion == "success" then "passed"
+        elif $jobs[0].conclusion == "skipped" and $changes[0].conclusion == "success" then "passed"
         else "failed" end' || return 1
   done
 }
