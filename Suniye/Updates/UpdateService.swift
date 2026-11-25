@@ -7,13 +7,19 @@ protocol AppUpdateControllerProtocol: AnyObject {
     /// False in builds that ship without updates, such as Preview.
     var isEnabled: Bool { get }
     var canCheckForUpdates: Bool { get }
-    var isUpdateReadyToInstall: Bool { get }
     var automaticallyChecksForUpdates: Bool { get set }
     var updateChannel: UpdateChannel { get set }
+    /// Called when `canCheckForUpdates` or a setting changes.
     var onStateChange: (() -> Void)? { get set }
+    /// Called for each update step that Sparkle reports.
+    var onEvent: ((AppUpdateEvent) -> Void)? { get set }
 
     func start()
+    /// Opens Sparkle's window: the check, then the release notes and Install.
     func checkForUpdates()
+    /// Checks the feed with no window. The answer arrives through `onEvent`.
+    /// Returns false when Sparkle cannot start a check now.
+    func checkForUpdateInformation() -> Bool
     func installUpdateAndRelaunch()
 }
 
@@ -24,8 +30,12 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
     private var canCheckForUpdatesObservation: AnyCancellable?
     private var hasStarted = false
     private var installStagedUpdate: (() -> Void)?
+    /// The user chose Install in Sparkle's window, so that window, not the app,
+    /// offers the restart once the update is extracted.
+    private var sparkleWindowInstallsUpdate = false
 
     var onStateChange: (() -> Void)?
+    var onEvent: ((AppUpdateEvent) -> Void)?
 
     override init() {
         super.init()
@@ -61,10 +71,6 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
         updaterController.updater.canCheckForUpdates
     }
 
-    var isUpdateReadyToInstall: Bool {
-        installStagedUpdate != nil
-    }
-
     var automaticallyChecksForUpdates: Bool {
         get {
             updaterController.updater.automaticallyChecksForUpdates
@@ -85,8 +91,55 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
         updaterController.checkForUpdates(nil)
     }
 
+    func checkForUpdateInformation() -> Bool {
+        let updater = updaterController.updater
+        guard hasStarted, !updater.sessionInProgress else {
+            return false
+        }
+        updater.checkForUpdateInformation()
+        return true
+    }
+
     func installUpdateAndRelaunch() {
         installStagedUpdate?()
+    }
+
+    @objc(updater:didFindValidUpdate:)
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        onEvent?(.available(version: item.displayVersionString))
+    }
+
+    @objc(updater:userDidMakeChoice:forUpdate:state:)
+    func updater(_ updater: SPUUpdater, userDidMake choice: SPUUserUpdateChoice, forUpdate updateItem: SUAppcastItem, state: SPUUserUpdateState) {
+        switch choice {
+        case .install:
+            sparkleWindowInstallsUpdate = true
+        case .skip:
+            onEvent?(.skipped)
+        case .dismiss:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    @objc(updater:willDownloadUpdate:withRequest:)
+    func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
+        onEvent?(.downloading(version: item.displayVersionString))
+    }
+
+    @objc(updater:willExtractUpdate:)
+    func updater(_ updater: SPUUpdater, willExtractUpdate item: SUAppcastItem) {
+        onEvent?(.preparing(version: item.displayVersionString))
+    }
+
+    /// Sparkle's window shows Install and Relaunch after this. An automatic
+    /// update instead reaches `willInstallUpdateOnQuit`.
+    @objc(updater:didExtractUpdate:)
+    func updater(_ updater: SPUUpdater, didExtractUpdate item: SUAppcastItem) {
+        if sparkleWindowInstallsUpdate {
+            onEvent?(.readyInSparkleWindow(version: item.displayVersionString))
+        }
     }
 
     /// Returning true keeps Sparkle's update session open, so `handler` stays
@@ -99,20 +152,26 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
     ) -> Bool {
         AppLogger.shared.log(.info, "sparkle update ready to install version=\(item.displayVersionString)")
         installStagedUpdate = handler
-        onStateChange?()
+        onEvent?(.readyToInstall(version: item.displayVersionString))
         return true
     }
 
-    /// While an update is held, the only cycle that can finish is the one
-    /// holding it, so its end means the handler no longer installs anything.
+    /// Every session ends here, with the error that `didAbortWithError` also
+    /// gets: the no-update error carries the reason. While an update is held,
+    /// the only cycle that can finish is the one holding it, so its end means
+    /// the handler no longer installs anything.
     @objc(updater:didFinishUpdateCycleForUpdateCheck:error:)
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
-        guard installStagedUpdate != nil else {
-            return
+        sparkleWindowInstallsUpdate = false
+        if installStagedUpdate != nil {
+            AppLogger.shared.log(.warning, "sparkle staged update dropped error=\(error?.localizedDescription ?? "none")")
+            installStagedUpdate = nil
         }
-        AppLogger.shared.log(.warning, "sparkle staged update dropped error=\(error?.localizedDescription ?? "none")")
-        installStagedUpdate = nil
-        onStateChange?()
+        let outcome = Self.outcome(of: error.map { $0 as NSError })
+        if case let .failed(failure) = outcome {
+            AppLogger.shared.log(.warning, "sparkle update failed kind=\(failure.kind) error=\(failure.message)")
+        }
+        onEvent?(.finished(outcome))
     }
 
     @objc(allowedChannelsForUpdater:)
@@ -124,13 +183,60 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
     func feedURLString(for updater: SPUUpdater) -> String? {
         updateChannel.appcastURLString
     }
+
+    private static func outcome(of error: NSError?) -> UpdateOutcome {
+        guard let error else {
+            return .ended
+        }
+        if error.domain == SUSparkleErrorDomain {
+            switch SUError(rawValue: OSStatus(error.code)) {
+            case .noUpdateError:
+                return .notFound(notFoundReason(error))
+            case .installationCanceledError, .installationAuthorizeLaterError:
+                return .ended
+            case .runningFromDiskImageError, .runningTranslocated:
+                return .failed(UpdateFailure(kind: .readOnlyLocation, message: error.localizedDescription))
+            default:
+                break
+            }
+        }
+        return .failed(UpdateFailure(kind: isOffline(error) ? .offline : .other, message: error.localizedDescription))
+    }
+
+    private static func notFoundReason(_ error: NSError) -> UpdateNotFound {
+        let reason = (error.userInfo[SPUNoUpdateFoundReasonKey] as? NSNumber)
+            .flatMap { SPUNoUpdateFoundReason(rawValue: $0.int32Value) }
+        switch reason {
+        case .systemIsTooOld, .systemIsTooNew, .hardwareDoesNotSupportARM64:
+            return .unsupported(message: error.localizedRecoverySuggestion ?? error.localizedDescription)
+        default:
+            return .upToDate
+        }
+    }
+
+    /// Sparkle wraps the network error of a failed download one or more levels deep.
+    private static func isOffline(_ error: NSError) -> Bool {
+        let offlineCodes: Set<Int> = [
+            NSURLErrorNotConnectedToInternet,
+            NSURLErrorNetworkConnectionLost,
+            NSURLErrorDataNotAllowed,
+            NSURLErrorInternationalRoamingOff
+        ]
+        var current: NSError? = error
+        while let next = current {
+            if next.domain == NSURLErrorDomain, offlineCodes.contains(next.code) {
+                return true
+            }
+            current = next.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return false
+    }
 }
 
 @MainActor
 final class DisabledUpdateController: AppUpdateControllerProtocol {
     var isEnabled: Bool { false }
     var canCheckForUpdates: Bool { false }
-    var isUpdateReadyToInstall: Bool { false }
     var automaticallyChecksForUpdates: Bool {
         get { false }
         set { onStateChange?() }
@@ -144,6 +250,7 @@ final class DisabledUpdateController: AppUpdateControllerProtocol {
         }
     }
     var onStateChange: (() -> Void)?
+    var onEvent: ((AppUpdateEvent) -> Void)?
 
     func start() {
         onStateChange?()
@@ -151,6 +258,10 @@ final class DisabledUpdateController: AppUpdateControllerProtocol {
 
     func checkForUpdates() {
         onStateChange?()
+    }
+
+    func checkForUpdateInformation() -> Bool {
+        false
     }
 
     func installUpdateAndRelaunch() {}

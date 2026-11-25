@@ -312,19 +312,20 @@ struct SidebarNavigationRow: View {
 }
 
 /// The background every sidebar row shares: a fill for the hover and the
-/// selection, and an accent edge for the keyboard focus. A field rests one
-/// step up, so it reads as a box before the pointer is on it.
+/// selection, and an accent edge for the keyboard focus. A raised row, such as
+/// a field, rests one step up, so it reads as a box before the pointer is on it.
 private struct SidebarRowBackground: ViewModifier {
     let isSelected: Bool
     let showsFocus: Bool
-    let isField: Bool
+    let isRaised: Bool
+    let respondsToHover: Bool
 
     @State private var isHovered = false
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
-        let resting = isSelected ? 2 : (isField ? 1 : 0)
-        let level = min(2, resting + (isHovered ? 1 : 0))
+        let resting = isSelected ? 2 : (isRaised ? 1 : 0)
+        let level = min(2, resting + (isHovered && respondsToHover ? 1 : 0))
         content
             .background(shape.fill(MainWindowPalette.selectedFill.opacity(Double(level) / 2)))
             .overlay(shape.strokeBorder(Color.accentColor.opacity(showsFocus ? 0.55 : 0), lineWidth: 1))
@@ -334,8 +335,18 @@ private struct SidebarRowBackground: ViewModifier {
 }
 
 extension View {
-    func sidebarRowBackground(isSelected: Bool = false, showsFocus: Bool = false, isField: Bool = false) -> some View {
-        modifier(SidebarRowBackground(isSelected: isSelected, showsFocus: showsFocus, isField: isField))
+    func sidebarRowBackground(
+        isSelected: Bool = false,
+        showsFocus: Bool = false,
+        isRaised: Bool = false,
+        respondsToHover: Bool = true
+    ) -> some View {
+        modifier(SidebarRowBackground(
+            isSelected: isSelected,
+            showsFocus: showsFocus,
+            isRaised: isRaised,
+            respondsToHover: respondsToHover
+        ))
     }
 }
 
@@ -761,11 +772,8 @@ extension Int {
 }
 
 
-/// Microphone picker in the sidebar's footer. The input device is the one
-/// setting that decides whether dictation works at all, so it earns a permanent
-/// place rather than living three clicks deep in General.
-/// The devices that both microphone menus list, with the same names and the
-/// chosen one checked. A device that is not connected cannot be chosen.
+/// The devices that the microphone menu lists, with the chosen one checked.
+/// A device that is not connected cannot be chosen.
 struct InputDevicePicker: View {
     let title: String
     let microphone: MicrophoneChoice
@@ -785,54 +793,5 @@ struct InputDevicePicker: View {
             }
         }
         .labelsHidden()
-    }
-}
-
-struct SidebarInputDeviceRow: View {
-    @Bindable var appState: AppState
-
-    var body: some View {
-        Menu {
-            // Inline, so the menu checks the chosen device.
-            InputDevicePicker(title: "Microphone", microphone: appState.microphone)
-                .pickerStyle(.inline)
-        } label: {
-            // The same grid as the navigation rows: the icon in their icon
-            // column, the name on their text edge.
-            HStack(spacing: AppMetrics.sidebarIconSpacing) {
-                Image(systemName: hasProblem ? "exclamationmark.triangle.fill" : "mic")
-                    .font(AppTypography.sidebarIcon)
-                    .frame(width: AppMetrics.sidebarIconColumn)
-                    .foregroundStyle(hasProblem ? MainWindowPalette.warningText : MainWindowPalette.secondaryText)
-
-                // The name gives up space first, so a long one never pushes
-                // the chevron out and hides that this is a picker.
-                Text(appState.microphone.activeInputDeviceName)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(AppTypography.caption.weight(.semibold))
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-            }
-            .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
-            .frame(minHeight: AppMetrics.sidebarRowHeight)
-            .contentShape(Rectangle())
-        }
-        // A plain menu draws the label as given. The borderless style inset it
-        // by its own amount, which moved the icon and name off the row grid.
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        // On the menu, not in its label: the menu takes the pointer events.
-        .sidebarRowBackground()
-        .help(appState.microphone.effectiveInputDeviceStatusText)
-    }
-
-    private var hasProblem: Bool {
-        appState.microphone.hasNoInput
     }
 }

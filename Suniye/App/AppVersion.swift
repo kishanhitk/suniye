@@ -52,13 +52,31 @@ struct AppVersion {
         self.channel = channel
     }
 
+    /// v0.0.83 (2988), or v0.0.84 (2991) Tip.
     var displayString: String {
-        let version = "\(marketing.major).\(marketing.minor).\(marketing.patch)"
-        let channelSuffix = channel == .tip ? " Tip" : ""
-        if let build {
-            return "v\(version) (\(build))\(channelSuffix)"
-        }
-        return "v\(version)\(channelSuffix)"
+        "v\(number)\(buildSuffix)\(channelSuffix)"
+    }
+
+    /// The version without the build number: v0.0.83, or v0.0.84 Tip.
+    var shortDisplayString: String {
+        "v\(number)\(channelSuffix)"
+    }
+
+    /// Version 0.0.83 (2988), for a tooltip.
+    var helpString: String {
+        "Version \(number)\(buildSuffix)\(channelSuffix)"
+    }
+
+    private var number: String {
+        "\(marketing.major).\(marketing.minor).\(marketing.patch)"
+    }
+
+    private var buildSuffix: String {
+        build.map { " (\($0))" } ?? ""
+    }
+
+    private var channelSuffix: String {
+        channel == .tip ? " Tip" : ""
     }
 
     static func fromBundle(_ bundle: Bundle = .main) -> AppVersion? {

@@ -116,7 +116,7 @@ struct MainWindowView: View {
                 .frame(height: 1)
                 .padding(.bottom, AppMetrics.sidebarFooterPadding)
 
-            SidebarInputDeviceRow(appState: appState)
+            SidebarUpdateRow(appState: appState)
                 .padding(.horizontal, AppMetrics.sidebarPaddingHorizontal)
                 .padding(.bottom, AppMetrics.sidebarFooterPadding)
         }
