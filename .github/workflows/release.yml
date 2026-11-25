@@ -11,9 +11,10 @@ env:
 jobs:
   release:
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 120
     permissions:
       contents: write
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -32,25 +33,12 @@ jobs:
       - name: Preflight
         run: ./scripts/e2e_preflight.sh
 
-      - name: Setup model
-        run: ./scripts/setup_model.sh
-
-      - name: Smoke checks
-        run: ./scripts/e2e_smoke.sh
-
-      - name: Unit tests
-        timeout-minutes: 25
-        run: |
-          xcodegen generate --spec project.yml
-          xcodebuild \
-            -project Suniye.xcodeproj \
-            -scheme Suniye \
-            -destination 'platform=macOS' \
-            -derivedDataPath .derivedData \
-            -test-timeouts-enabled YES \
-            -default-test-execution-time-allowance 120 \
-            -maximum-test-execution-time-allowance 300 \
-            test
+      # Restore only: a cache saved from a tag run is scoped to that tag, and no later run can restore it.
+      - name: Restore llama.cpp build cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .build/llama.cpp
+          key: llama-cpp-${{ runner.arch }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('scripts/setup_llama_cpp.sh') }}
 
       - name: Import code signing identity
         env:
@@ -79,6 +67,12 @@ jobs:
 
       - name: Verify release artifacts
         run: ./scripts/verify_release.sh --version "${GITHUB_REF_NAME}" --build-channel stable --dist-dir dist
+
+      - name: Wait for main CI on the tagged commit
+        timeout-minutes: 80
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/wait_for_main_ci.sh --sha "$(git rev-parse HEAD)"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v3
