@@ -3,12 +3,18 @@ import CoreAudio
 import Foundation
 import QuartzCore
 
-/// Shared configuration for the recording level meter. The capture service is the
-/// authority on band granularity; the indicator fallback and tests must agree with it.
+/// How loud the microphone is, for the indicator's meters.
 enum AudioLevelMeter {
-    /// Number of frequency bands the level meter renders.
-    static let bandCount = 22
     private static let gain: Float = 14
+    /// Loudness of digital silence, dBFS.
+    static let silentLoudness: Float = -120
+
+    /// An RMS as dBFS, for the listening dots. Never NaN: a non-finite RMS
+    /// reads as silence.
+    static func loudness(rms: Float) -> Float {
+        guard rms.isFinite else { return silentLoudness }
+        return max(20 * log10(max(rms, 0) + 1e-6), silentLoudness)
+    }
 
     /// Maps a block's RMS to the 0...1 level that the meters draw.
     static func level(rms: Float) -> Float {
@@ -69,8 +75,10 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         var samples: [Float] = []
         var interruption: AudioCaptureInterruption?
         var engineRestartCount = 0
-        var smoothedLevels = Array(repeating: Float(0), count: AudioLevelMeter.bandCount)
-        var lastLevelEmissionTime: CFTimeInterval = 0
+        var lastLoudnessEmissionTime: CFTimeInterval = 0
+        var loudnessSum: Double = 0
+        var loudnessSquares: Double = 0
+        var loudnessCount = 0
         var pendingStop: CheckedContinuation<CapturedAudio, Never>?
 
         init(id: UUID, stream: MicrophoneStream) {
@@ -301,7 +309,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         if accepted > 0 {
             let acceptedValues = UnsafeBufferPointer(rebasing: values[0 ..< accepted])
             active.samples.append(contentsOf: acceptedValues)
-            updateLevels(active: active, values: acceptedValues)
+            updateLoudness(active: active, values: acceptedValues)
         }
         if accepted < values.count || active.samples.count >= maximumSampleCount(for: active) {
             interruptActiveCapture(.maximumDurationReached)
@@ -310,31 +318,28 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         return true
     }
 
-    private func updateLevels(active: ActiveCapture, values: UnsafeBufferPointer<Float>) {
-        guard !values.isEmpty else { return }
-        let chunkSize = max(1, values.count / active.smoothedLevels.count)
-        var next = Array(repeating: Float(0), count: active.smoothedLevels.count)
-        for index in next.indices {
-            let start = index * chunkSize
-            let end = index == next.count - 1 ? values.count : min(values.count, start + chunkSize)
-            guard start < end else { continue }
-            var sum: Double = 0
-            for sampleIndex in start ..< end {
-                let value = Double(values[sampleIndex])
-                sum += value * value
-            }
-            let rms = Float((sum / Double(end - start)).squareRoot())
-            next[index] = AudioLevelMeter.level(rms: rms)
-        }
-        for index in next.indices {
-            // Weight the freshly measured level more heavily so the meter tracks
-            // speech transients quickly instead of lagging behind.
-            active.smoothedLevels[index] = active.smoothedLevels[index] * 0.42 + next[index] * 0.58
+    /// The loudness of every finite sample since the last report, for the
+    /// listening dots, at most 60 times a second. The RMS is taken around the
+    /// samples' mean, so a microphone's DC offset never reads as voice. NaN or
+    /// infinite samples are left out here; the capture outcome still reports
+    /// them.
+    private func updateLoudness(active: ActiveCapture, values: UnsafeBufferPointer<Float>) {
+        for value in values where value.isFinite {
+            let sample = Double(value)
+            active.loudnessSum += sample
+            active.loudnessSquares += sample * sample
+            active.loudnessCount += 1
         }
         let now = CACurrentMediaTime()
-        guard now - active.lastLevelEmissionTime >= 1.0 / 60.0 else { return }
-        active.lastLevelEmissionTime = now
-        onEvent?(.levelsUpdated(sessionID: active.id, levels: active.smoothedLevels))
+        guard active.loudnessCount > 0, now - active.lastLoudnessEmissionTime >= 1.0 / 60.0 else { return }
+        let count = Double(active.loudnessCount)
+        let mean = active.loudnessSum / count
+        let rms = Float(max(active.loudnessSquares / count - mean * mean, 0).squareRoot())
+        active.lastLoudnessEmissionTime = now
+        active.loudnessSum = 0
+        active.loudnessSquares = 0
+        active.loudnessCount = 0
+        onEvent?(.loudnessUpdated(sessionID: active.id, loudness: AudioLevelMeter.loudness(rms: rms)))
     }
 
     private func maximumSampleCount(for active: ActiveCapture) -> Int {
@@ -431,7 +436,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         }
         activeCapture = nil
         deviceMonitor.watch(deviceID: nil)
-        onEvent?(.levelsUpdated(sessionID: active.id, levels: Array(repeating: 0, count: AudioLevelMeter.bandCount)))
+        onEvent?(.loudnessUpdated(sessionID: active.id, loudness: AudioLevelMeter.silentLoudness))
         logFinalCapture(captured, discarded: discard)
         scheduleReleaseCheck(sessionID: active.id)
         pendingStop?.resume(returning: captured)

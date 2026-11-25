@@ -197,6 +197,7 @@
 		E3028D6A9793D71228435D59 /* RecentResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662584944F30DDB878E080DB /* RecentResult.swift */; };
 		E3A433470340E499ACE09241 /* DictationShortcutGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D66C0108BAD9B0F52C0C56C /* DictationShortcutGesture.swift */; };
 		E42B9D9466C39190BE3E0F70 /* ChatGPTFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C67334A6B88F1804622886B9 /* ChatGPTFlowTests.swift */; };
+		E6475CCF298E0F4E795473A6 /* DotScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 088D2D25B4952E9FCF34E245 /* DotScope.swift */; };
 		E68584D536C4FF0DEC3A067E /* MeetingEnvironment+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A5B1A724E299635D2DB9BB5 /* MeetingEnvironment+Live.swift */; };
 		E7E277F449A0999AACADF0F5 /* ChatGPTLoopbackListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = C65E77019B12574A260AA74A /* ChatGPTLoopbackListener.swift */; };
 		E9FD019C79C5F9252AE20FDF /* OnboardingLandscape.swift in Sources */ = {isa = PBXBuildFile; fileRef = E30B5CBFBBC268B8A7F4CEAA /* OnboardingLandscape.swift */; };
@@ -254,6 +255,7 @@
 		046F926226E346D7CA0D318F /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
 		0752F3160D623308CAB98425 /* KeyboardUseMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardUseMonitor.swift; sourceTree = "<group>"; };
 		07EE2587FA1A9B64552D866B /* SystemKeyboardAndFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemKeyboardAndFocus.swift; sourceTree = "<group>"; };
+		088D2D25B4952E9FCF34E245 /* DotScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DotScope.swift; sourceTree = "<group>"; };
 		09900DB72F300BBB0FD974BA /* ASRModelComparisonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASRModelComparisonTests.swift; sourceTree = "<group>"; };
 		0B11D64A85C7AD251C7EDD6E /* SidebarUpdateRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarUpdateRow.swift; sourceTree = "<group>"; };
 		0D8A816470895160000BB7AD /* MicrophoneChoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophoneChoice.swift; sourceTree = "<group>"; };
@@ -818,6 +820,7 @@
 		A31BA5FD8BBC852441526120 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				088D2D25B4952E9FCF34E245 /* DotScope.swift */,
 				97155D7E066E92195D4E1BB2 /* FloatingIndicatorController.swift */,
 				C4D17FE61BCEBBF070559774 /* FloatingIndicatorView.swift */,
 				7E5B7826AE30DE223A95B24A /* LearningToastPresenter.swift */,
@@ -1176,6 +1179,7 @@
 				4EA104BC0A26FBB987817167 /* DictationLibrary.swift in Sources */,
 				E3A433470340E499ACE09241 /* DictationShortcutGesture.swift in Sources */,
 				E05442F7F0A2FC14E629D134 /* DictationStatsStore.swift in Sources */,
+				E6475CCF298E0F4E795473A6 /* DotScope.swift in Sources */,
 				DE701F50F2477D0155DC9DB2 /* EditLearning.swift in Sources */,
 				6CE02C30286EE23046AC6918 /* EditLearningService.swift in Sources */,
 				F2F5E1417665BAB29988390B /* EditModeService.swift in Sources */,

@@ -56,11 +56,20 @@ enum MagicFormatRewriteError: LocalizedError, Equatable {
 
 @MainActor
 final class MagicFormatCoordinator {
-    /// User-facing labels for each polish stage, shown in the status text and the
-    /// floating pill.
-    enum Stage {
-        static let polishing = "Polishing..."
-        static let startingLocalModel = "Starting local model..."
+    /// Where a polish is. Only a model start, which can take seconds, puts
+    /// text in the pill.
+    enum Stage: Equatable {
+        case startingLocalModel
+        case polishing
+
+        var pillMessage: String? {
+            switch self {
+            case .startingLocalModel:
+                return "Starting local model"
+            case .polishing:
+                return nil
+            }
+        }
     }
 
     struct PolishRequest {
@@ -73,7 +82,7 @@ final class MagicFormatCoordinator {
         let onAPIKeyReadFailed: () async -> Void
         let startSlowWarning: () -> Task<Void, Never>
         /// Advertise the current stage to both the status text and the pill.
-        let setStage: (String) -> Void
+        let setStage: (Stage) -> Void
         /// Replaces the API model id in outcomes AND logs (e.g. "custom" when the
         /// user's preset carries a free-text model id). Snapshotted at request
         /// build time — settings can change across the polish suspension.
@@ -215,7 +224,7 @@ final class MagicFormatCoordinator {
         }
 
         let slowWarningTask = request.startSlowWarning()
-        request.setStage(Stage.polishing)
+        request.setStage(.polishing)
         defer { slowWarningTask.cancel() }
 
         // Masked BEFORE it can reach the outcome or app.log (which ships in
@@ -229,7 +238,7 @@ final class MagicFormatCoordinator {
     private func polishWithApple(input: String, rawText: String, request: PolishRequest) async -> MagicFormatPolishOutcome {
         let config = Self.makeAppleConfig(settings: request.settings)
         let slowWarningTask = request.startSlowWarning()
-        request.setStage(Stage.polishing)
+        request.setStage(.polishing)
         defer { slowWarningTask.cancel() }
 
         return await runPolish(provider: .appleFoundationModels, model: nil, logName: "apple_foundation_models", rawText: rawText) {
@@ -241,7 +250,7 @@ final class MagicFormatCoordinator {
         let config = Self.makeLocalGemmaConfig(settings: request.settings)
         let slowWarningTask = request.startSlowWarning()
         let isRuntimeWarm = await localGemmaPostProcessor.isRuntimeWarm()
-        request.setStage(isRuntimeWarm ? Stage.polishing : Stage.startingLocalModel)
+        request.setStage(isRuntimeWarm ? .polishing : .startingLocalModel)
         defer { slowWarningTask.cancel() }
 
         return await runPolish(
@@ -314,7 +323,7 @@ final class MagicFormatCoordinator {
                 )
             case .localGemma:
                 if await !localGemmaPostProcessor.isRuntimeWarm() {
-                    request.setStage(Stage.startingLocalModel)
+                    request.setStage(.startingLocalModel)
                 }
                 output = try await localGemmaPostProcessor.generate(
                     instructions: instructions,
