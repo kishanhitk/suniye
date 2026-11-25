@@ -510,6 +510,21 @@ struct FloatingIndicatorView: View {
             }
         }
         .frame(minHeight: FloatingIndicatorMetrics.pillHeight)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(dictationAccessibilityLabel(edit: edit, message: message))
+        .accessibilityAddTraits(isInteractive ? .isButton : [])
+        .accessibilityAction {
+            if isInteractive { onAction() }
+        }
+    }
+
+    private func dictationAccessibilityLabel(edit: Bool, message: String?) -> String {
+        if let message { return message }
+        return switch fieldStage {
+        case .listening: "Listening"
+        case .working: "Transcribing"
+        case .formatting: edit ? "Rewriting" : "Formatting"
+        }
     }
 
     /// The step lives outside the pill's shape: a switch from transcribing
