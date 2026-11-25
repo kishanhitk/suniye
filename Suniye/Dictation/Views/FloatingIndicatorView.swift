@@ -30,8 +30,7 @@ enum MeetingPillAction {
 
 /// The indicator's one motion vocabulary.
 enum FloatingIndicatorMotion {
-    /// Every change of the pill's shape and its accessories: Hex's morph spring.
-    static let morph = Animation.spring(duration: 0.3, bounce: 0.15)
+        static let morph = Animation.spring(duration: 0.3, bounce: 0.15)
     /// With Reduce Motion the pill and its accessories cross-fade in place.
     static let reducedFade = Animation.easeInOut(duration: 0.16)
     /// Leaving is faster than arriving.

@@ -1,11 +1,8 @@
 // The listening wave: a field of dots lit by a braided pair of oscilloscope
 // traces that follow the voice, and, while the dictation is processed, light
-// that flows through the same braid. The shimmer of the formatting step is
-// Suniye's own.
+// that flows through the same braid.
 //
-// Ported from Hex (https://github.com/kitlangton/hex), src/rune_hud/dot_scope.rs
-// and src/rune_hud/dot_scope/scope.rs at e117dbe0, and the dot drawing of
-// src/rune_hud.wgsl:
+// Parts of this file are adapted from code under this license:
 //
 // MIT License
 //
@@ -51,7 +48,7 @@ final class DotScopeVoice {
     var autoLevel = DotScopeAutoLevel()
 }
 
-/// Hex's slow auto level: the loudest the speaker has recently been reads as
+/// A slow auto level: the loudest the speaker has recently been reads as
 /// full and the room as silent, so a quiet microphone and a loud one move the
 /// field alike. The peak rises within 40 ms and falls back over the release;
 /// the room level falls to any quieter moment in 0.3 s and creeps up over 6 s,
@@ -224,8 +221,8 @@ final class DotScope {
             step(voice: voice)
             stepped += Self.step
         }
-        // Hex traces every second step (120 Hz); the field is drawn once a
-        // frame, so it is traced once a frame over the time that passed.
+        // The field is drawn once a frame, so it is traced once a frame over
+        // the time that passed.
         if stepped > 0 {
             beam(stepped)
         }
@@ -259,7 +256,7 @@ final class DotScope {
         carrier = (carrier + h * Self.tau * turn * speed).truncatingRemainder(dividingBy: Self.tau)
 
         // The colours cool, and the shimmer comes and goes, on critically
-        // damped springs: 0.3 s, or Hex's 0.16 s fade with Reduce Motion.
+        // damped springs: 0.3 s, or a 0.16 s fade with Reduce Motion.
         let omega = Self.tau / (reduceMotion ? 0.16 : 0.3)
         Self.ease(&cool, velocity: &coolVelocity, to: working ? 1 : 0, omega: omega, h: h)
         Self.ease(&format, velocity: &formatVelocity, to: stage == .formatting ? 1 : 0, omega: omega, h: h)
@@ -579,7 +576,7 @@ final class DotScope {
     }
 }
 
-/// The dot field, drawn the way Hex's shader draws it: a soft glow behind the
+/// The dot field: a soft glow behind the
 /// voice, then each dot's halo and dot, sized and lit by its brightness, and
 /// faded where the plate's capsule ends.
 struct DotScopeField: View {
