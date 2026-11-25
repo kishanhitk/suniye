@@ -106,7 +106,7 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
 
     @objc(updater:didFindValidUpdate:)
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
-        onEvent?(.available(version: item.displayVersionString))
+        onEvent?(.available)
     }
 
     @objc(updater:userDidMakeChoice:forUpdate:state:)
@@ -125,12 +125,12 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
 
     @objc(updater:willDownloadUpdate:withRequest:)
     func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
-        onEvent?(.downloading(version: item.displayVersionString))
+        onEvent?(.downloading)
     }
 
     @objc(updater:willExtractUpdate:)
     func updater(_ updater: SPUUpdater, willExtractUpdate item: SUAppcastItem) {
-        onEvent?(.preparing(version: item.displayVersionString))
+        onEvent?(.preparing)
     }
 
     /// Sparkle's window shows Install and Relaunch after this. An automatic
@@ -138,7 +138,7 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
     @objc(updater:didExtractUpdate:)
     func updater(_ updater: SPUUpdater, didExtractUpdate item: SUAppcastItem) {
         if sparkleWindowInstallsUpdate {
-            onEvent?(.readyInSparkleWindow(version: item.displayVersionString))
+            onEvent?(.readyInSparkleWindow)
         }
     }
 
@@ -152,7 +152,7 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
     ) -> Bool {
         AppLogger.shared.log(.info, "sparkle update ready to install version=\(item.displayVersionString)")
         installStagedUpdate = handler
-        onEvent?(.readyToInstall(version: item.displayVersionString))
+        onEvent?(.readyToInstall)
         return true
     }
 
@@ -169,7 +169,7 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
         }
         let outcome = Self.outcome(of: error.map { $0 as NSError })
         if case let .failed(failure) = outcome {
-            AppLogger.shared.log(.warning, "sparkle update failed kind=\(failure.kind) error=\(failure.message)")
+            AppLogger.shared.log(.warning, "sparkle update failed kind=\(failure) error=\(error?.localizedDescription ?? "none")")
         }
         onEvent?(.finished(outcome))
     }
@@ -195,12 +195,12 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
             case .installationCanceledError, .installationAuthorizeLaterError:
                 return .ended
             case .runningFromDiskImageError, .runningTranslocated:
-                return .failed(UpdateFailure(kind: .readOnlyLocation, message: error.localizedDescription))
+                return .failed(.readOnlyLocation)
             default:
                 break
             }
         }
-        return .failed(UpdateFailure(kind: isOffline(error) ? .offline : .other, message: error.localizedDescription))
+        return .failed(isOffline(error) ? .offline : .other)
     }
 
     private static func notFoundReason(_ error: NSError) -> UpdateNotFound {
@@ -208,7 +208,7 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
             .flatMap { SPUNoUpdateFoundReason(rawValue: $0.int32Value) }
         switch reason {
         case .systemIsTooOld, .systemIsTooNew, .hardwareDoesNotSupportARM64:
-            return .unsupported(message: error.localizedRecoverySuggestion ?? error.localizedDescription)
+            return .unsupported(reason: error.localizedRecoverySuggestion ?? error.localizedDescription)
         default:
             return .upToDate
         }

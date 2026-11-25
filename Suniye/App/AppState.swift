@@ -134,10 +134,7 @@ final class AppState {
         updateStatus.isReadyToInstall
     }
     var canRestartToUpdate: Bool {
-        guard case .readyToInstall = updateStatus else {
-            return false
-        }
-        return !isCapturing
+        updateStatus == .readyToInstall && !isCapturing
     }
     var automaticallyChecksForUpdates = false
     var appVersionText: String {
@@ -2766,21 +2763,21 @@ final class AppState {
     }
 
     func restartToUpdate() {
-        guard case let .readyToInstall(version) = updateStatus, canRestartToUpdate else {
+        guard canRestartToUpdate else {
             AppLogger.shared.log(.info, "sparkle restart to update refused status=\(updateStatus) phase=\(phase.rawValue)")
             return
         }
         AppLogger.shared.log(.info, "sparkle restart to update")
         analytics.track(.updateAction(kind: .restartToUpdate, fromVersion: nil, toVersion: nil))
-        updateStatus = .restarting(version: version)
+        updateStatus = .restarting
         appUpdateController.installUpdateAndRelaunch()
     }
 
     /// A quit that the app cancels, such as Keep Recording during a meeting,
     /// leaves the downloaded update waiting for the next restart.
     func quitWasCancelled() {
-        if case let .restarting(version) = updateStatus {
-            updateStatus = .readyToInstall(version: version)
+        if updateStatus == .restarting {
+            updateStatus = .readyToInstall
         }
     }
 

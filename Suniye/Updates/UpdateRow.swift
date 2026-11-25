@@ -35,6 +35,7 @@ struct UpdateRow: Equatable {
     var action: Action?
     /// False while the action waits, such as a restart during a dictation.
     var isEnabled = true
+    /// Only for a reason that the title cannot hold.
     var help: String?
 }
 
@@ -42,53 +43,25 @@ extension AppState {
     var updateRow: UpdateRow {
         let version = AppVersion.fromBundle()
         guard updatesEnabled else {
-            return UpdateRow(title: version?.displayString ?? "Unknown", tone: .quiet, help: "Updates are off in this build.")
+            return UpdateRow(title: version?.displayString ?? "Unknown", tone: .quiet)
         }
         let check: UpdateRow.Action? = canCheckForUpdates ? .check : nil
         switch updateStatus {
         case .idle:
-            return UpdateRow(
-                title: version?.shortDisplayString ?? "Unknown",
-                actionTitle: "Check for updates",
-                tone: .quiet,
-                action: check,
-                help: version?.helpString
-            )
+            return UpdateRow(title: version?.shortDisplayString ?? "Unknown", actionTitle: "Check for updates", tone: .quiet, action: check)
         case .checking:
             return UpdateRow(title: "Checking…", symbol: .progress, tone: .quiet)
         case .upToDate:
-            return UpdateRow(
-                title: "Up to date",
-                actionTitle: "Check for updates",
-                symbol: .upToDate,
-                tone: .plain,
-                action: check,
-                help: version?.helpString
-            )
-        case let .available(newVersion), let .readyInSparkleWindow(newVersion):
+            return UpdateRow(title: "Up to date", actionTitle: "Check for updates", symbol: .upToDate, tone: .plain, action: check)
+        case .available, .readyInSparkleWindow:
             // Sparkle's window holds a ready update and asks for the restart itself.
-            return UpdateRow(
-                title: "Update available",
-                symbol: .available,
-                tone: .plain,
-                action: canCheckForUpdates ? .showUpdate : nil,
-                help: "Version \(newVersion) is available."
-            )
-        case let .downloading(newVersion):
-            return UpdateRow(title: "Downloading…", symbol: .progress, tone: .quiet, help: "Downloading version \(newVersion).")
-        case let .preparing(newVersion):
-            return UpdateRow(title: "Preparing…", symbol: .progress, tone: .quiet, help: "Preparing version \(newVersion).")
-        case let .readyToInstall(newVersion):
-            return UpdateRow(
-                title: "Restart to update",
-                symbol: .ready,
-                tone: .strong,
-                action: .restart,
-                isEnabled: canRestartToUpdate,
-                help: canRestartToUpdate
-                    ? "Installs \(newVersion) and opens \(AppIdentity.current.displayName) again."
-                    : "Available after the dictation."
-            )
+            return UpdateRow(title: "Update available", symbol: .available, tone: .plain, action: canCheckForUpdates ? .showUpdate : nil)
+        case .downloading:
+            return UpdateRow(title: "Downloading…", symbol: .progress, tone: .quiet)
+        case .preparing:
+            return UpdateRow(title: "Preparing…", symbol: .progress, tone: .quiet)
+        case .readyToInstall:
+            return UpdateRow(title: "Restart to update", symbol: .ready, tone: .strong, action: .restart, isEnabled: canRestartToUpdate)
         case .restarting:
             return UpdateRow(title: "Restarting…", symbol: .progress, tone: .quiet)
         case let .problem(problem):
@@ -115,29 +88,21 @@ extension AppState {
     private func row(for problem: UpdateProblem, check: UpdateRow.Action?) -> UpdateRow {
         switch problem {
         case .offline:
-            return UpdateRow(
-                title: "Offline",
-                actionTitle: "Try again",
-                symbol: .warning,
-                tone: .warning,
-                action: check,
-                help: "No internet connection."
-            )
-        case let .checkFailed(message):
-            return UpdateRow(title: "Check failed", actionTitle: "Try again", symbol: .warning, tone: .warning, action: check, help: message)
-        case let .updateFailed(message):
+            return UpdateRow(title: "Offline", actionTitle: "Try again", symbol: .warning, tone: .warning, action: check)
+        case .checkFailed:
+            return UpdateRow(title: "Check failed", actionTitle: "Try again", symbol: .warning, tone: .warning, action: check)
+        case .updateFailed:
             return UpdateRow(
                 title: "Update failed",
                 actionTitle: "Try again",
                 symbol: .warning,
                 tone: .warning,
-                action: canCheckForUpdates ? .showUpdate : nil,
-                help: message
+                action: canCheckForUpdates ? .showUpdate : nil
             )
-        case let .readOnlyLocation(message):
-            return UpdateRow(title: "Move to Applications", symbol: .warning, tone: .warning, help: message)
-        case let .unsupported(message):
-            return UpdateRow(title: "Can’t update", symbol: .warning, tone: .warning, help: message)
+        case .readOnlyLocation:
+            return UpdateRow(title: "Move to Applications", symbol: .warning, tone: .warning)
+        case let .unsupported(reason):
+            return UpdateRow(title: "Can’t update", symbol: .warning, tone: .warning, help: reason)
         }
     }
 }
