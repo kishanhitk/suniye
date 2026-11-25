@@ -30,6 +30,7 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 2. GitHub Actions `release.yml` asks GitHub to generate release notes for the tag, embeds them in the Sparkle appcast, injects the tag version, computes the stable build number, builds artifacts, and creates the release.
+3. `release.yml` does not run the smoke checks or tests again. Before it publishes, `scripts/wait_for_main_ci.sh` waits for the `build-test` job of the `ci.yml` push run on `main` for the tagged commit and stops the release if that job failed. A tag pushed at merge time builds and notarizes while main CI runs.
 
 ## Tip builds
 Every push to `main` publishes a mutable prerelease/tag named `tip`.
