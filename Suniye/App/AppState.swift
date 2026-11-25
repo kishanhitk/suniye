@@ -234,8 +234,7 @@ final class AppState {
         uploadService: issueReportUploadService,
         context: { [unowned self] in issueReportContext() },
         nowProvider: nowProvider,
-        fileOpener: fileOpener,
-        diagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker
+        fileOpener: fileOpener
     )
 
     /// Every change goes through `updateLLMSettings`, which saves it and
@@ -992,7 +991,6 @@ final class AppState {
     private let systemGlobeKeyActionProvider: () -> SystemGlobeKeyAction
     /// Injectable free-disk probe for the onboarding download preflight.
     private let availableDiskCapacityProvider: () async -> Int64?
-    private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
 
@@ -1100,12 +1098,6 @@ final class AppState {
         },
         systemGlobeKeyActionProvider: @escaping () -> SystemGlobeKeyAction = SystemGlobeKeyAction.current,
         availableDiskCapacityProvider: (() async -> Int64?)? = nil,
-        issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { defaultName in
-            let panel = NSSavePanel()
-            panel.nameFieldStringValue = defaultName
-            panel.canCreateDirectories = true
-            return panel.runModal() == .OK ? panel.url : nil
-        },
         meetingCoordinator: MeetingCoordinator? = nil,
         startServices: Bool = true
     ) {
@@ -1199,7 +1191,6 @@ final class AppState {
                 ).volumeAvailableCapacityForImportantUsage
             }.value
         }
-        self.issueReportDiagnosticsDestinationPicker = issueReportDiagnosticsDestinationPicker
         self.runtimeServicesEnabled = startServices
         self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         self.appUpdateController.onStateChange = { [weak self] in
