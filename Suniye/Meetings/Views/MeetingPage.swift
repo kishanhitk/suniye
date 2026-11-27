@@ -7,6 +7,8 @@ enum MeetingTab: Int, CaseIterable {
     case notes
     case transcript
 
+    static let whileRecording: [MeetingTab] = [.notes, .transcript]
+
     var title: String {
         switch self {
         case .summary: return "Summary"
@@ -38,7 +40,7 @@ struct MeetingPage: View {
         self.meetings = meetings
         self.appState = appState
         self.id = id
-        _tab = State(initialValue: meetings.live?.id == id ? .notes : .summary)
+        _tab = State(initialValue: meetings.openMeetingTab ?? (meetings.live?.id == id ? .notes : .summary))
     }
 
     var body: some View {
@@ -62,9 +64,12 @@ struct MeetingPage: View {
                         detail: "Everything up to \(MeetingTranscript.clock(duration)) is saved." + (failure.outOfSpace ? " Free up space to record again." : "")
                     )
                 }
-                if live == nil {
+                if live != nil {
+                    MeetingTabs(selection: $tab, tabs: MeetingTab.whileRecording)
+                        .fixedSize()
+                } else {
                     HStack(spacing: 12) {
-                        MeetingTabs(selection: $tab)
+                        MeetingTabs(selection: $tab, tabs: MeetingTab.allCases)
                             .fixedSize()
                         Spacer(minLength: 12)
                         HStack(spacing: 4) {
@@ -99,7 +104,10 @@ struct MeetingPage: View {
                 notes = await meetings.notes(of: id)
                 notesUnreadable = notes == nil
             }
-            .onAppear { meetings.pageOnScreen = id }
+            .onAppear {
+                meetings.pageOnScreen = id
+                meetings.openMeetingTab = nil
+            }
             .onDisappear {
                 meetings.textSaves.saveNow(id)
                 meetings.playback.close(id)
@@ -254,9 +262,18 @@ struct MeetingPage: View {
 
     // MARK: - Content
 
-    /// While the meeting records, the page shows only the notes.
     @ViewBuilder
     private func content(_ record: MeetingRecord) -> some View {
+        if let live, tab == .transcript {
+            MeetingLiveTranscriptPane(session: live)
+        } else {
+            finishedContent(record)
+        }
+    }
+
+    /// While the meeting records, only the notes show here.
+    @ViewBuilder
+    private func finishedContent(_ record: MeetingRecord) -> some View {
         switch live == nil ? tab : .notes {
         case .summary:
             MeetingSummaryTab(
@@ -290,7 +307,7 @@ struct MeetingPage: View {
                         playback: meetings.playback,
                         id: id,
                         segments: segments,
-                        lines: transcriptLines(record),
+                        lines: MeetingTranscriptLine.lines(of: segments, in: record),
                         timeline: MeetingTimeline(pauses: record.pauses),
                         hasAudio: meetings.audioOnMac.contains(id) && record.status.hasFinalTranscript,
                         isEditable: canEditText(record)
@@ -341,27 +358,16 @@ struct MeetingPage: View {
             meetings.textEdited(part)
         }
     }
-
-    private func transcriptLines(_ record: MeetingRecord) -> [MeetingTranscriptLine] {
-        let timeline = MeetingTimeline(pauses: record.pauses)
-        return segments.map { segment in
-            MeetingTranscriptLine(
-                id: segment.id,
-                time: MeetingTranscript.clock(timeline.wallSeconds(forSample: segment.audioStart)),
-                speaker: record.hasCallTrack ? segment.track : nil,
-                text: segment.text
-            )
-        }
-    }
 }
 
-/// Summary, Notes and Transcript in one native segmented control.
+/// The tabs in one native segmented control.
 private struct MeetingTabs: NSViewRepresentable {
     @Binding var selection: MeetingTab
+    let tabs: [MeetingTab]
 
     func makeNSView(context: Context) -> NSSegmentedControl {
         let control = NSSegmentedControl(
-            labels: MeetingTab.allCases.map(\.title),
+            labels: tabs.map(\.title),
             trackingMode: .selectOne,
             target: context.coordinator,
             action: #selector(Coordinator.changed(_:))
@@ -372,23 +378,26 @@ private struct MeetingTabs: NSViewRepresentable {
 
     func updateNSView(_ control: NSSegmentedControl, context: Context) {
         context.coordinator.selection = $selection
-        control.selectedSegment = selection.rawValue
+        context.coordinator.tabs = tabs
+        control.selectedSegment = tabs.firstIndex(of: selection) ?? -1
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(selection: $selection)
+        Coordinator(selection: $selection, tabs: tabs)
     }
 
     final class Coordinator: NSObject {
         var selection: Binding<MeetingTab>
+        var tabs: [MeetingTab]
 
-        init(selection: Binding<MeetingTab>) {
+        init(selection: Binding<MeetingTab>, tabs: [MeetingTab]) {
             self.selection = selection
+            self.tabs = tabs
         }
 
         @objc func changed(_ sender: NSSegmentedControl) {
-            guard let tab = MeetingTab(rawValue: sender.selectedSegment) else { return }
-            selection.wrappedValue = tab
+            guard tabs.indices.contains(sender.selectedSegment) else { return }
+            selection.wrappedValue = tabs[sender.selectedSegment]
         }
     }
 }
