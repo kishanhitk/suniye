@@ -127,6 +127,10 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--e2e-llm-success") || CommandLine.arguments.contains("--e2e-llm-fallback") {
             sharedAppState.runLLME2ESmoke()
         }
+        let meetingLive = "--e2e-meeting-live="
+        if let argument = CommandLine.arguments.first(where: { $0.hasPrefix(meetingLive) }), let seconds = Int(argument.dropFirst(meetingLive.count)) {
+            sharedAppState.runMeetingLiveE2E(seconds: seconds)
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
