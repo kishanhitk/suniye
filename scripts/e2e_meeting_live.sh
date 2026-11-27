@@ -48,7 +48,7 @@ player_pid=$!
 
 finished=0
 for _ in $(seq 1 $((MEETING_SECONDS + 600))); do
-  if log_since_start | grep -q "e2e meeting live finished"; then
+  if log_since_start | grep "e2e meeting live finished" >/dev/null; then
     finished=1
     break
   fi
@@ -65,15 +65,15 @@ if [[ "${finished}" != "1" ]]; then
   echo "The meeting did not finish." >&2
   exit 1
 fi
-if ! log_since_start | grep -Eq "e2e meeting live lines=[1-9]"; then
+if ! log_since_start | grep -E "e2e meeting live lines=[1-9]" >/dev/null; then
   echo "No line showed during the meeting." >&2
   exit 1
 fi
-if ! log_since_start | grep -Eq "e2e meeting live finished .* final=[1-9]"; then
+if ! log_since_start | grep -E "e2e meeting live finished .* final=[1-9]" >/dev/null; then
   echo "The final transcript has no line." >&2
   exit 1
 fi
-if log_since_start | grep -Eq "e2e meeting live finished .* status=interrupted"; then
+if log_since_start | grep -E "e2e meeting live finished .* status=interrupted" >/dev/null; then
   echo "The final transcript did not finish." >&2
   exit 1
 fi

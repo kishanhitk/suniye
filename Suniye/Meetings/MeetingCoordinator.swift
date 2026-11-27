@@ -94,12 +94,18 @@ private enum MeetingLiveEnd {
 /// them. Times are wall-clock seconds from the meeting start, as the page
 /// shows them.
 struct MeetingTranscriptRead: Equatable, Sendable {
+    enum State: Equatable, Sendable {
+        /// No line that starts before `completeThrough` comes later, so a
+        /// reader can ask again from there.
+        case recording(completeThrough: TimeInterval)
+        /// The final pass can still add lines anywhere: read all again later.
+        case finishing
+        /// The lines do not change any more, except by an edit.
+        case final
+    }
+
     let lines: [MeetingSegment]
-    /// While the meeting records: no line that starts before this time comes
-    /// later, so a reader can ask again from here. Nil when the transcript is
-    /// final; a reader that read during the recording reads it all again,
-    /// because the final pass can add lines before this time.
-    let completeThrough: TimeInterval?
+    let state: State
 }
 
 /// The meeting that records now, as the meeting page and the pill show it.
@@ -385,12 +391,17 @@ final class MeetingCoordinator {
     /// the meeting start.
     func transcript(of id: UUID, from: TimeInterval) async -> MeetingTranscriptRead {
         let lines = await transcript(of: id)
-        let timeline = MeetingTimeline(pauses: record(id)?.pauses ?? [])
-        let completeThrough = live.flatMap { $0.id == id ? timeline.wallSeconds(forSample: $0.transcript.completeThrough) : nil }
-        return MeetingTranscriptRead(
-            lines: lines.filter { timeline.wallSeconds(forSample: $0.audioStart) >= from },
-            completeThrough: completeThrough
-        )
+        let record = record(id)
+        let timeline = MeetingTimeline(pauses: record?.pauses ?? [])
+        let state: MeetingTranscriptRead.State
+        if let live, live.id == id {
+            state = .recording(completeThrough: timeline.wallSeconds(forSample: live.transcript.completeThrough))
+        } else if record?.status.hasFinalTranscript == true, transcriptPasses[id] == nil {
+            state = .final
+        } else {
+            state = .finishing
+        }
+        return MeetingTranscriptRead(lines: lines.filter { timeline.wallSeconds(forSample: $0.audioStart) >= from }, state: state)
     }
 
     func summary(of id: UUID) async -> String? {
@@ -520,8 +531,17 @@ final class MeetingCoordinator {
             }
         }
         await speech.start()
-        await transcriber.startLive(callPlaysOnSpeakers: record.callPlayedOnSpeakers) { [weak session] shown in
-            DispatchQueue.main.async { MainActor.assumeIsolated { session?.transcript = shown } }
+        await transcriber.startLive(callPlaysOnSpeakers: record.callPlayedOnSpeakers) { [weak self, weak session] shown in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let session else { return }
+                    let linesChanged = session.transcript.lines.count != shown.lines.count
+                    session.transcript = shown
+                    if linesChanged {
+                        self?.dropListText(id)
+                    }
+                }
+            }
         }
         recorder.setMicrophoneMuted(dictationCaptures)
         // The microphone would hear the playback. No await from here to

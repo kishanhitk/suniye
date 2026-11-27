@@ -245,7 +245,7 @@ struct MeetingPage: View {
         case .notes:
             return !(notes ?? "").allSatisfy(\.isWhitespace)
         case .transcript:
-            return segments.contains { !$0.text.allSatisfy(\.isWhitespace) }
+            return meetings.record(id)?.status != .finishing && segments.contains { !$0.text.allSatisfy(\.isWhitespace) }
         }
     }
 

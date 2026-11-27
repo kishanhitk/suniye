@@ -2958,7 +2958,7 @@ final class AppState {
             while ContinuousClock.now - started < .seconds(seconds) {
                 try? await Task.sleep(for: .seconds(10))
                 let shown = session.transcript
-                AppLogger.shared.log(.info, "e2e meeting live lines=\(shown.lines.count) completeThrough=\(String(format: "%.1f", Double(shown.completeThrough) / Double(MeetingAudioFormat.sampleRate))) last=\(shown.lines.last.map { "\($0.track.speakerLabel): \($0.text)" } ?? "")")
+                AppLogger.shared.log(.info, "e2e meeting live lines=\(shown.lines.count) completeThrough=\(String(format: "%.1f", Double(shown.completeThrough) / Double(MeetingAudioFormat.sampleRate)))")
                 if !dictated, ContinuousClock.now - started >= .seconds(seconds / 2) {
                     dictated = true
                     await runE2EDictation(label: "during meeting")

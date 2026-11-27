@@ -188,7 +188,7 @@ final class MeetingFlowTests: XCTestCase {
         XCTAssertTrue(youShown)
         XCTAssertTrue(themShown)
         XCTAssertEqual(fromStart.lines.map(\.track), [.you, .them])
-        XCTAssertEqual(fromStart.completeThrough, 2.8, "the You track has its talk up to 2.8 s, the Them track more")
+        XCTAssertEqual(fromStart.state, .recording(completeThrough: 2.8), "the You track has its talk up to 2.8 s, the Them track more")
         XCTAssertEqual(fromOneSecond.lines.map(\.text), ["Them speaks here."])
         for (earlier, later) in zip(snapshots, snapshots.dropFirst()) {
             XCTAssertTrue(later.starts(with: earlier), "a shown line never changes, moves or goes")
@@ -196,7 +196,7 @@ final class MeetingFlowTests: XCTestCase {
         XCTAssertEqual(decodesDuringTheCall, 2)
         XCTAssertEqual(decodesAfterStop, 2, "the lines of the call are stored; the rest of the audio is silence")
         XCTAssertEqual(final.lines.map(\.text), [longSentence, "Them speaks here."])
-        XCTAssertNil(final.completeThrough, "a reader reads the final transcript again")
+        XCTAssertEqual(final.state, .final, "a reader reads the final transcript again")
     }
 
     func testOnSpeakersAnEchoOfTheCallNeverShowsDuringTheCall() async throws {
@@ -285,9 +285,10 @@ final class MeetingFlowTests: XCTestCase {
         coordinator.dictationChanged(active: false)
         await stopping.value
         let segments = await store.segments(of: id)
+        let earlierDone = await waitUntil { coordinator.record(earlier.id)?.status == .done }
 
         XCTAssertTrue(waits, "the stopped meeting waits for the earlier transcript")
-        XCTAssertEqual(coordinator.record(earlier.id)?.status, .done)
+        XCTAssertTrue(earlierDone)
         XCTAssertEqual(segments.map(\.text), ["Them speaks here."])
     }
 

@@ -82,7 +82,7 @@ After a quit or a crash, the next launch writes no transcript by itself: it does
   - A model you pick, the dictation model too: it loads on an engine of its own when the meeting starts and unloads after the transcript, so a switch of the dictation model does not change it. Dictation keeps its model. The Mac holds both models in memory for the whole meeting.
   - The meeting uses the transcript model that was set when it started.
 - A dictation goes first: from the key-down to the end of the dictation, no piece of audio starts decoding. The piece that decodes at the key-down finishes.
-- One transcript at a time: when two meetings wait for a transcript, the second one starts after the first one ends, with the transcript model that was set when it was asked for. Until then its page shows "Waiting for another transcript…". A meeting that starts while another transcript is written shows its live lines after that transcript ends.
+- One transcript at a time: when two meetings wait for a transcript, the second one starts after the first one ends, with the transcript model that was set when it was asked for. Until then its page shows "Waiting for another transcript…". A meeting that starts while another transcript is written shows its live lines after that transcript ends. A transcript asked for during a recording (Finish Transcript, Transcribe Again) starts after that recording's transcript.
 - Picking a model that is not on the Mac downloads it. It becomes the transcript model when the download is done.
 - When the transcript model is not on the Mac at the stop, the meeting shows that cause and **Finish Transcript**.
 - The audio goes to the model in pieces of 2 to 12 s, cut at pauses.
