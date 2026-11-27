@@ -37,6 +37,7 @@ final class MeetingFlowTests: XCTestCase {
     private var hostedSummaryModel: GatedSummaryModel!
     private var clock: Date!
     private var freeBytes: Int64 = 10_000_000_000
+    private var callOnSpeakers = false
     private var microphone: FakeMicrophoneUsers!
     private var analytics: SpyAnalytics!
     private var uptime: TimeInterval = 1000
@@ -72,7 +73,7 @@ final class MeetingFlowTests: XCTestCase {
             canRecordCallAudio: true,
             makeSources: { [unowned self] _ in [.you: you, .them: them] },
             freeDiskBytes: { [unowned self] in freeBytes },
-            callPlaysOnSpeakers: { false },
+            callPlaysOnSpeakers: { [unowned self] in callOnSpeakers },
             makeMicrophoneUsers: { [unowned self] in microphone },
             now: { [unowned self] in clock },
             uptime: { [unowned self] in uptime },
@@ -155,6 +156,139 @@ final class MeetingFlowTests: XCTestCase {
         XCTAssertEqual(decodesDuringDictation, 0)
         XCTAssertEqual(segments.map(\.track), [.them, .you], "the dictated words are not meeting talk; talk after the capture ends is")
         XCTAssertNil(coordinator.transcriptPasses[id])
+    }
+
+    func testAMeetingShowsItsLinesWhileItRecordsAndStopDecodesOnlyTheRest() async throws {
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        try await coordinator.startMeeting(source: .manual)
+        let session = try XCTUnwrap(coordinator.live)
+        var snapshots: [[MeetingSegment]] = []
+        func shows(_ count: Int) async -> Bool {
+            await waitUntil {
+                if snapshots.last != session.transcript.lines {
+                    snapshots.append(session.transcript.lines)
+                }
+                return session.transcript.lines.count == count
+            }
+        }
+
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+        them.push(silence(3))
+        let youShown = await shows(1)
+        them.push(tone(2.5, level: 0.5) + silence(0.5))
+        let themShown = await shows(2)
+        let fromStart = await coordinator.transcript(of: session.id, from: 0)
+        let fromOneSecond = await coordinator.transcript(of: session.id, from: 1)
+        let decodesDuringTheCall = await engine.calls
+        await coordinator.stop()
+        let decodesAfterStop = await engine.calls
+        let final = await coordinator.transcript(of: session.id, from: 0)
+
+        XCTAssertTrue(youShown)
+        XCTAssertTrue(themShown)
+        XCTAssertEqual(fromStart.lines.map(\.track), [.you, .them])
+        XCTAssertEqual(fromStart.completeThrough, 2.8, "the You track has its talk up to 2.8 s, the Them track more")
+        XCTAssertEqual(fromOneSecond.lines.map(\.text), ["Them speaks here."])
+        for (earlier, later) in zip(snapshots, snapshots.dropFirst()) {
+            XCTAssertTrue(later.starts(with: earlier), "a shown line never changes, moves or goes")
+        }
+        XCTAssertEqual(decodesDuringTheCall, 2)
+        XCTAssertEqual(decodesAfterStop, 2, "the lines of the call are stored; the rest of the audio is silence")
+        XCTAssertEqual(final.lines.map(\.text), [longSentence, "Them speaks here."])
+        XCTAssertNil(final.completeThrough, "a reader reads the final transcript again")
+    }
+
+    func testOnSpeakersAnEchoOfTheCallNeverShowsDuringTheCall() async throws {
+        callOnSpeakers = true
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        try await coordinator.startMeeting(source: .manual)
+        let session = try XCTUnwrap(coordinator.live)
+
+        you.push(tone(2.5, level: 0.5) + silence(0.5))
+        them.push(tone(2.5, level: 0.5) + silence(0.5))
+        let bothDecoded = await waitUntil { await self.engine.calls == 2 }
+        try await Task.sleep(for: .milliseconds(50))
+        let shownBeforeTheCallTrackMovesOn = session.transcript.lines
+        them.push(silence(3))
+        let released = await waitUntil { !session.transcript.lines.isEmpty }
+        await coordinator.stop()
+        let final = await coordinator.transcript(of: session.id)
+
+        XCTAssertTrue(bothDecoded)
+        XCTAssertEqual(shownBeforeTheCallTrackMovesOn, [], "the You line waits for the call lines near it")
+        XCTAssertTrue(released)
+        XCTAssertEqual(session.transcript.lines.map(\.track), [.them], "the microphone heard the call: its line never shows")
+        XCTAssertEqual(final.map(\.track), [.them])
+    }
+
+    func testAQuitKeepsTheLinesOfTheCallAndFinishTranscriptDecodesOnlyTheRest() async throws {
+        let first = makeCoordinator()
+        first.speechModelChanged(.parakeetV3)
+        try await first.startMeeting(source: .manual)
+        let session = try XCTUnwrap(first.live)
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+        them.push(silence(3))
+        let shown = await waitUntil { session.transcript.lines.count == 1 }
+
+        await first.stopForQuit()
+        let next = makeCoordinator()
+        next.speechModelChanged(.parakeetV3)
+        await next.start()
+        next.finishTranscript(session.id)
+        let finished = await waitUntil { next.record(session.id)?.status == .done }
+        let segments = await store.segments(of: session.id)
+        let decodes = await engine.calls
+
+        XCTAssertTrue(shown)
+        XCTAssertTrue(finished)
+        XCTAssertEqual(segments.map(\.text), [longSentence])
+        XCTAssertEqual(decodes, 1, "Finish Transcript starts after the stored line")
+    }
+
+    func testATranscriptModelThatDoesNotLoadSaysWhyAndStopTriesItAgain() async throws {
+        transcriptEngineError = MeetingTranscriptModelError.notDownloaded("Cohere Transcribe")
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.transcriptModel = .cohereTranscribe }
+        try await coordinator.startMeeting(source: .manual)
+        let session = try XCTUnwrap(coordinator.live)
+        let failed = await waitUntil { session.transcriptFailure != nil }
+
+        transcriptEngineError = nil
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+        them.push(silence(3))
+        await coordinator.stop()
+        let segments = await store.segments(of: session.id)
+        let dictationEngineDecodes = await engine.calls
+
+        XCTAssertTrue(failed)
+        XCTAssertEqual(session.transcriptFailure, "Cohere Transcribe is not downloaded. Download it in Settings, or choose another transcript model.")
+        XCTAssertEqual(segments.map(\.text), [longSentence], "the stop loads the transcript model again")
+        XCTAssertEqual(dictationEngineDecodes, 0)
+    }
+
+    func testAMeetingStoppedWhileAnEarlierTranscriptRunsGetsItsTranscriptAfterIt() async throws {
+        let earlier = try await finishedMeeting(status: .notTranscribed, endedDaysAgo: 0)
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        await coordinator.start()
+        coordinator.dictationChanged(active: true)
+        coordinator.finishTranscript(earlier.id)
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+        them.push(tone(2.5, level: 0.5) + silence(0.5))
+
+        let stopping = Task { await coordinator.stop() }
+        let waits = await waitUntil { coordinator.transcriptPasses[id]?.waiting == true }
+        coordinator.dictationChanged(active: false)
+        await stopping.value
+        let segments = await store.segments(of: id)
+
+        XCTAssertTrue(waits, "the stopped meeting waits for the earlier transcript")
+        XCTAssertEqual(coordinator.record(earlier.id)?.status, .done)
+        XCTAssertEqual(segments.map(\.text), ["Them speaks here."])
     }
 
     func testADictationStopsTheSummaryAndItRunsAgainAfterwards() async throws {

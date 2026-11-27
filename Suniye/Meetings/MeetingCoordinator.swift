@@ -82,6 +82,26 @@ struct MeetingTranscriptPass: Equatable {
     var progress: MeetingTranscriptProgress?
 }
 
+/// How a recording ended, for its transcript pass.
+private enum MeetingLiveEnd {
+    /// Stop: the final phase writes the rest of the transcript.
+    case stop
+    /// Quit or Cancel: the pass ends with no final phase.
+    case abandon
+}
+
+/// The lines of a meeting as `MeetingCoordinator.transcript(of:from:)` reads
+/// them. Times are wall-clock seconds from the meeting start, as the page
+/// shows them.
+struct MeetingTranscriptRead: Equatable, Sendable {
+    let lines: [MeetingSegment]
+    /// While the meeting records: no line that starts before this time comes
+    /// later, so a reader can ask again from here. Nil when the transcript is
+    /// final; a reader that read during the recording reads it all again,
+    /// because the final pass can add lines before this time.
+    let completeThrough: TimeInterval?
+}
+
 /// The meeting that records now, as the meeting page and the pill show it.
 @MainActor
 @Observable
@@ -105,16 +125,52 @@ final class MeetingSession {
     /// The new microphone, for a few seconds after the device changed.
     fileprivate(set) var changedInput: String?
 
+    /// The lines that the live transcript shows.
+    fileprivate(set) var transcript = MeetingLiveTranscript()
+    /// Why the live transcript does not run: the transcript model did not load.
+    fileprivate(set) var transcriptFailure: String?
+
     @ObservationIgnored fileprivate let recorder: MeetingRecorder
     @ObservationIgnored fileprivate let speech: MeetingSpeechWatch
+    @ObservationIgnored fileprivate let transcriber: MeetingTranscriber
+    /// The meeting's transcript pass: the live phase, then at Stop the final one.
+    @ObservationIgnored fileprivate var pass: Task<Void, Never>?
+    /// The pass waits for the passes before it until this is set.
+    @ObservationIgnored fileprivate var passStarted = false
+    /// The transcriber has its engine.
+    @ObservationIgnored fileprivate var isConnected = false
+    /// The engine of a chosen transcript model; the pass unloads it.
+    @ObservationIgnored fileprivate var ownEngine: TranscriptionServiceProtocol?
     /// Set by the first stop, so that a second one does nothing.
     @ObservationIgnored fileprivate var isStopping = false
+    @ObservationIgnored private var end: MeetingLiveEnd?
+    @ObservationIgnored private var endWaiter: CheckedContinuation<MeetingLiveEnd, Never>?
 
-    fileprivate init(record: MeetingRecord, source: MeetingSource, recorder: MeetingRecorder, speech: MeetingSpeechWatch) {
+    fileprivate init(record: MeetingRecord, source: MeetingSource, recorder: MeetingRecorder, speech: MeetingSpeechWatch, transcriber: MeetingTranscriber) {
         self.record = record
         self.source = source
         self.recorder = recorder
         self.speech = speech
+        self.transcriber = transcriber
+    }
+
+    fileprivate var hasEnded: Bool {
+        end != nil
+    }
+
+    /// The first end wins.
+    fileprivate func finish(_ end: MeetingLiveEnd) {
+        guard self.end == nil else { return }
+        self.end = end
+        endWaiter?.resume(returning: end)
+        endWaiter = nil
+    }
+
+    fileprivate func waitForEnd() async -> MeetingLiveEnd {
+        if let end {
+            return end
+        }
+        return await withCheckedContinuation { endWaiter = $0 }
     }
 
     var id: UUID {
@@ -180,6 +236,8 @@ final class MeetingCoordinator {
     private(set) var listTextRevision = 0
     /// The meeting that the Meetings section shows; nil shows the list.
     var openMeetingID: UUID?
+    /// The tab that the next meeting page opens on; nil for its default.
+    var openMeetingTab: MeetingTab?
     /// The meeting whose page is on screen, so a notice does not repeat it.
     var pageOnScreen: UUID?
     private(set) var settings: MeetingSettings
@@ -311,12 +369,28 @@ final class MeetingCoordinator {
         listTextRevision += 1
     }
 
-    /// The transcript as a reader sees it, also while the app still finishes
-    /// it: see `MeetingTranscript.final(_:of:)`.
+    /// The transcript as a reader sees it: the shown lines while the meeting
+    /// records, else `MeetingTranscript.final(_:of:)`, also while the app
+    /// still finishes it.
     func transcript(of id: UUID) async -> [MeetingSegment] {
+        if let live, live.id == id {
+            return live.transcript.lines
+        }
         let segments = await store.segments(of: id)
         guard let record = record(id) else { return segments }
         return MeetingTranscript.final(segments, of: record)
+    }
+
+    /// The lines that start at `from` or later, in wall-clock seconds from
+    /// the meeting start.
+    func transcript(of id: UUID, from: TimeInterval) async -> MeetingTranscriptRead {
+        let lines = await transcript(of: id)
+        let timeline = MeetingTimeline(pauses: record(id)?.pauses ?? [])
+        let completeThrough = live.flatMap { $0.id == id ? timeline.wallSeconds(forSample: $0.transcript.completeThrough) : nil }
+        return MeetingTranscriptRead(
+            lines: lines.filter { timeline.wallSeconds(forSample: $0.audioStart) >= from },
+            completeThrough: completeThrough
+        )
     }
 
     func summary(of id: UUID) async -> String? {
@@ -418,11 +492,26 @@ final class MeetingCoordinator {
         )
         try await store.create(record)
         let speech = MeetingSpeechWatch(makeDetector: environment.makeSpeechDetector)
-        let session = MeetingSession(record: record, source: source, recorder: recorder, speech: speech)
+        let transcriber = makeTranscriber(for: id, tracks: recorder.tracks, file: .transcript)
+        let session = MeetingSession(record: record, source: source, recorder: recorder, speech: speech, transcriber: transcriber)
         // The recorder's queue keeps its output and events in order, and so
-        // do the speech watch's stream and the main queue.
-        recorder.onOutput = { speech.enqueue($0) }
+        // do the streams of the speech watch and the transcriber, and the
+        // main queue.
+        recorder.onOutput = { output in
+            speech.enqueue(output)
+            transcriber.enqueue(.audio(output))
+        }
         recorder.onEvent = { [weak self, weak session] event in
+            switch event {
+            case .paused:
+                transcriber.enqueue(.paused)
+            case let .trackFailed(track, _):
+                transcriber.enqueue(.trackFailed(track))
+            case let .trackStarted(track):
+                transcriber.enqueue(.trackStarted(track))
+            default:
+                break
+            }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let session else { return }
@@ -431,6 +520,9 @@ final class MeetingCoordinator {
             }
         }
         await speech.start()
+        await transcriber.startLive(callPlaysOnSpeakers: record.callPlayedOnSpeakers) { [weak session] shown in
+            DispatchQueue.main.async { MainActor.assumeIsolated { session?.transcript = shown } }
+        }
         recorder.setMicrophoneMuted(dictationCaptures)
         // The microphone would hear the playback. No await from here to
         // `live`, so no Play comes in between.
@@ -439,6 +531,7 @@ final class MeetingCoordinator {
             try recorder.start()
         } catch {
             speech.stop()
+            await transcriber.cancel()
             try? await store.delete(record.id)
             throw MeetingStartError.couldNotStart(error.localizedDescription)
         }
@@ -449,6 +542,7 @@ final class MeetingCoordinator {
         audioOnMac.insert(record.id)
         closeCallCard()
         detector.recordingStarted(call: callApp)
+        startPass(of: session)
         checkLive(session)
         analytics.track(.meetingStarted(source: source))
         AppLogger.shared.log(.info, "meeting started id=\(record.id.uuidString) source=\(source.rawValue) tracks=\(recorder.tracks.map(\.rawValue).joined(separator: ","))")
@@ -510,10 +604,20 @@ final class MeetingCoordinator {
         case .user, .callEnded, .sleep, .quit:
             break
         }
+        transcriptPasses[session.id] = MeetingTranscriptPass(kind: .first, waiting: !session.passStarted)
+        await session.transcriber.endLive()
         if let callEnd = record(session.id)?.transcriptEnd {
+            // A line decoded during the call can hold talk after its end.
+            let lines = await store.segments(of: session.id)
+            do {
+                try await store.replaceSegments(lines.filter { $0.audioEnd <= callEnd }, of: session.id)
+            } catch {
+                AppLogger.shared.log(.error, "meeting lines after the call end not dropped id=\(session.id.uuidString) error=\(error.localizedDescription)")
+            }
             await store.cutAudio(of: session.id, afterSample: callEnd)
         }
-        await queuePass(session.id, kind: .first)?.value
+        session.finish(.stop)
+        await session.pass?.value
     }
 
     /// A call track that cannot start again shows as a failed track.
@@ -528,6 +632,8 @@ final class MeetingCoordinator {
         let end = wallSeconds(of: session)
         await update(session.id) { $0.end(atWallSeconds: end) }
         live = nil
+        await session.transcriber.cancel()
+        session.finish(.abandon)
         AppLogger.shared.log(.info, "meeting stopped for quit id=\(session.id.uuidString)")
         trackEnd(of: session, atWallSeconds: end, reason: .quit)
     }
@@ -586,6 +692,8 @@ final class MeetingCoordinator {
         answerCallCard(.cancel)
         guard let session = beginStop() else { return }
         live = nil
+        await session.transcriber.cancel()
+        session.finish(.abandon)
         meetings.removeAll { $0.id == session.id }
         audioOnMac.remove(session.id)
         do {
@@ -918,7 +1026,10 @@ final class MeetingCoordinator {
             self?.transcriptPasses[id]?.waiting = false
             switch kind {
             case .first:
-                await self?.transcribe(id, model: model)
+                await self?.transcribe(id, model: model) { [weak self] in
+                    guard let self else { throw CancellationError() }
+                    return try await self.runPass(id, model: model, file: .transcript)
+                }
             case .again:
                 await self?.writeTranscriptAgain(id, model: model)
             }
@@ -934,13 +1045,58 @@ final class MeetingCoordinator {
         await deleteExpiredAudio()
     }
 
+    /// The pass of a recording: the live phase from the start, then at Stop
+    /// the final phase on the same transcriber and engine. It waits for the
+    /// passes before it, so the engine of a chosen model loads only when no
+    /// other pass holds one.
+    private func startPass(of session: MeetingSession) {
+        let id = session.id
+        let model = settings.transcriptModel
+        let previous = lastPass
+        let transcriber = session.transcriber
+        transcribers[id] = transcriber
+        let pass = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            session.passStarted = true
+            self.transcriptPasses[id]?.waiting = false
+            if !session.hasEnded {
+                do {
+                    session.ownEngine = try await self.connect(transcriber, to: model)
+                    session.isConnected = true
+                } catch {
+                    AppLogger.shared.log(.error, "meeting live transcript did not start id=\(id.uuidString) error=\(error.localizedDescription)")
+                    session.transcriptFailure = error.localizedDescription
+                }
+            }
+            if await session.waitForEnd() == .stop {
+                await self.transcribe(id, model: model) {
+                    if !session.isConnected {
+                        session.ownEngine = try await self.connect(transcriber, to: model)
+                        session.isConnected = true
+                    }
+                    return try await self.run(transcriber, for: id)
+                }
+            }
+            await transcriber.idle()
+            await session.ownEngine?.unloadModel()
+            session.ownEngine = nil
+            self.transcribers[id] = nil
+            if self.transcriptPasses[id] != nil {
+                await self.endPass(id)
+            }
+        }
+        session.pass = pass
+        lastPass = pass
+    }
+
     /// Writes the transcript, then queues the summary.
-    private func transcribe(_ id: UUID, model chosenModel: ASRModelID?) async {
+    private func transcribe(_ id: UUID, model chosenModel: ASRModelID?, writing pass: () async throws -> [MeetingSegment]) async {
         let started = ContinuousClock.now
         let outcome: MeetingOutcome
         var segments = 0
         do {
-            let transcript = try await runPass(id, model: chosenModel, lines: .transcript)
+            let transcript = try await pass()
             segments = transcript.count
             outcome = segments == 0 ? .noSpeech : .done
             let enough = await hasEnoughSpeech(id, segments: transcript)
@@ -981,7 +1137,7 @@ final class MeetingCoordinator {
         }
         await store.deleteDraft(of: id)
         do {
-            let transcript = try await runPass(id, model: chosenModel, lines: .draft)
+            let transcript = try await runPass(id, model: chosenModel, file: .draft)
             guard !transcript.isEmpty else { throw TranscribeAgainError.noLines }
             try await store.keepDraft(of: id)
             await update(id) { $0.transcriptEditedAt = nil }
@@ -1022,25 +1178,34 @@ final class MeetingCoordinator {
         }
     }
 
-    /// With no model ("Same as dictation"), the pass runs on the dictation
-    /// engine with the model that engine has. A chosen model, the dictation
-    /// model too, gets an engine of its own that is unloaded after the pass,
-    /// so a switch of the dictation model does not change the pass. On either
-    /// engine, no piece of audio starts decoding while a dictation runs.
-    private func runPass(_ id: UUID, model: ASRModelID?, lines: MeetingStore.SegmentFile) async throws -> [MeetingSegment] {
-        guard let model else {
-            return try await run(makeTranscriber(for: id, lines: lines, engine: engine) { [weak self] in await self?.speechEngineFree ?? false }, for: id)
-        }
-        let ownEngine = try await makeTranscriptEngine(model)
-        let transcriber = makeTranscriber(for: id, lines: lines, engine: ownEngine) { [weak self] in await self?.dictating == false }
+    /// A pass from the audio files, on the engine of `model`.
+    private func runPass(_ id: UUID, model: ASRModelID?, file: MeetingStore.SegmentFile) async throws -> [MeetingSegment] {
+        let transcriber = makeTranscriber(for: id, tracks: store.audioTracks(of: id), file: file)
+        let ownEngine = try await connect(transcriber, to: model)
         do {
             let transcript = try await run(transcriber, for: id)
-            await ownEngine.unloadModel()
+            await ownEngine?.unloadModel()
             return transcript
         } catch {
-            await ownEngine.unloadModel()
+            await ownEngine?.unloadModel()
             throw error
         }
+    }
+
+    /// With no model ("Same as dictation"), the transcriber decodes on the
+    /// dictation engine with the model that engine has. A chosen model, the
+    /// dictation model too, gets an engine of its own, which is returned for
+    /// the caller to unload, so a switch of the dictation model does not
+    /// change the pass. On either engine, no piece of audio starts decoding
+    /// while a dictation runs.
+    private func connect(_ transcriber: MeetingTranscriber, to model: ASRModelID?) async throws -> TranscriptionServiceProtocol? {
+        guard let model else {
+            await transcriber.use(engine) { [weak self] in await self?.speechEngineFree ?? false }
+            return nil
+        }
+        let ownEngine = try await makeTranscriptEngine(model)
+        await transcriber.use(ownEngine) { [weak self] in await self?.dictating == false }
+        return ownEngine
     }
 
     private func run(_ transcriber: MeetingTranscriber, for id: UUID) async throws -> [MeetingSegment] {
@@ -1049,19 +1214,12 @@ final class MeetingCoordinator {
         return try await transcriber.transcribe()
     }
 
-    private func makeTranscriber(
-        for id: UUID,
-        lines: MeetingStore.SegmentFile,
-        engine: TranscriptionServiceProtocol,
-        mayDecode: @escaping @Sendable () async -> Bool
-    ) -> MeetingTranscriber {
+    private func makeTranscriber(for id: UUID, tracks: [MeetingTrack], file: MeetingStore.SegmentFile) -> MeetingTranscriber {
         MeetingTranscriber(
             meetingID: id,
-            tracks: store.audioTracks(of: id),
+            tracks: tracks,
             store: store,
-            lines: lines,
-            engine: engine,
-            mayDecode: mayDecode,
+            file: file,
             onProgress: { [weak self] progress in
                 DispatchQueue.main.async { MainActor.assumeIsolated { self?.show(progress, of: id) } }
             }
@@ -1103,6 +1261,8 @@ final class MeetingCoordinator {
         case let .trackFailed(track, message):
             session.failedTracks[track] = message
             onNotice?(.trackFailed(track))
+        case .paused:
+            break
         case let .storageFailed(message, outOfSpace):
             AppLogger.shared.log(.error, "meeting stopped by a write error id=\(session.id.uuidString) error=\(message)")
             writeFailure = MeetingWriteFailure(meetingID: session.id, outOfSpace: outOfSpace)
@@ -1128,6 +1288,7 @@ final class MeetingCoordinator {
                 }
                 if !session.record.callPlayedOnSpeakers, self.environment.callPlaysOnSpeakers() {
                     await self.update(session.id) { $0.callPlayedOnSpeakers = true }
+                    await session.transcriber.callPlaysOnSpeakers()
                 }
                 try? await Task.sleep(for: self.environment.liveCheckInterval)
             }

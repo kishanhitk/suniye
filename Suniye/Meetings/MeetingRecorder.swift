@@ -20,6 +20,8 @@ enum MeetingRecorderEvent: Equatable, Sendable {
     /// A track's source started: at the start, at a resume, or after
     /// Restart Call Audio.
     case trackStarted(MeetingTrack)
+    /// Sent after the last audio before a pause.
+    case paused
     case trackFailed(MeetingTrack, String)
     /// `outOfSpace` tells a full disk from any other write error.
     case storageFailed(String, outOfSpace: Bool)
@@ -126,7 +128,10 @@ final class MeetingRecorder: @unchecked Sendable {
         let isRecording: Bool = queue.sync { running && pausedSince == nil }
         guard isRecording else { return }
         stopSources()
-        queue.sync { pausedSince = Self.uptime() }
+        queue.sync {
+            pausedSince = Self.uptime()
+            onEvent?(.paused)
+        }
     }
 
     /// Stays paused and throws when no track starts again.

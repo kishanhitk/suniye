@@ -39,6 +39,11 @@ struct MeetingSegmenter {
         pendingStart = startPosition
     }
 
+    /// The start of the audio that is in no chunk yet; nil when there is none.
+    var unresolvedStart: Int? {
+        pending.isEmpty ? nil : pendingStart
+    }
+
     /// `position` is where `samples` start in the track's file. Audio that does
     /// not continue the chunk in progress ends that chunk first.
     mutating func append(_ samples: [Float], at position: Int) -> [MeetingAudioChunk] {

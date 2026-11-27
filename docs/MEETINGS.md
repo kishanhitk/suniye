@@ -70,14 +70,19 @@ After a quit or a crash, the next launch writes no transcript by itself: it does
 
 ## Transcript
 
-- No speech recognition runs while the meeting records. The meeting page shows the notes, the meters and the warnings.
+- While the meeting records, the meeting page has two tabs: **Notes** (first) and **Transcript**. The Transcript tab shows the lines a few seconds after the speech, with "You" and "Them". It follows new lines while it is scrolled to the end. The lines have no copy, edit, player or time links until the meeting ends.
+- A shown line never changes, moves or goes during the call. A line shows when no earlier line can still come: the transcript of each track has reached its start. When the call plays on speakers, a "You" line also waits until the "Them" lines near it are written; a "You" line that repeats them (the microphone heard the call) never shows.
+- The words of a dictation are not in the transcript: the microphone track gets silence while the dictation records.
+- Lines are saved as they show. After a quit or a crash, **Finish Transcript** starts after the last saved line.
+- When the transcript model cannot load at the start, the Transcript tab says "The transcript comes after you stop." with the cause, and the stop tries the model again.
 - The pill shows a red dot, the recorded time and one level meter for the louder track. **Settings → Indicator → Show meeting time** (on by default) shows or hides the time.
-- After the stop, the transcript model writes the transcript from the audio files. The meeting page shows "Finishing the transcript…" with the minutes done.
+- After the stop, the transcript model writes the rest of the transcript from the audio files: the audio after the last saved line of each track. The meeting page shows "Finishing the transcript…" with the minutes done. Lines shown during the call stay, except a "You" line that the echo filter drops because the call moved to speakers, and lines after the end of a call that a recording followed.
 - **Settings → Meetings → Transcript model**:
   - **Same as Dictation** (default): the dictation model, on the dictation engine.
-  - A model you pick, the dictation model too: it loads for the transcript on an engine of its own and unloads after it, so a switch of the dictation model does not change it. Dictation keeps its model. The Mac holds both models in memory while the transcript is written.
+  - A model you pick, the dictation model too: it loads on an engine of its own when the meeting starts and unloads after the transcript, so a switch of the dictation model does not change it. Dictation keeps its model. The Mac holds both models in memory for the whole meeting.
+  - The meeting uses the transcript model that was set when it started.
 - A dictation goes first: from the key-down to the end of the dictation, no piece of audio starts decoding. The piece that decodes at the key-down finishes.
-- One transcript at a time: when two meetings wait for a transcript, the second one starts after the first one ends, with the transcript model that was set when it was asked for. Until then its page shows "Waiting for another transcript…".
+- One transcript at a time: when two meetings wait for a transcript, the second one starts after the first one ends, with the transcript model that was set when it was asked for. Until then its page shows "Waiting for another transcript…". A meeting that starts while another transcript is written shows its live lines after that transcript ends.
 - Picking a model that is not on the Mac downloads it. It becomes the transcript model when the download is done.
 - When the transcript model is not on the Mac at the stop, the meeting shows that cause and **Finish Transcript**.
 - The audio goes to the model in pieces of 2 to 12 s, cut at pauses.
