@@ -25,9 +25,9 @@ enum MeetingTranscript {
     }
 
     /// The lines of a pass that a transcript keeps: no echo of the call, and
-    /// no line after the end of the call that the meeting followed.
+    /// no line that reaches past the end of the call that the meeting followed.
     static func filtered(_ segments: [MeetingSegment], of record: MeetingRecord) -> [MeetingSegment] {
-        let kept = record.transcriptEnd.map { end in segments.filter { $0.audioStart < end } } ?? segments
+        let kept = record.transcriptEnd.map { end in segments.filter { $0.audioEnd <= end } } ?? segments
         return final(kept, callPlayedOnSpeakers: record.callPlayedOnSpeakers)
     }
 
