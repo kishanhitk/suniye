@@ -161,19 +161,35 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
     private static let inferenceQueue = DispatchQueue(label: "dev.suniye.cohere-inference", qos: .userInitiated)
     private static let warmupAudio = [Float](repeating: 0, count: CohereTranscribe.sampleRate)
 
-    /// Runs one chunk on the inference queue and hands back its token ids.
+    /// Runs one chunk on the inference queue and hands back its token ids. A
+    /// cancel of the calling task ends the chunk and throws `CancellationError`.
     private static func decode(_ audio: [Float], model: LoadedModel) async throws -> [Int64] {
-        try await withCheckedThrowingContinuation { continuation in
-            inferenceQueue.async {
-                continuation.resume(with: Result { try decodeChunk(audio, model: model) })
+        let cancellation = try OrtRunCancellation()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                inferenceQueue.async {
+                    continuation.resume(with: Result {
+                        do {
+                            return try decodeChunk(audio, model: model, cancellation: cancellation)
+                        } catch _ where cancellation.isCancelled {
+                            throw CancellationError()
+                        }
+                    })
+                }
             }
+        } onCancel: {
+            cancellation.cancel()
         }
     }
 
-    private static func decodeChunk(_ audio: [Float], model: LoadedModel) throws -> [Int64] {
+    private static func decodeChunk(_ audio: [Float], model: LoadedModel, cancellation: OrtRunCancellation) throws -> [Int64] {
+        guard !cancellation.isCancelled else {
+            throw CancellationError()
+        }
         let encoded = try model.encoder.run(
             inputs: [("audio", try OrtTensor.float(shape: [1, Int64(audio.count)], values: audio))],
-            outputNames: ["n_layer_cross_k", "n_layer_cross_v"]
+            outputNames: ["n_layer_cross_k", "n_layer_cross_v"],
+            cancellation: cancellation
         )
         let crossK = encoded[0]
         let crossV = encoded[1]
@@ -196,7 +212,8 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
                     ("n_layer_cross_v", crossV),
                     ("offset", try OrtTensor.int64(shape: [], values: [offset]))
                 ],
-                outputNames: ["logits", "out_n_layer_self_k_cache", "out_n_layer_self_v_cache"]
+                outputNames: ["logits", "out_n_layer_self_k_cache", "out_n_layer_self_v_cache"],
+                cancellation: cancellation
             )
             let logits = outputs[0]
             // The returned caches become next step's inputs: no copy, ORT owns both.

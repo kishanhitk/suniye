@@ -103,6 +103,10 @@ protocol TranscriptionServiceProtocol {
     func loadModel(config: RecognizerConfig) async throws
     /// `onProgress` is only ever driven by engines that split long audio into
     /// chunks (Cohere); single-pass engines ignore it.
+    ///
+    /// When the calling task is cancelled, the decode either finishes or
+    /// throws: it never returns part of the text. Cohere, Qwen3-ASR and Apple
+    /// Speech stop early; sherpa-onnx finishes.
     func transcribe(
         samples: [Float],
         sampleRate: Int,
