@@ -49,6 +49,8 @@ struct MeetingLiveTranscript: Equatable, Sendable {
 ///   stays small, and reports each step's end as progress.
 /// - One chunk decodes at a time, the earliest first across both tracks,
 ///   through the speech engine, and only while `mayDecode` says yes.
+/// - `interruptDecode()` stops the chunk in flight, when its engine can stop
+///   it; the chunk decodes again, with all its attempts left.
 /// - A chunk whose decode fails is tried again after `retryDelay`: a decode
 ///   that arrives while the router unloads the old engine of a model switch
 ///   fails once.
@@ -76,8 +78,16 @@ actor MeetingTranscriber {
         var silent = 0
         var segments = 0
         var retries = 0
+        var interrupted = 0
         var failed = 0
         var decodeSeconds: Double = 0
+    }
+
+    private enum ChunkResult {
+        /// The chunk has its line, or none, or a hole.
+        case done
+        case failed
+        case interrupted
     }
 
     /// The state that only the live phase uses.
@@ -118,8 +128,13 @@ actor MeetingTranscriber {
     /// stored.
     private var holes: [MeetingTrack: Int] = [:]
     private var decoder: Task<Void, Never>?
+    /// The engine call of the chunk in flight.
+    private var engineCall: Task<String, Error>?
     /// Set by `wake()`, so that a wake during an `await mayDecode()` is not lost.
     private var woken = false
+    /// Counts `interruptDecode()` calls, so that one during an
+    /// `await mayDecode()` is not lost.
+    private var interrupts = 0
     /// Set by `endLive()` while the chunk in flight finishes.
     private var holdsChunks = false
     private var cancelled = false
@@ -159,6 +174,14 @@ actor MeetingTranscriber {
     func wake() {
         woken = true
         decodeIfIdle()
+    }
+
+    /// Stops the chunk in flight, when its engine can stop it. Call it when
+    /// `mayDecode` says no from now on: the chunk decodes again when it says
+    /// yes, and the interrupt does not count as one of its attempts.
+    func interruptDecode() {
+        interrupts += 1
+        engineCall?.cancel()
     }
 
     // MARK: - Live phase
@@ -390,20 +413,23 @@ actor MeetingTranscriber {
     private func decodePending() async {
         while !holdsChunks, !cancelled, earliestPendingIndex() != nil {
             woken = false
+            let interruptsBefore = interrupts
             guard engine != nil, await mayDecode() else {
                 if woken { continue }
                 break
             }
+            // An interrupt during `mayDecode()` makes its yes old.
+            guard interrupts == interruptsBefore else { continue }
             guard !holdsChunks, !cancelled, let index = earliestPendingIndex(), let engine else { break }
             let chunk = pending.remove(at: index)
             inFlight = chunk
-            let done = await decode(chunk, on: engine)
-            if !done {
+            let result = await decode(chunk, on: engine)
+            if result != .done {
                 pending.append(chunk)
             }
             inFlight = nil
             releaseLines()
-            if !done {
+            if result == .failed {
                 try? await Task.sleep(for: retryDelay)
             }
         }
@@ -417,25 +443,25 @@ actor MeetingTranscriber {
         pending.indices.min { (pending[$0].start, pending[$0].track) < (pending[$1].start, pending[$1].track) }
     }
 
-    /// Returns false when the chunk should be tried again.
-    private func decode(_ chunk: MeetingAudioChunk, on engine: TranscriptionServiceProtocol) async -> Bool {
+    private func decode(_ chunk: MeetingAudioChunk, on engine: TranscriptionServiceProtocol) async -> ChunkResult {
         // A line stored past a failed chunk would make the next finish start
         // after it, so the rest of the track waits for that finish.
         if let hole = holes[chunk.track], chunk.start > hole {
-            return true
+            return .done
         }
         guard chunk.hasSound else {
             stats.silent += 1
             stats.chunks += 1
             live?.heard[chunk.track] = chunk.end
-            return true
+            return .done
         }
         let id = ChunkID(track: chunk.track, start: chunk.start)
+        let interruptsBefore = interrupts
         let started = ContinuousClock.now
         do {
             let samples = try MeetingAudioFileReader.samples(at: store.audioURL(chunk.track, for: meetingID), range: chunk.start ..< chunk.end)
-            let text = try await engine.transcribe(samples: samples, sampleRate: MeetingAudioFormat.sampleRate, purpose: .meeting)
-            guard !cancelled else { return true }
+            let text = try await decodeText(samples, on: engine)
+            guard !cancelled else { return .done }
             stats.decodeSeconds += (ContinuousClock.now - started) / .seconds(1)
             attempts[id] = nil
             await save(text, of: chunk)
@@ -443,9 +469,13 @@ actor MeetingTranscriber {
             if holes[chunk.track] == nil {
                 live?.heard[chunk.track] = chunk.end
             }
-            return true
+            return .done
         } catch {
-            guard !cancelled else { return true }
+            guard !cancelled else { return .done }
+            guard interrupts == interruptsBefore else {
+                stats.interrupted += 1
+                return .interrupted
+            }
             let attempt = (attempts[id] ?? 0) + 1
             guard attempt < Self.maximumAttempts else {
                 attempts[id] = nil
@@ -453,11 +483,24 @@ actor MeetingTranscriber {
                 stats.chunks += 1
                 AppLogger.shared.log(.error, "meeting transcript gave up on a chunk id=\(meetingID.uuidString) track=\(chunk.track.rawValue) start=\(chunk.start) error=\(error.localizedDescription)")
                 markHole(at: chunk)
-                return true
+                return .done
             }
             attempts[id] = attempt
             stats.retries += 1
-            return false
+            return .failed
+        }
+    }
+
+    /// The engine runs in a task of its own, which `interruptDecode()` and a
+    /// cancel of the decoder both cancel.
+    private func decodeText(_ samples: [Float], on engine: TranscriptionServiceProtocol) async throws -> String {
+        let call = Task { try await engine.transcribe(samples: samples, sampleRate: MeetingAudioFormat.sampleRate, purpose: .meeting) }
+        engineCall = call
+        defer { engineCall = nil }
+        return try await withTaskCancellationHandler {
+            try await call.value
+        } onCancel: {
+            call.cancel()
         }
     }
 
@@ -520,7 +563,7 @@ actor MeetingTranscriber {
         }
         AppLogger.shared.log(
             .info,
-            "meeting transcript finished id=\(meetingID.uuidString) chunks=\(stats.chunks) silent=\(stats.silent) segments=\(stats.segments) dropped=\(stored.count - transcript.count) retries=\(stats.retries) failed=\(stats.failed) decodeSeconds=\(String(format: "%.1f", stats.decodeSeconds))"
+            "meeting transcript finished id=\(meetingID.uuidString) chunks=\(stats.chunks) silent=\(stats.silent) segments=\(stats.segments) dropped=\(stored.count - transcript.count) retries=\(stats.retries) interrupted=\(stats.interrupted) failed=\(stats.failed) decodeSeconds=\(String(format: "%.1f", stats.decodeSeconds))"
         )
         return transcript
     }

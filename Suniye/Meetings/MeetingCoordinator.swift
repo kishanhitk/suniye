@@ -282,6 +282,8 @@ final class MeetingCoordinator {
     @ObservationIgnored private var lastPass: Task<Void, Never>?
     /// The passes that decode now. Each one waits while a dictation runs.
     @ObservationIgnored private var transcribers: [UUID: MeetingTranscriber] = [:]
+    /// Engines of chosen transcript models that are loaded now.
+    @ObservationIgnored private var ownEnginesLoaded = 0
     @ObservationIgnored private var dictating = false
     /// The dictation's audio capture runs: the microphone track gets silence.
     @ObservationIgnored private var dictationCaptures = false {
@@ -966,16 +968,28 @@ final class MeetingCoordinator {
 
     // MARK: - Dictation and the speech model
 
-    /// From the start of a dictation to its end, no meeting chunk starts
-    /// decoding and the summary waits. The microphone track gets silence from
-    /// the start until `dictationCaptureEnded()`: the dictated words are not
-    /// meeting talk. Playback stops for the capture, so the dictation does
-    /// not hear it, and it does not start again by itself.
+    /// From the start of a dictation to its end, no meeting chunk decodes and
+    /// the summary waits. A chunk that decodes at the start stops, when its
+    /// engine can stop it, and decodes again after the dictation. While a
+    /// chosen transcript model is loaded, the start warms the dictation
+    /// engine: macOS takes back the pages of the idle dictation model while
+    /// the other model runs. The microphone track gets silence from the start
+    /// until `dictationCaptureEnded()`: the dictated words are not meeting
+    /// talk. Playback stops for the capture, so the dictation does not hear
+    /// it, and it does not start again by itself.
     func dictationChanged(active: Bool) {
         dictating = active
         dictationCaptures = active
         summaries.hold(active)
         detector.dictationChanged(active: active)
+        if active {
+            for transcriber in transcribers.values {
+                Task { await transcriber.interruptDecode() }
+            }
+            if ownEnginesLoaded > 0 {
+                Task { [engine] in await engine.warmUp() }
+            }
+        }
         wakeTranscribers()
     }
 
@@ -1099,7 +1113,7 @@ final class MeetingCoordinator {
                 }
             }
             await transcriber.idle()
-            await session.ownEngine?.unloadModel()
+            await self.unload(session.ownEngine)
             session.ownEngine = nil
             self.transcribers[id] = nil
             if self.transcriptPasses[id] != nil {
@@ -1204,10 +1218,10 @@ final class MeetingCoordinator {
         let ownEngine = try await connect(transcriber, to: model)
         do {
             let transcript = try await run(transcriber, for: id)
-            await ownEngine?.unloadModel()
+            await unload(ownEngine)
             return transcript
         } catch {
-            await ownEngine?.unloadModel()
+            await unload(ownEngine)
             throw error
         }
     }
@@ -1216,7 +1230,7 @@ final class MeetingCoordinator {
     /// dictation engine with the model that engine has. A chosen model, the
     /// dictation model too, gets an engine of its own, which is returned for
     /// the caller to unload, so a switch of the dictation model does not
-    /// change the pass. On either engine, no piece of audio starts decoding
+    /// change the pass. On either engine, no piece of audio decodes
     /// while a dictation runs.
     private func connect(_ transcriber: MeetingTranscriber, to model: ASRModelID?) async throws -> TranscriptionServiceProtocol? {
         guard let model else {
@@ -1224,8 +1238,15 @@ final class MeetingCoordinator {
             return nil
         }
         let ownEngine = try await makeTranscriptEngine(model)
+        ownEnginesLoaded += 1
         await transcriber.use(ownEngine) { [weak self] in await self?.dictating == false }
         return ownEngine
+    }
+
+    private func unload(_ ownEngine: TranscriptionServiceProtocol?) async {
+        guard let ownEngine else { return }
+        await ownEngine.unloadModel()
+        ownEnginesLoaded -= 1
     }
 
     private func run(_ transcriber: MeetingTranscriber, for id: UUID) async throws -> [MeetingSegment] {
