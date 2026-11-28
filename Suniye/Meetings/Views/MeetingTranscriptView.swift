@@ -7,6 +7,43 @@ struct MeetingTranscriptLine: Equatable {
     /// Nil when the meeting had no call track, so no line has a speaker.
     let speaker: MeetingTrack?
     let text: String
+
+    /// The live and the final transcript both take their times and speakers
+    /// from here.
+    static func lines(of segments: [MeetingSegment], in record: MeetingRecord) -> [MeetingTranscriptLine] {
+        let timeline = MeetingTimeline(pauses: record.pauses)
+        return segments.map { segment in
+            MeetingTranscriptLine(
+                id: segment.id,
+                time: MeetingTranscript.clock(timeline.wallSeconds(forSample: segment.audioStart)),
+                speaker: record.hasCallTrack ? segment.track : nil,
+                text: segment.text
+            )
+        }
+    }
+}
+
+/// The Transcript tab while the meeting records.
+struct MeetingLiveTranscriptPane: View {
+    let session: MeetingSession
+
+    var body: some View {
+        if let failure = session.transcriptFailure {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("The transcript comes after you stop.")
+                Text(failure)
+            }
+            .font(AppTypography.body)
+            .foregroundStyle(MainWindowPalette.secondaryText)
+        } else if session.transcript.lines.isEmpty {
+            Text("Lines show a few seconds after people speak.")
+                .font(AppTypography.body)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+        } else {
+            MeetingTranscriptView(lines: MeetingTranscriptLine.lines(of: session.transcript.lines, in: session.record), followsEnd: true)
+                .padding(.horizontal, -MeetingTranscriptView.markOverhang)
+        }
+    }
 }
 
 /// "Finishing the transcript…" and the minutes of audio done, while the
@@ -58,6 +95,9 @@ struct MeetingTranscriptView: NSViewRepresentable {
     var follow = 0
     /// Plays from the line with this id; nil when no audio can play.
     var seek: ((UUID) -> Void)?
+    /// New lines come at the end while the meeting records: the view follows
+    /// them while it is scrolled to the end.
+    var followsEnd = false
     /// The text of each line that the user touched since the lines were last
     /// drawn, and whether the edit ended. An empty text is a line to delete
     /// when the edit ends.
@@ -86,7 +126,7 @@ struct MeetingTranscriptView: NSViewRepresentable {
         context.coordinator.edited = edited
         context.coordinator.seek = seek
         textView.isEditable = isEditable
-        context.coordinator.render(lines, canSeek: seek != nil, into: textView)
+        context.coordinator.render(lines, canSeek: seek != nil, followsEnd: followsEnd, into: textView)
         context.coordinator.mark(marked, follow: follow, in: textView)
     }
 
@@ -149,10 +189,16 @@ struct MeetingTranscriptView: NSViewRepresentable {
         /// Draws the lines again when they changed. The lines that the user
         /// edits come back the same, so typing never redraws. A change of the
         /// links alone changes the times in place: an edit that waits for its
-        /// save keeps its lines and its undo.
-        func render(_ lines: [MeetingTranscriptLine], canSeek: Bool, into textView: MeetingTranscriptTextView) {
+        /// save keeps its lines and its undo. Lines added at the end are
+        /// appended, so a selection stays.
+        func render(_ lines: [MeetingTranscriptLine], canSeek: Bool, followsEnd: Bool, into textView: MeetingTranscriptTextView) {
             guard let storage = textView.textStorage else { return }
-            if lines != rendered {
+            let follows = followsEnd && textView.isScrolledToEnd
+            if lines.count > rendered.count, touched.isEmpty, lines.starts(with: rendered) {
+                storage.append(Self.text(for: Array(lines.dropFirst(rendered.count))))
+                Self.setLinks(canSeek, in: storage)
+                rendered = lines
+            } else if lines != rendered {
                 storage.setAttributedString(Self.text(for: lines))
                 Self.setLinks(canSeek, in: storage)
                 rendered = lines
@@ -164,6 +210,9 @@ struct MeetingTranscriptView: NSViewRepresentable {
                 Self.setLinks(canSeek, in: storage)
             }
             self.canSeek = canSeek
+            if follows {
+                textView.scrollToEnd()
+            }
         }
 
         /// Marks the lines that play. The view scrolls to them when they
@@ -399,6 +448,20 @@ final class MeetingTranscriptTextView: MeetingTextView {
         for band in bands(layingOut: false) where band.intersects(rect) {
             NSBezierPath(roundedRect: band, xRadius: 6, yRadius: 6).fill()
         }
+    }
+
+    /// The last line is in sight, or the text is shorter than the view.
+    var isScrolledToEnd: Bool {
+        guard let visible = enclosingScrollView?.documentVisibleRect else { return true }
+        return visible.maxY >= bounds.maxY - 8
+    }
+
+    func scrollToEnd() {
+        if let layoutManager = textLayoutManager, let content = layoutManager.textContentManager {
+            layoutManager.ensureLayout(for: content.documentRange)
+        }
+        textLayoutManager?.textViewportLayoutController.layoutViewport()
+        scrollToEndOfDocument(nil)
     }
 
     /// Scrolls a marked line that is out of sight to a third of the way down.

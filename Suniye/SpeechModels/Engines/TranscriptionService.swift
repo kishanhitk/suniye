@@ -103,6 +103,10 @@ protocol TranscriptionServiceProtocol {
     func loadModel(config: RecognizerConfig) async throws
     /// `onProgress` is only ever driven by engines that split long audio into
     /// chunks (Cohere); single-pass engines ignore it.
+    ///
+    /// When the calling task is cancelled, the decode either finishes or
+    /// throws: it never returns part of the text. Cohere, Qwen3-ASR and Apple
+    /// Speech stop early; sherpa-onnx finishes.
     func transcribe(
         samples: [Float],
         sampleRate: Int,
@@ -110,9 +114,15 @@ protocol TranscriptionServiceProtocol {
         onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
     ) async throws -> String
     func unloadModel() async
+    /// Touches the loaded model's memory, so that the next decode does not
+    /// wait for the pages that macOS took back while another model ran.
+    func warmUp() async
 }
 
 extension TranscriptionServiceProtocol {
+    /// Engines whose model is not in the app's memory have nothing to warm.
+    func warmUp() async {}
+
     func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose = .final) async throws -> String {
         try await transcribe(samples: samples, sampleRate: sampleRate, purpose: purpose) { _ in }
     }
@@ -228,6 +238,9 @@ actor TranscriptionService: TranscriptionServiceProtocol {
     /// Parakeet drops the last word or the closing punctuation of a clip that
     /// ends at speech; silence after the clip lets it emit them.
     private static let parakeetTrailingSilenceSeconds = 0.4
+
+    /// A decode of half a second runs every layer of the model once.
+    private static let warmUpSamples = [Float](repeating: 0, count: 8_000)
 
     private var recognizer: OpaquePointer?
     private var loadedConfig: RecognizerConfig?
@@ -347,6 +360,11 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         }
         recognizer = nil
         loadedConfig = nil
+    }
+
+    func warmUp() async {
+        // A partial decode writes no log line and gets no trailing silence.
+        _ = try? await transcribe(samples: Self.warmUpSamples, sampleRate: 16_000, purpose: .partial) { _ in }
     }
 
     private func makeRecognizerConfig(for config: RecognizerConfig) throws -> SherpaOnnxOfflineRecognizerConfig {

@@ -27,6 +27,21 @@ enum MeetingAudioFormat {
         return (sum / Float(samples.count)).squareRoot()
     }
 
+    /// The 16-bit value that the file holds for `sample`; values outside
+    /// -1...1 are clipped.
+    static func pcm(_ sample: Float) -> Int16 {
+        Int16(min(1, max(-1, sample)) * Float(Int16.max))
+    }
+
+    static func float(_ value: Int16) -> Float {
+        Float(value) / Float(Int16.max)
+    }
+
+    /// `samples` as a read of the file gives them back.
+    static func stored(_ samples: [Float]) -> [Float] {
+        samples.map { float(pcm($0)) }
+    }
+
     /// True when a 100 ms window of `samples` reaches `silenceLevel`.
     static func hasSound(_ samples: ArraySlice<Float>) -> Bool {
         stride(from: samples.startIndex, to: samples.endIndex, by: soundWindowSamples).contains { start in
@@ -71,15 +86,14 @@ final class MeetingAudioFileWriter {
         try? handle.close()
     }
 
-    /// `samples` are 16 kHz floats in -1...1; values outside are clipped.
+    /// `samples` are 16 kHz floats.
     func append(_ samples: [Float]) throws {
         guard !samples.isEmpty else { return }
         var data = Data(count: samples.count * MeetingAudioFormat.bytesPerSample)
         data.withUnsafeMutableBytes { raw in
             let out = raw.bindMemory(to: Int16.self)
             for (index, sample) in samples.enumerated() {
-                let clipped = min(1, max(-1, sample))
-                out[index] = Int16(clipped * Float(Int16.max)).littleEndian
+                out[index] = MeetingAudioFormat.pcm(sample).littleEndian
             }
         }
         try handle.write(contentsOf: data)
@@ -158,7 +172,7 @@ enum MeetingAudioFileReader {
         try handle.seek(toOffset: UInt64(MeetingAudioFormat.headerSize + lower * MeetingAudioFormat.bytesPerSample))
         let data = try handle.read(upToCount: (upper - lower) * MeetingAudioFormat.bytesPerSample) ?? Data()
         return data.withUnsafeBytes { raw in
-            raw.bindMemory(to: Int16.self).map { Float(Int16(littleEndian: $0)) / Float(Int16.max) }
+            raw.bindMemory(to: Int16.self).map { MeetingAudioFormat.float(Int16(littleEndian: $0)) }
         }
     }
 

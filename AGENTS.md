@@ -72,6 +72,9 @@ xcodebuild \
 ## Targeted E2E scripts
 - LLM forced success/fallback smoke tests run via launch args:
   - `--e2e-llm-success`, `--e2e-llm-fallback`
+- Live meeting transcript in a real app: `scripts/e2e_meeting_live.sh <app path> <meeting audio> [seconds]`.
+  It starts the app with `--e2e-meeting-live=<seconds>` and plays the audio on the speakers.
+  The app needs Microphone and System Audio Recording access.
 - Scripts under `scripts/e2e_*.sh` expect app installed at:
   - `~/Applications/Suniye.app`
 

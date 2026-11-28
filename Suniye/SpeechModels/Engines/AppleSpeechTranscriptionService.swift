@@ -229,14 +229,20 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
         async let transcription = transcriber.results.reduce(into: AttributedString()) { $0.append($1.text) }
 
         // Documented one-shot batch path: analyze the finite input, then flush finalized
-        // results through the last processed sample.
-        if let lastSample = try await analyzer.analyzeSequence(stream) {
-            try await analyzer.finalizeAndFinish(through: lastSample)
-        } else {
-            await analyzer.cancelAndFinishNow()
+        // results through the last processed sample. A cancel of the calling task ends
+        // the analysis, and its text is then incomplete.
+        try await withTaskCancellationHandler {
+            if let lastSample = try await analyzer.analyzeSequence(stream) {
+                try await analyzer.finalizeAndFinish(through: lastSample)
+            } else {
+                await analyzer.cancelAndFinishNow()
+            }
+        } onCancel: {
+            Task { await analyzer.cancelAndFinishNow() }
         }
 
         let attributed = try await transcription
+        try Task.checkCancellation()
         let text = String(attributed.characters).trimmingCharacters(in: .whitespacesAndNewlines)
         if purpose.writesDecodeLog {
             AppLogger.shared.log(.info, "apple speech transcribe done chars=\(text.count)")

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// A loaded ONNX model. `run` blocks the calling thread for the duration of
 /// the inference; callers own the threading decision. ORT documents `Run` as
@@ -27,7 +28,7 @@ final class OrtSession: @unchecked Sendable {
         OnnxRuntime.api.pointee.ReleaseSession(handle)
     }
 
-    func run(inputs: [(name: String, tensor: OrtTensor)], outputNames: [String]) throws -> [OrtTensor] {
+    func run(inputs: [(name: String, tensor: OrtTensor)], outputNames: [String], cancellation: OrtRunCancellation? = nil) throws -> [OrtTensor] {
         let inputNames = inputs.map { strdup($0.name) }
         let outputCNames = outputNames.map { strdup($0) }
         defer {
@@ -43,7 +44,7 @@ final class OrtSession: @unchecked Sendable {
         try OnnxRuntime.check(
             OnnxRuntime.api.pointee.Run(
                 handle,
-                nil,
+                cancellation?.handle,
                 inputNamePointers,
                 inputValues,
                 inputs.count,
@@ -58,5 +59,31 @@ final class OrtSession: @unchecked Sendable {
             }
             return OrtTensor.adopt(value)
         }
+    }
+}
+
+/// Ends the `run` calls that use it, from any thread: a running one exits at
+/// its next operator, and a later one fails at once.
+final class OrtRunCancellation: @unchecked Sendable {
+    fileprivate let handle: OpaquePointer
+    private let cancelled = OSAllocatedUnfairLock(initialState: false)
+
+    init() throws {
+        var options: OpaquePointer?
+        try OnnxRuntime.check(OnnxRuntime.api.pointee.CreateRunOptions(&options))
+        handle = options!
+    }
+
+    deinit {
+        OnnxRuntime.api.pointee.ReleaseRunOptions(handle)
+    }
+
+    var isCancelled: Bool {
+        cancelled.withLock { $0 }
+    }
+
+    func cancel() {
+        cancelled.withLock { $0 = true }
+        try? OnnxRuntime.check(OnnxRuntime.api.pointee.RunOptionsSetTerminate(handle))
     }
 }

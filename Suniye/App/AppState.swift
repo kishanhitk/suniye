@@ -2931,6 +2931,53 @@ final class AppState {
         }
     }
 
+    /// `--e2e-meeting-live=<seconds>` (scripts/e2e_meeting_live.sh): with
+    /// the speech model loaded, one 6 s dictation before the meeting, then a
+    /// meeting from the real microphone and call audio for `seconds`, its
+    /// Transcript tab open, the shown lines logged every 10 s, the same
+    /// dictation in the middle, then Stop and the final transcript logged.
+    /// The dictations are copied, never pasted, so no key event is posted.
+    func runMeetingLiveE2E(seconds: Int) {
+        Task { @MainActor in
+            AppLogger.shared.log(.info, "e2e meeting live start seconds=\(seconds)")
+            while phase != .ready || loadedASRModelID == nil {
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            await runE2EDictation(label: "before meeting")
+            do {
+                try await meetings.startMeeting(source: .manual)
+            } catch {
+                AppLogger.shared.log(.error, "e2e meeting live could not start error=\(error.localizedDescription)")
+                return
+            }
+            guard let session = meetings.live else { return }
+            meetings.openMeetingTab = .transcript
+            openMeeting(session.id)
+            let started = ContinuousClock.now
+            var dictated = false
+            while ContinuousClock.now - started < .seconds(seconds) {
+                try? await Task.sleep(for: .seconds(10))
+                let shown = session.transcript
+                AppLogger.shared.log(.info, "e2e meeting live lines=\(shown.lines.count) completeThrough=\(String(format: "%.1f", Double(shown.completeThrough) / Double(MeetingAudioFormat.sampleRate)))")
+                if !dictated, ContinuousClock.now - started >= .seconds(seconds / 2) {
+                    dictated = true
+                    await runE2EDictation(label: "during meeting")
+                }
+            }
+            await meetings.stop()
+            let final = await meetings.transcript(of: session.id)
+            AppLogger.shared.log(.info, "e2e meeting live finished id=\(session.id.uuidString) shown=\(session.transcript.lines.count) final=\(final.count) status=\(meetings.record(session.id)?.status.rawValue ?? "")")
+        }
+    }
+
+    private func runE2EDictation(label: String) async {
+        await beginRecordingFlow(trigger: .manual, destination: .clipboardOnly)
+        try? await Task.sleep(for: .seconds(6))
+        let released = ContinuousClock.now
+        await stopRecordingAndTranscribe(trigger: .manual)
+        AppLogger.shared.log(.info, "e2e meeting live dictation \(label) releaseToTextMs=\(Int((ContinuousClock.now - released) / .milliseconds(1)))")
+    }
+
     private func wireHotkey() {
         hotkeyService.onHotkeyDown = { [weak self] in
             AppLogger.shared.log(.debug, "hotkey callback: down")
