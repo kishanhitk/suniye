@@ -97,6 +97,12 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         active = nil
     }
 
+    func warmUp() async {
+        if let engine = active?.engine, let service = service(for: engine) {
+            await service.warmUp()
+        }
+    }
+
     private static func engine(for family: ASRModelFamily) -> Engine {
         switch family {
         case .appleSpeech:

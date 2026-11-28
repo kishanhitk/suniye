@@ -146,6 +146,11 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         model = nil
     }
 
+    func warmUp() async {
+        guard let model else { return }
+        _ = try? await Self.decode(Self.warmupAudio, model: model)
+    }
+
     // MARK: - Inference
 
     /// Everything a decode needs, built in full before it is published as loaded.
